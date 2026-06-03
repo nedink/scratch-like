@@ -19,6 +19,19 @@ config/icon="res://icon.svg"
 
 window/size/viewport_width=800
 window/size/viewport_height=600
+; Launch fullscreen. The fixed 800x600 viewport (below) is upscaled to fill the
+; whole screen; with integer scale_mode that's a whole-number factor, so the
+; bitmap font stays crisp. Press Alt+Enter (Godot's default) to toggle back to
+; a window.
+window/size/mode=3
+; Pixel-perfect scaling. The game renders to a fixed 800x600 viewport, then that
+; whole image is scaled to fill the window by a whole-number factor ("integer"),
+; so every source pixel maps to an NxN block — no half-pixel seams. This is what
+; keeps the bitmap font crisp on a HiDPI / Retina display, where the window's
+; physical backing buffer is ~2x the logical size: without it, that upscale lands
+; on fractional pixel boundaries and the glyph texels render unevenly.
+window/stretch/mode="viewport"
+window/stretch/scale_mode="integer"
 
 [physics]
 
