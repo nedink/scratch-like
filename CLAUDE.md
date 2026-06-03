@@ -9,13 +9,14 @@ exists.
 
 **Goal of this milestone:** finally put **text on screen** — the payoff every prior
 milestone deferred ("no on-screen way to announce the winner yet"). M6 adds a
-**bitmap font** baked from `font.png` (a 3×5-pixel glyph atlas: `A–Z` on the top
-row, `0–9` on the second, 1px letter and line spacing) and a **`say`** block that
-renders a string into a transparent costume and wears it on the sprite. The
+**bitmap font** baked from `font.png` (a glyph atlas of `A–Z` then `0–9`, in two
+sizes — a 3×5 face and a larger 5×9 face) and a **`say`** block that renders a
+string into a transparent costume and wears it on the sprite. The
 motivating demo adds an **Announcer** sprite: it parks off-screen, watches the
 rounds-won totals, and the instant a player takes the match it jumps to center,
-`say`s **"P1 WINS" / "P2 WINS"**, then fires `stop "all"` — so the game-over freeze
-now lands with the winner *named on screen*. The ball no longer ends the match
+`say`s **"P1 WINS" / "P2 WINS"** in the large face at the viewport's own resolution
+(no scaling), then fires `stop "all"` — so the game-over freeze now lands with the
+winner *named on screen*. The ball no longer ends the match
 itself (the freeze has to happen *after* the banner is painted); it just stops
 clearing the board on the clinching round, leaving the final pips up behind the
 banner.
@@ -166,25 +167,36 @@ documented sibling primitive.)
 ### On-screen text (M6)
 
 [scripts/font.gd](scripts/font.gd) is a `PixelFont`: it loads `font.png` once and
-`render(text, color)`s a string into a fresh transparent `ImageTexture`, copying
-each white glyph pixel from the atlas as `color`. The atlas is a 3×5-pixel grid —
-`A–Z` on the first row, `0–9` on the second — stepped every 4px (3 + 1px letter
-spacing); lines step every 6px (5 + 1px). `render` uppercases letters, honors
-`"\n"`, and leaves a glyph-sized gap for a space or any unsupported character. The
-Stage builds one shared `PixelFont` (like the target registry — a runtime resource
-every sprite reaches, never reloaded per sprite) and exposes it via `font()`.
+`render(text, color, size)`s a string into a fresh transparent `ImageTexture`,
+copying each white glyph pixel from the atlas as `color`. The atlas stacks two
+**faces**, each a two-row grid of `A–Z` then `0–9`:
+
+| face | glyph | spacing | letters y | digits y |
+| --- | --- | --- | --- | --- |
+| `"small"` (default) | 3×5 | 1px | 0 | 6 |
+| `"large"` | 5×9 | 2px | 16 | 27 |
+
+Within a face, glyphs step every `(cell + spacing)`px along a row and each row
+steps one line below the last (so the digit row's y follows from the letter row's).
+`render` uppercases letters, honors `"\n"`, and leaves a glyph-sized gap for a space
+or any unsupported character. The `"large"` face exists so text can be drawn at the
+**viewport's own resolution** — big enough to read without scaling the sprite up
+(which the tiny `"small"` face needs to be legible). The Stage builds one shared
+`PixelFont` (like the target registry — a runtime resource every sprite reaches,
+never reloaded per sprite) and exposes it via `font()`.
 
 The **`say`** block makes that text a sprite's *costume*: it stringifies its input,
-renders it through the Stage's font, and assigns the result to the target node's
-texture, forcing nearest-neighbor filtering so the tiny glyphs stay crisp when the
-sprite is scaled up. Stringifying means a number reporter shows as a numeric
-readout — the path to a real HUD — though this demo only uses literal banners.
+renders it through the Stage's font in the requested `size` face, and assigns the
+result to the target node's texture, forcing nearest-neighbor filtering so glyphs
+stay crisp if the sprite *is* scaled. Stringifying means a number reporter shows as
+a numeric readout — the path to a real HUD — though this demo only uses literal banners.
 
 The Announcer is why `stop "all"` **moved off the ball**: the freeze must land
 *after* the banner is painted, and it must read the same rounds-won totals, so the
-one script that knows how to draw the result is the one that ends the match. `say`
-sets the costume synchronously, then `stop "all"` flips the global flag in the same
-frame — every coroutine (the Announcer included) unwinds, frozen with the banner up.
+one script that knows how to draw the result is the one that ends the match. It
+`say`s in the `"large"` face at scale 1 — the banner is drawn 1:1, never scaled up.
+`say` sets the costume synchronously, then `stop "all"` flips the global flag in the
+same frame — every coroutine (the Announcer included) unwinds, frozen with the banner up.
 
 ## Opcodes implemented
 
@@ -204,7 +216,7 @@ frame — every coroutine (the Announcer included) unwinds, frozen with the bann
 | `key_pressed?` | reporter | `key` | polls a key by name (`OS.find_keycode_from_string` → `Input.is_physical_key_pressed`). Use canonical names: `"W"`, `"S"`, `"Up"`, `"Down"` |
 | `set_var` | statement | `name`, `value` | sets a variable (local-first, then global; unseeded → creates a global) |
 | `change_var` | statement | `name`, `by` | adds `by` to a variable — the score increment |
-| `say` | statement | `text` | renders `text` (stringified) through the bitmap font and sets it as the sprite's costume; the winner banner |
+| `say` | statement | `text`, `size` | renders `text` (stringified) through the bitmap font in the `size` face (`"small"` default / `"large"`) and sets it as the sprite's costume; the winner banner |
 | `stop` | statement | `mode` | `"all"` halts every script (the game-over freeze); `"this script"` unwinds only the calling coroutine (clears its `_alive` flag) |
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
 | `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original. Clears the round's pips |

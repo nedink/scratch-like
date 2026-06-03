@@ -79,10 +79,10 @@ func _ready() -> void:
 	# Milestone 6: a text banner. The Announcer parks off-screen until a player
 	# takes the match, then jumps to center, `say`s the winner (a font.png costume),
 	# and fires `stop "all"` itself — so the game-over freeze lands with the winner
-	# named on screen, the payoff earlier milestones kept deferring. It is scaled up
-	# (the 3x5 glyphs are tiny) and nearest-filtered by `say` so the pixels stay crisp.
+	# named on screen, the payoff earlier milestones kept deferring. It `say`s in the
+	# "large" (5x9) face, sized to read at the viewport's own resolution, so the node
+	# stays at scale 1 — the banner is drawn 1:1, never scaled up.
 	var announcer := _add_sprite("Announcer", Vector2(-400, -400), 1, 1, Color(1, 1, 1, 0))
-	announcer.node.scale = Vector2(8, 8)
 
 	# "Press the green flag" on the first *rendered* frame, not during scene
 	# construction. A script's first `forever` iteration runs synchronously the

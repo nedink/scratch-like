@@ -321,14 +321,17 @@ func _on_stop(block: Dictionary) -> void:
 
 ## say: replace this sprite's costume with `text` rendered through the Stage's
 ## bitmap font (M6). The input is stringified first, so a number reporter shows as
-## a numeric readout. We force nearest-neighbor filtering so the tiny 3x5 glyphs
-## stay crisp when the sprite is scaled up. Unlike Scratch's speech bubble, the
-## text *is* the costume — exactly the "text-rendering costume" path the docs noted.
+## a numeric readout. The optional `size` input picks the font face: "small" (the
+## 3x5 default, meant to be scaled up) or "large" (5x9, sized to read at the
+## viewport's own resolution with no scaling). We force nearest-neighbor filtering
+## so glyphs stay crisp if the sprite *is* scaled. Unlike Scratch's speech bubble,
+## the text *is* the costume — exactly the "text-rendering costume" path the docs noted.
 func _on_say(block: Dictionary) -> void:
 	var text := str(_value(block, "text"))
+	var size := String(block.get("inputs", {}).get("size", "small"))
 	var sprite := _target.node as Sprite2D
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	sprite.texture = _stage.font().render(text)
+	sprite.texture = _stage.font().render(text, Color.WHITE, size)
 
 
 ## variable: read a variable's value (local-first, then global).

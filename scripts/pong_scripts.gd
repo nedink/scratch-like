@@ -158,12 +158,12 @@ static func announcer() -> Array:
 			_forever([
 				_if(_gt(_var("p1_rounds"), ROUNDS_TO_WIN - 1), [
 					_go_to(CENTER.x, CENTER.y),
-					_say("P1 WINS"),
+					_say("P1 WINS", "large"),
 					_stop("all"),
 				]),
 				_if(_gt(_var("p2_rounds"), ROUNDS_TO_WIN - 1), [
 					_go_to(CENTER.x, CENTER.y),
-					_say("P2 WINS"),
+					_say("P2 WINS", "large"),
 					_stop("all"),
 				]),
 			]),
@@ -307,8 +307,8 @@ static func _stop(mode: String) -> Dictionary:
 
 # On-screen text (Milestone 6).
 
-static func _say(text: Variant) -> Dictionary:
-	return {"opcode": "say", "inputs": {"text": text}}
+static func _say(text: Variant, size: String = "small") -> Dictionary:
+	return {"opcode": "say", "inputs": {"text": text, "size": size}}
 
 
 # Cloning (Milestone 4).
