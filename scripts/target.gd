@@ -12,10 +12,16 @@ extends RefCounted
 ## The scene node this target moves around the stage.
 var node: Node2D
 
+## The name this target is registered under on the Stage. This is how one
+## script refers to *another* entity — e.g. `touching_sprite?("LeftPaddle")`
+## resolves through the Stage's registry, which keys on exactly this name.
+var name: String
+
 ## Facing direction in degrees, using Scratch's convention:
 ##   90 = right (+x), 0 = up (-y on screen), and the angle increases clockwise.
 var direction: float = 90.0
 
 
-func _init(target_node: Node2D) -> void:
+func _init(target_node: Node2D, target_name: String) -> void:
 	node = target_node
+	name = target_name

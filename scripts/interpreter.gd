@@ -25,8 +25,16 @@ extends RefCounted
 ##   * Opcode -> handler `Callable`, looked up in a table. Adding a new block
 ##     type later is just registering one more entry plus its handler method.
 
-## SceneTree, kept so coroutines can `await _tree.process_frame`.
-## (A RefCounted has no get_tree() of its own, so we are handed one.)
+## The Stage this interpreter runs under. Two reasons we hold it instead of a
+## bare SceneTree (as M1 did):
+##   * coroutines still need `await _tree.process_frame` — we get the tree from
+##     the Stage, which is a Node;
+##   * cross-sprite blocks (`touching_sprite?`) resolve other entities through
+##     `_stage.find_target(name)`.
+var _stage: Stage
+
+## SceneTree, cached from the Stage so coroutines can `await _tree.process_frame`
+## (a RefCounted has no get_tree() of its own).
 var _tree: SceneTree
 
 ## The sprite this interpreter drives.
@@ -40,8 +48,9 @@ var _statement_handlers: Dictionary = {}
 var _reporter_handlers: Dictionary = {}
 
 
-func _init(tree: SceneTree, target: Target) -> void:
-	_tree = tree
+func _init(stage: Stage, target: Target) -> void:
+	_stage = stage
+	_tree = stage.get_tree()
 	_target = target
 	_register_handlers()
 
@@ -56,9 +65,13 @@ func _register_handlers() -> void:
 		"move_steps": _on_move_steps,
 		"turn_degrees": _on_turn_degrees,
 		"point_in_direction": _on_point_in_direction,
+		"go_to": _on_go_to,
+		"wait_seconds": _on_wait_seconds,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
+		"touching_sprite?": _on_touching_sprite,
+		"key_pressed?": _on_key_pressed,
 	}
 
 
@@ -146,26 +159,77 @@ func _on_turn_degrees(block: Dictionary) -> void:
 
 ## point_in_direction: set the facing direction.
 ##   * A number sets it absolutely (Scratch convention, 90 = right).
-##   * The special value "bounce" reflects the current direction off whichever
-##     viewport edge(s) the sprite is touching — this is the milestone's
-##     "if on edge, bounce" behaviour, computed in code because the block set
-##     has no arithmetic to express a reflection as data yet.
+##   * The special value "bounce" reflects the current direction off whatever
+##     the sprite is touching — viewport edges *and* other sprites (see
+##     _bounce). It stays a runtime-computed sentinel because the block set has
+##     no arithmetic to express a reflection as data yet.
 func _on_point_in_direction(block: Dictionary) -> void:
 	var arg: Variant = block.get("inputs", {}).get("direction")
 	if typeof(arg) == TYPE_STRING and arg == "bounce":
-		_target.direction = _bounce_off_edges()
+		_target.direction = _bounce()
 	else:
 		_target.direction = wrapf(float(_evaluate(arg)), 0.0, 360.0)
 
 
+## go_to: teleport the sprite to an absolute (x, y) position. Used to reset the
+## ball to center and to clamp the paddles onto their rails.
+func _on_go_to(block: Dictionary) -> void:
+	var x := float(_value(block, "x"))
+	var y := float(_value(block, "y"))
+	_target.node.position = Vector2(x, y)
+
+
+## wait_seconds: suspend this script for `seconds`, yielding cooperatively the
+## same way `forever` does. Used for the serve delay after a point.
+func _on_wait_seconds(block: Dictionary) -> void:
+	var seconds := float(_value(block, "seconds"))
+	await _tree.create_timer(seconds).timeout
+
+
 # --- Reporter handlers -----------------------------------------------------
 
-## touching_edge?: true when the sprite has reached any viewport edge.
-func _on_touching_edge(_block: Dictionary) -> bool:
+## touching_edge?(side): true when the sprite has reached a viewport edge.
+## `side` ∈ {"top","bottom","left","right","any"}, default "any" (M1 behavior).
+## The ball needs to bounce off top/bottom but pass *through* left/right (the
+## miss zones), which a single "any edge" test can't express.
+func _on_touching_edge(block: Dictionary) -> bool:
+	var side := String(block.get("inputs", {}).get("side", "any"))
 	var bounds := _inner_bounds()  # area the sprite's center may occupy
 	var pos := _target.node.position
-	return pos.x <= bounds.position.x or pos.x >= bounds.end.x \
-		or pos.y <= bounds.position.y or pos.y >= bounds.end.y
+	match side:
+		"top":
+			return pos.y <= bounds.position.y
+		"bottom":
+			return pos.y >= bounds.end.y
+		"left":
+			return pos.x <= bounds.position.x
+		"right":
+			return pos.x >= bounds.end.x
+		_:
+			return pos.x <= bounds.position.x or pos.x >= bounds.end.x \
+				or pos.y <= bounds.position.y or pos.y >= bounds.end.y
+
+
+## touching_sprite?(name): true when this sprite's box overlaps the named
+## sprite's box. The name is resolved through the Stage's target registry.
+func _on_touching_sprite(block: Dictionary) -> bool:
+	var other_name := String(_value(block, "name"))
+	var other := _stage.find_target(other_name)
+	if other == null:
+		push_warning("Interpreter: touching_sprite? unknown sprite '%s'" % other_name)
+		return false
+	return _sprite_rect(_target).intersects(_sprite_rect(other))
+
+
+## key_pressed?(key): poll whether a key (by name, e.g. "w" or "Up") is held.
+## This is a reporter, not an event hat — it lives inside `forever { if … }`.
+func _on_key_pressed(block: Dictionary) -> bool:
+	var key_name := String(_value(block, "key"))
+	var keycode := OS.find_keycode_from_string(key_name)
+	if keycode == KEY_NONE:
+		push_warning("Interpreter: key_pressed? unknown key '%s'" % key_name)
+		return false
+	return Input.is_physical_key_pressed(keycode)
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -195,26 +259,78 @@ func _direction_vector(degrees: float) -> Vector2:
 func _inner_bounds() -> Rect2:
 	var sprite := _target.node as Sprite2D
 	var view := sprite.get_viewport_rect()
-	var half := sprite.texture.get_size() * sprite.scale * 0.5
+	var half := _sprite_size(sprite) * 0.5
 	return Rect2(half, view.size - half * 2.0)
 
 
-## Reflect the current direction off whatever edge(s) the sprite is on, and nudge
-## the sprite back inside the bounds so it doesn't re-trigger next frame. Handles
-## corners naturally (both axes flip). Returns the new direction in degrees.
-func _bounce_off_edges() -> float:
+## A sprite's drawn size in world units (texture size scaled).
+func _sprite_size(sprite: Sprite2D) -> Vector2:
+	return sprite.texture.get_size() * sprite.scale
+
+
+## A target's world-space axis-aligned box. Sprite2D is centered by default, so
+## the box is centered on the node's position.
+func _sprite_rect(target: Target) -> Rect2:
+	var sprite := target.node as Sprite2D
+	var size := _sprite_size(sprite)
+	return Rect2(sprite.position - size * 0.5, size)
+
+
+## Reflect the current direction off whatever the sprite is currently touching —
+## the viewport's top/bottom/left/right edges and any overlapping sprite — and
+## nudge the sprite clear so it doesn't re-trigger next frame. Returns the new
+## direction in degrees.
+##
+## Rather than blindly negating a velocity component (which can make a sprite
+## "stick" if it's flipped twice in a frame), we *steer away* from each surface:
+## the component is forced to the sign that points back into open space. This is
+## what makes calling bounce from several `if` branches in one frame safe.
+func _bounce() -> float:
 	var sprite := _target.node as Sprite2D
 	var bounds := _inner_bounds()
+	var pos := sprite.position
 	var velocity := _direction_vector(_target.direction)
 
-	if sprite.position.x <= bounds.position.x or sprite.position.x >= bounds.end.x:
-		velocity.x = -velocity.x
-	if sprite.position.y <= bounds.position.y or sprite.position.y >= bounds.end.y:
-		velocity.y = -velocity.y
+	# Walls: steer away from whichever edge we're on, then clamp inside.
+	if pos.y <= bounds.position.y:
+		velocity.y = absf(velocity.y)
+	elif pos.y >= bounds.end.y:
+		velocity.y = -absf(velocity.y)
+	if pos.x <= bounds.position.x:
+		velocity.x = absf(velocity.x)
+	elif pos.x >= bounds.end.x:
+		velocity.x = -absf(velocity.x)
+	pos.x = clampf(pos.x, bounds.position.x, bounds.end.x)
+	pos.y = clampf(pos.y, bounds.position.y, bounds.end.y)
 
-	# Clamp back inside the playable area.
-	sprite.position.x = clampf(sprite.position.x, bounds.position.x, bounds.end.x)
-	sprite.position.y = clampf(sprite.position.y, bounds.position.y, bounds.end.y)
+	# Sprites: reflect off the shallowest-overlap axis and push out along it.
+	# (A tall paddle is hit on its side, so x is the shallow axis -> flip x.)
+	var size := _sprite_size(sprite)
+	var my_rect := Rect2(pos - size * 0.5, size)
+	for other_name in _stage.target_names():
+		var other: Target = _stage.find_target(other_name)
+		if other == _target:
+			continue
+		var other_rect := _sprite_rect(other)
+		if not my_rect.intersects(other_rect):
+			continue
+		var overlap := my_rect.intersection(other_rect)
+		if overlap.size.x <= overlap.size.y:
+			if my_rect.get_center().x < other_rect.get_center().x:
+				velocity.x = -absf(velocity.x)
+				pos.x -= overlap.size.x
+			else:
+				velocity.x = absf(velocity.x)
+				pos.x += overlap.size.x
+		else:
+			if my_rect.get_center().y < other_rect.get_center().y:
+				velocity.y = -absf(velocity.y)
+				pos.y -= overlap.size.y
+			else:
+				velocity.y = absf(velocity.y)
+				pos.y += overlap.size.y
+		my_rect = Rect2(pos - size * 0.5, size)
 
+	sprite.position = pos
 	# Inverse of _direction_vector(): vector -> Scratch direction.
 	return rad_to_deg(atan2(velocity.x, -velocity.y))
