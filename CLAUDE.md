@@ -219,9 +219,16 @@ sprites at the same corners and run the project's smallest script —
 — so each readout re-renders its live score through the shared font every tick. There
 is **no new opcode and no font change**: `say` already stringifies, and `0–9` were
 already in the atlas. The HUD sprites carry no costume of their own (a transparent
-1×1 placeholder, like the Announcer); `say` supplies one each tick, in white. Drawing
-at the `"large"` face, scale 1, follows M6's no-scaling rule — a single digit is small
-but legible at the viewport's own resolution.
+1×1 placeholder, like the Announcer); `say` supplies one each tick, in white.
+
+Like the Announcer's banner, the HUD draws at the `"large"` face, **scale 1** — no node
+scaling, following M6's no-scaling rule. The digit is small at native size, but the
+480×360 window is upscaled to fullscreen by a whole-number factor (`scale_mode="integer"`),
+so every source pixel maps to an N×N block and the native glyph reads cleanly; `say`
+forces nearest-neighbor filtering so it stays crisp. (An earlier pass scaled the HUD
+nodes up to fight thin strokes vanishing; that was a non-integer-stretch artifact and
+the integer-scaled 480×360 viewport makes it unnecessary — the digit is plenty visible
+at native scale.)
 
 The load-bearing change was in **`_on_round_won`**, not the HUD script. M5 zeroed both
 scores *unconditionally* at every round-end and relied on the pip clones — which were
@@ -276,7 +283,7 @@ is left as polish.)
 ## File layout
 
 ```
-project.godot              Godot project config; main scene = main.tscn; 800x600 window
+project.godot              Godot project config; main scene = main.tscn; 480x360 window
 main.tscn                  Main scene: a single Node2D "Stage" running stage.gd
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont

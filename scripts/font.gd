@@ -68,6 +68,14 @@ func render(text: String, color: Color = Color.WHITE, size: String = _DEFAULT_FA
 	# an empty string still yields a valid 1x1 texture.
 	var width := maxi(1, columns * advance_x - spacing)
 	var height := maxi(1, lines.size() * advance_y - spacing)
+	# Pad to even dimensions (the extra row/column stays transparent). A centered
+	# Sprite2D wearing an odd-sized costume sits on a half-pixel boundary
+	# (e.g. 36 - 5/2 = 33.5), so the viewport upscale samples the glyphs' 1px edge
+	# strokes inconsistently and a digit's flat top/bottom can vanish — "0" reading
+	# as two cut-off bars. Even dimensions put the edges on whole pixels at an
+	# integer position, so the costume stays crisp at native scale (no node scaling).
+	width += width % 2
+	height += height % 2
 	var image := Image.create(width, height, false, Image.FORMAT_RGBA8)
 	image.fill(Color(0, 0, 0, 0))
 

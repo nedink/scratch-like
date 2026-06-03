@@ -42,9 +42,9 @@ func _ready() -> void:
 	# Two tall thin paddles on the rails, one small ball in the center.
 	var paddle := Color(0.9, 0.9, 0.95)
 	var ball_color := Color(1.0, 0.8, 0.25)
-	var left := _add_sprite("LeftPaddle", Vector2(40, 300), 16, 96, paddle)
-	var right := _add_sprite("RightPaddle", Vector2(760, 300), 16, 96, paddle)
-	var ball := _add_sprite("Ball", Vector2(400, 300), 16, 16, ball_color)
+	var left := _add_sprite("LeftPaddle", Vector2(24, 180), 16, 96, paddle)
+	var right := _add_sprite("RightPaddle", Vector2(456, 180), 16, 96, paddle)
+	var ball := _add_sprite("Ball", Vector2(240, 180), 16, 16, ball_color)
 
 	# Milestone 3 state, seeded up front (this code stands in for a future
 	# editor's "make a variable" step). Scores are global; the ball's speed is a
@@ -66,10 +66,13 @@ func _ready() -> void:
 	# P1, top-right for P2) and `say`s its score every tick (see pong_scripts.gd).
 	# The sprites carry no costume of their own — `say` supplies one (white glyphs in
 	# the "large" face) — so they start as a transparent 1x1 placeholder, like the
-	# Announcer.
+	# Announcer. Like the Announcer's banner they draw at the sprite's *native* scale
+	# (1), no node scaling: the 480x360 window is upscaled to fullscreen by a whole-
+	# number factor (integer stretch), so every source pixel maps to an NxN block and
+	# even the native "large" digit is plenty legible.
 	var transparent := Color(1, 1, 1, 0)
-	var p1_hud := _add_sprite("P1Hud", Vector2(60, 40), 1, 1, transparent)
-	var p2_hud := _add_sprite("P2Hud", Vector2(740, 40), 1, 1, transparent)
+	var p1_hud := _add_sprite("P1Hud", Vector2(36, 24), 1, 1, transparent)
+	var p2_hud := _add_sprite("P2Hud", Vector2(444, 24), 1, 1, transparent)
 
 	# Milestone 6: a text banner. The Announcer parks off-screen until a player
 	# takes the match, then jumps to center, `say`s the winner (a font.png costume),

@@ -327,7 +327,7 @@ func _on_stop(block: Dictionary) -> void:
 ## so glyphs stay crisp if the sprite *is* scaled. Unlike Scratch's speech bubble,
 ## the text *is* the costume — exactly the "text-rendering costume" path the docs noted.
 func _on_say(block: Dictionary) -> void:
-	var text := str(_value(block, "text"))
+	var text := _stringify(_value(block, "text"))
 	var size := String(block.get("inputs", {}).get("size", "small"))
 	var sprite := _target.node as Sprite2D
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -446,6 +446,17 @@ func _on_delete_this_clone(_block: Dictionary) -> void:
 
 
 # --- Helpers ---------------------------------------------------------------
+
+## Stringify a `say` value the way Scratch does: a whole-number float reads as a
+## bare integer, not "3.0". Our arithmetic blocks (and change_var) always produce
+## floats, so a score of 3 arrives here as 3.0 — and since the font atlas has no
+## "." glyph, str()'s "3.0" would paint as "3" + gap + "0". Dropping the trailing
+## ".0" keeps the readout a single clean digit.
+func _stringify(value: Variant) -> String:
+	if typeof(value) == TYPE_FLOAT and value == floor(value) and is_finite(value):
+		return str(int(value))
+	return str(value)
+
 
 func _opcode(block: Dictionary) -> String:
 	return block.get("opcode", "")

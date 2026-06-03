@@ -13,16 +13,16 @@ extends RefCounted
 ## and fire `stop "all"`. M7 replaces M4/M5's clone-built pip grids with a live
 ## numeric HUD — each player's score `say`n through the bitmap font every tick.
 ##
-## Layout assumptions (matched in stage.gd, 800x600 window):
-##   * paddles are 16x96, so their center y is clamped to [48, 552];
-##   * left paddle rides x = 40, right paddle rides x = 760;
-##   * the ball is 16x16 and serves from the center (400, 300).
+## Layout assumptions (matched in stage.gd, 480x360 window):
+##   * paddles are 16x96, so their center y is clamped to [48, 312];
+##   * left paddle rides x = 24, right paddle rides x = 456;
+##   * the ball is 16x16 and serves from the center (240, 180).
 
 const PADDLE_SPEED := 8.0
 const BALL_SPEED := 6.0
 const PADDLE_TOP_Y := 48.0
-const PADDLE_BOTTOM_Y := 552.0
-const CENTER := Vector2(400, 300)
+const PADDLE_BOTTOM_Y := 312.0
+const CENTER := Vector2(240, 180)
 const SERVE_DELAY := 1.0
 ## Best-of-N (Milestone 5): take a round by reaching this many points, and win the
 ## match — firing `stop "all"` — by taking this many rounds. Each continuing round
@@ -58,11 +58,11 @@ static func _paddle(up_key: String, down_key: String, rail_x: float) -> Array:
 static func left_paddle() -> Array:
 	# Key names are Godot's canonical keycode-name strings (see
 	# OS.find_keycode_from_string), so "W"/"S"/"Up"/"Down", not "w"/"s".
-	return _paddle("W", "S", 40.0)
+	return _paddle("W", "S", 24.0)
 
 
 static func right_paddle() -> Array:
-	return _paddle("Up", "Down", 760.0)
+	return _paddle("Up", "Down", 456.0)
 
 
 ## The ball: serve from center, then forever move and reflect off the top/bottom
