@@ -21,6 +21,11 @@ var name: String
 ##   90 = right (+x), 0 = up (-y on screen), and the angle increases clockwise.
 var direction: float = 90.0
 
+## Per-sprite ("for this sprite only") variables: name (String) -> value.
+## Resolved *before* the Stage's globals, so a local shadows a global of the
+## same name (Scratch semantics). The ball keeps its `speed` here.
+var variables: Dictionary = {}
+
 
 func _init(target_node: Node2D, target_name: String) -> void:
 	node = target_node

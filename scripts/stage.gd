@@ -20,6 +20,15 @@ var _targets: Dictionary = {}
 ## interpreters themselves) outlive _ready() and keep running.
 var _interpreters: Array[Interpreter] = []
 
+## name (String) -> value. Global ("for all sprites") variables, shared by every
+## script. M3's scores live here; per-sprite locals live on each Target instead.
+var _variables: Dictionary = {}
+
+## Cleared by the `stop "all"` block. Every forever / run-stack polls this and
+## bails when it goes false, so the whole game halts within a frame — the
+## game-over freeze, since M3 has no on-screen way to announce the winner yet.
+var _running: bool = true
+
 
 func _ready() -> void:
 	# Two tall thin paddles on the rails, one small ball in the center.
@@ -29,9 +38,30 @@ func _ready() -> void:
 	var right := _add_sprite("RightPaddle", Vector2(760, 300), 16, 96, paddle)
 	var ball := _add_sprite("Ball", Vector2(400, 300), 16, 16, ball_color)
 
+	# Milestone 3 state, seeded up front (this code stands in for a future
+	# editor's "make a variable" step). Scores are global; the ball's speed is a
+	# per-sprite local, which both lets move_steps read it as a variable and
+	# proves the local store works alongside the globals.
+	set_var("p1_score", 0)
+	set_var("p2_score", 0)
+	ball.variables["speed"] = PongScripts.BALL_SPEED
+
 	_run(left, PongScripts.left_paddle())
 	_run(right, PongScripts.right_paddle())
 	_run(ball, PongScripts.ball())
+
+	# Milestone 4: a score readout made of clones. Each pip sprite parks itself
+	# off-screen and clones one small marker per point (see pong_scripts.gd).
+	var pip := Color(0.4, 0.9, 0.5)
+	var off_screen := Vector2(-100, -100)
+	var p1_pips := _add_sprite("P1Pips", off_screen, 10, 10, pip)
+	var p2_pips := _add_sprite("P2Pips", off_screen, 10, 10, pip)
+	# Seed the locals the layout math writes to, so they resolve as locals (and
+	# are inherited by each clone) rather than leaking into the global store.
+	for pips in [p1_pips, p2_pips]:
+		pips.variables = {"count": 0, "index": 0, "col": 0, "row": 0}
+	_run(p1_pips, PongScripts.p1_pips())
+	_run(p2_pips, PongScripts.p2_pips())
 
 
 ## Look up another target by the name it was registered under. Returns null if
@@ -44,6 +74,35 @@ func find_target(target_name: String) -> Target:
 ## every other sprite on the stage.
 func target_names() -> Array:
 	return _targets.keys()
+
+
+# --- Global variables & run state (Milestone 3) ----------------------------
+
+## Read a global variable. Returns 0 when unset; interpreters resolve a sprite's
+## locals before falling back here, so this is only reached for true globals.
+func get_var(var_name: String) -> Variant:
+	return _variables.get(var_name, 0)
+
+
+## Write a global variable.
+func set_var(var_name: String, value: Variant) -> void:
+	_variables[var_name] = value
+
+
+## Whether a global by this name exists — used by the interpreter's local-first
+## variable resolution to decide whether an assignment lands locally or here.
+func has_var(var_name: String) -> bool:
+	return _variables.has(var_name)
+
+
+## True until `stop "all"` runs. Scripts poll this to know when to unwind.
+func is_running() -> bool:
+	return _running
+
+
+## The `stop "all"` block: flip the flag every script is watching.
+func stop_all() -> void:
+	_running = false
 
 
 # --- Setup helpers ---------------------------------------------------------
@@ -67,6 +126,30 @@ func _run(target: Target, script: Array) -> void:
 	var interpreter := Interpreter.new(self, target)
 	_interpreters.append(interpreter)
 	interpreter.run(script)
+
+
+## Spawn a clone of `source`: a new node copying its costume + transform, a new
+## Target inheriting its direction and *local* variables (Scratch semantics), and
+## a fresh interpreter that launches the script's when_i_start_as_a_clone hats.
+## Clones are deliberately *not* added to the name registry — they share the
+## original's name but aren't individually addressable, so find_target and
+## touching_sprite? keep resolving the single original. Retaining the interpreter
+## in _interpreters keeps the clone (and its node) alive.
+func create_clone_of(source: Target, script: Array) -> void:
+	var src := source.node as Sprite2D
+	var clone_node := Sprite2D.new()
+	clone_node.texture = src.texture
+	clone_node.position = src.position
+	clone_node.scale = src.scale
+	add_child(clone_node)
+
+	var clone := Target.new(clone_node, source.name)
+	clone.direction = source.direction
+	clone.variables = source.variables.duplicate()
+
+	var interpreter := Interpreter.new(self, clone)
+	_interpreters.append(interpreter)
+	interpreter.run_as_clone(script)
 
 
 ## Generate a plain colored rectangle in code so the project has no dependency

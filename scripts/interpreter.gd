@@ -40,6 +40,10 @@ var _tree: SceneTree
 ## The sprite this interpreter drives.
 var _target: Target
 
+## This target's full script (all hats), retained so a clone can locate and
+## launch the `when_i_start_as_a_clone` hats. Set by run() / run_as_clone().
+var _script: Array = []
+
 ## opcode (String) -> Callable for blocks that *do* something (statements).
 var _statement_handlers: Dictionary = {}
 
@@ -67,11 +71,29 @@ func _register_handlers() -> void:
 		"point_in_direction": _on_point_in_direction,
 		"go_to": _on_go_to,
 		"wait_seconds": _on_wait_seconds,
+		"set_var": _on_set_var,
+		"change_var": _on_change_var,
+		"stop": _on_stop,
+		"create_clone": _on_create_clone,
+		"when_i_start_as_a_clone": _on_when_i_start_as_a_clone,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
 		"touching_sprite?": _on_touching_sprite,
 		"key_pressed?": _on_key_pressed,
+		"variable": _on_variable,
+		"add": _on_add,
+		"subtract": _on_subtract,
+		"multiply": _on_multiply,
+		"divide": _on_divide,
+		"mod": _on_mod,
+		"equals": _on_equals,
+		"greater_than": _on_greater_than,
+		"less_than": _on_less_than,
+		"and": _on_and,
+		"or": _on_or,
+		"not": _on_not,
+		"random": _on_random,
 	}
 
 
@@ -81,9 +103,19 @@ func _register_handlers() -> void:
 ## green flag. We launch each hat's body as a fire-and-forget coroutine so the
 ## caller (and the engine) is never blocked.
 func run(script: Array) -> void:
+	_script = script
 	for block in script:
 		if _opcode(block) == "when_flag_clicked":
 			# No `await`: this returns as soon as the body first yields a frame.
+			_run_stack(_body(block))
+
+
+## Start this script as a freshly spawned clone: like run(), but the entry points
+## are the `when_i_start_as_a_clone` hats instead of the green-flag hats.
+func run_as_clone(script: Array) -> void:
+	_script = script
+	for block in script:
+		if _opcode(block) == "when_i_start_as_a_clone":
 			_run_stack(_body(block))
 
 
@@ -93,6 +125,9 @@ func run(script: Array) -> void:
 ## (e.g. forever) suspends the whole stack until it resumes.
 func _run_stack(blocks: Array) -> void:
 	for block in blocks:
+		# Bail mid-stack the moment `stop "all"` fires, so no further blocks run.
+		if not _stage.is_running():
+			return
 		await _execute(block)
 
 
@@ -134,8 +169,10 @@ func _on_when_flag_clicked(block: Dictionary) -> void:
 ## The per-iteration `await` is what keeps this from freezing the engine.
 func _on_forever(block: Dictionary) -> void:
 	var body := _body(block)
-	while true:
+	while _stage.is_running():
 		await _run_stack(body)
+		if not _stage.is_running():
+			return
 		await _tree.process_frame
 
 
@@ -230,6 +267,130 @@ func _on_key_pressed(block: Dictionary) -> bool:
 		push_warning("Interpreter: key_pressed? unknown key '%s'" % key_name)
 		return false
 	return Input.is_physical_key_pressed(keycode)
+
+
+# --- Variables, operators & control (Milestone 3) --------------------------
+
+## set_var: store `value` (which may itself be a reporter) into variable `name`.
+func _on_set_var(block: Dictionary) -> void:
+	_set_variable(String(_value(block, "name")), _value(block, "value"))
+
+
+## change_var: add `by` to the current value of variable `name`.
+func _on_change_var(block: Dictionary) -> void:
+	var name := String(_value(block, "name"))
+	_set_variable(name, float(_get_variable(name)) + float(_value(block, "by")))
+
+
+## stop: end execution. Only "all" is supported — it flips the Stage's running
+## flag, which every forever / run-stack polls, so all scripts unwind within a
+## frame. (Stopping just *this* script would need per-coroutine unwinding and is
+## deferred; "all" is all the game-over freeze needs.)
+func _on_stop(block: Dictionary) -> void:
+	var mode := String(block.get("inputs", {}).get("mode", "all"))
+	if mode == "all":
+		_stage.stop_all()
+	else:
+		push_warning("Interpreter: unsupported stop mode '%s'" % mode)
+
+
+## variable: read a variable's value (local-first, then global).
+func _on_variable(block: Dictionary) -> Variant:
+	return _get_variable(String(_value(block, "name")))
+
+
+# Arithmetic. divide / mod guard division by zero (-> 0) so a bad script can't
+# crash the runtime.
+func _on_add(block: Dictionary) -> float:
+	return float(_value(block, "a")) + float(_value(block, "b"))
+
+func _on_subtract(block: Dictionary) -> float:
+	return float(_value(block, "a")) - float(_value(block, "b"))
+
+func _on_multiply(block: Dictionary) -> float:
+	return float(_value(block, "a")) * float(_value(block, "b"))
+
+func _on_divide(block: Dictionary) -> float:
+	var b := float(_value(block, "b"))
+	return 0.0 if b == 0.0 else float(_value(block, "a")) / b
+
+func _on_mod(block: Dictionary) -> float:
+	var b := float(_value(block, "b"))
+	return 0.0 if b == 0.0 else fmod(float(_value(block, "a")), b)
+
+
+# Comparison -> bool.
+func _on_equals(block: Dictionary) -> bool:
+	return is_equal_approx(float(_value(block, "a")), float(_value(block, "b")))
+
+func _on_greater_than(block: Dictionary) -> bool:
+	return float(_value(block, "a")) > float(_value(block, "b"))
+
+func _on_less_than(block: Dictionary) -> bool:
+	return float(_value(block, "a")) < float(_value(block, "b"))
+
+
+# Boolean combinators -> bool.
+func _on_and(block: Dictionary) -> bool:
+	return bool(_value(block, "a")) and bool(_value(block, "b"))
+
+func _on_or(block: Dictionary) -> bool:
+	return bool(_value(block, "a")) or bool(_value(block, "b"))
+
+func _on_not(block: Dictionary) -> bool:
+	return not bool(_value(block, "a"))
+
+
+## random: a uniform float in [from, to] — the varied serve angle. Godot's
+## global RNG is auto-seeded, so serves differ from run to run.
+func _on_random(block: Dictionary) -> float:
+	return randf_range(float(_value(block, "from")), float(_value(block, "to")))
+
+
+# --- Variable resolution ---------------------------------------------------
+
+## Read variable `name`, checking this target's locals first, then the Stage's
+## globals (Scratch's shadowing order). Unknown -> 0 with a warning.
+func _get_variable(name: String) -> Variant:
+	if _target.variables.has(name):
+		return _target.variables[name]
+	if _stage.has_var(name):
+		return _stage.get_var(name)
+	push_warning("Interpreter: read of undefined variable '%s'" % name)
+	return 0
+
+
+## Write variable `name`, resolved the same way: an existing local wins, else an
+## existing global, else we create it in the global store (and warn — every
+## variable the scripts touch is meant to be seeded up front).
+func _set_variable(name: String, value: Variant) -> void:
+	if _target.variables.has(name):
+		_target.variables[name] = value
+	elif _stage.has_var(name):
+		_stage.set_var(name, value)
+	else:
+		push_warning("Interpreter: assignment to undeclared variable '%s' (creating global)" % name)
+		_stage.set_var(name, value)
+
+
+# --- Cloning (Milestone 4) -------------------------------------------------
+
+## when_i_start_as_a_clone: as a nested statement it just runs its body; the real
+## entry point for clones is run_as_clone() above.
+func _on_when_i_start_as_a_clone(block: Dictionary) -> void:
+	await _run_stack(_body(block))
+
+
+## create_clone: spawn a runtime copy of this sprite (only "myself" is supported)
+## that inherits its costume, direction, and *local* variables, then runs its own
+## when_i_start_as_a_clone hats. The Stage owns node + interpreter creation; we
+## just hand it this target and the script the clone should run.
+func _on_create_clone(block: Dictionary) -> void:
+	var which := String(block.get("inputs", {}).get("target", "myself"))
+	if which != "myself":
+		push_warning("Interpreter: create_clone only supports 'myself' (got '%s')" % which)
+		return
+	_stage.create_clone_of(_target, _script)
 
 
 # --- Helpers ---------------------------------------------------------------
