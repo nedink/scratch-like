@@ -1,18 +1,17 @@
 class_name PongScripts
 extends RefCounted
 
-## The Pong scripts — two paddles, a ball, and two clone-built scoreboards —
-## expressed purely as data, exactly the shape a visual editor would emit. Each is
-## an Array of block dictionaries with substacks nested under "inputs".
+## The Pong scripts — two paddles, a ball, two numeric score readouts, and an
+## announcer — expressed purely as data, exactly the shape a visual editor would
+## emit. Each is an Array of block dictionaries with substacks nested under "inputs".
 ##
 ## M3 layered *data & expressions* onto the M2 motion blocks: the ball tracks the
 ## score in **variables** (`change p2_score by 1`) and serves at a randomized angle
-## built from a **nested reporter expression** (`add 90, random(-45, 45)`). M4 drew
-## the score with **clones**. M5 makes the match **best-of-N**: reaching
-## ROUND_POINTS takes a round and bumps the global `round`, on which every pip clone
-## **deletes itself** (the board clears) and the makers restart; taking
-## ROUNDS_TO_WIN rounds fires `stop "all"` (the whole game freezes — there is still
-## no on-screen text, so the win shows as the freeze with the final pips left up).
+## built from a **nested reporter expression** (`add 90, random(-45, 45)`). M5 makes
+## the match **best-of-N**: reaching ROUND_POINTS takes a round and bumps the global
+## `round`; taking ROUNDS_TO_WIN rounds lets the Announcer paint the winner banner
+## and fire `stop "all"`. M7 replaces M4/M5's clone-built pip grids with a live
+## numeric HUD — each player's score `say`n through the bitmap font every tick.
 ##
 ## Layout assumptions (matched in stage.gd, 800x600 window):
 ##   * paddles are 16x96, so their center y is clamped to [48, 552];
@@ -25,18 +24,13 @@ const PADDLE_TOP_Y := 48.0
 const PADDLE_BOTTOM_Y := 552.0
 const CENTER := Vector2(400, 300)
 const SERVE_DELAY := 1.0
-## Best-of-N (Milestone 5): take a round by reaching this many points (the pip row
-## wraps every PIP_COLS, so ROUND_POINTS == PIP_COLS fills exactly one row), and
-## win the match — firing `stop "all"` — by taking this many rounds. Each new round
-## bumps the global `round`, which makes every pip clone delete itself and the
-## makers restart their counts, so the board clears and rebuilds.
+## Best-of-N (Milestone 5): take a round by reaching this many points, and win the
+## match — firing `stop "all"` — by taking this many rounds. Each continuing round
+## bumps the global `round` and re-serves from center.
 const ROUND_POINTS := 5
 const ROUNDS_TO_WIN := 2
 ## Serve angle = straight across (90 = right, 270 = left) ± a random spread.
 const SERVE_SPREAD := 45.0
-## Scoreboard pips: clones laid out left-to-right, wrapping every PIP_COLS.
-const PIP_COLS := 5
-const PIP_GAP := 14.0
 
 
 ## A keyboard-driven paddle: move on its vertical rail while a key is held, and
@@ -119,22 +113,28 @@ static func _serve_left() -> Dictionary:
 
 
 ## The blocks that run when a player takes a round (the body of the round-end `if`).
-## Bank the round on `rounds_var` and *always* zero both per-round scores — that
-## clears the `score > ROUND_POINTS-1` condition so this round-won block can't fire
-## twice (it no longer ends the match itself, so the ball keeps looping the frame or
-## two it takes the Announcer to freeze the game). Then, *only if the match isn't
-## over*, bump the global `round` (the signal every pip clone deletes itself on) and
-## re-serve from center along `serve`. On the match-winning round that step is
-## skipped, so `round` never advances and the final pips stay up — the Announcer,
-## watching the same rounds totals, paints the banner and fires `stop "all"`. M6
-## moved the freeze there so the win shows on screen instead of just stopping.
-## Ordering is still load-bearing: bump `round` only on rounds that continue.
+## Bank the round on `rounds_var`, then — *only if the match isn't over* — zero both
+## per-round scores, bump the global `round`, and re-serve from center along `serve`.
+##
+## Zeroing the scores clears the `score > ROUND_POINTS-1` condition so a continuing
+## round can't bank twice. On the match-*winning* round that whole branch is skipped:
+## the scores are left standing (so the HUD freezes showing the winning ROUND_POINTS,
+## not 0) and the ball keeps looping — re-firing this block harmlessly, since the
+## Announcer, watching the same rounds totals, paints the banner and fires
+## `stop "all"` within a frame. M6 moved the freeze there so the win shows on screen.
+##
+## (M5 zeroed the scores *unconditionally* and the freeze relied on the pip clones,
+## which were decoupled from the live score, staying up. M7's HUD reads the live
+## score every tick, so the zeroing had to move inside the continue-branch to keep
+## the winning number on screen. `round` was M5's signal for the pips to clear; with
+## the pips gone nothing reads it, but the ball still bumps it harmlessly — the
+## `delete_this_clone` machinery ships unexercised, like `stop "this script"`.)
 static func _on_round_won(rounds_var: String, serve: Dictionary) -> Array:
 	return [
 		_change(rounds_var, 1),
-		_set_var("p1_score", 0),
-		_set_var("p2_score", 0),
 		_if(_lt(_var(rounds_var), ROUNDS_TO_WIN), [
+			_set_var("p1_score", 0),
+			_set_var("p2_score", 0),
 			_change("round", 1),
 			_go_to(CENTER.x, CENTER.y),
 			_point(serve),
@@ -171,62 +171,33 @@ static func announcer() -> Array:
 	]
 
 
-## A clone-built score readout. The original parks off-screen (seeded there in
-## stage.gd) and, whenever its player's score outruns the count of pips it has
-## made, bumps the count, stashes it in the local `index`, and clones itself.
-## Each clone inherits that `index` and places itself in a grid:
-##   col = (index - 1) mod PIP_COLS,  row = (index - 1 - col) / PIP_COLS
-## This is the M4 payoff: the grid math exercises the full M3 operator palette.
+## A live numeric score readout (Milestone 7). The HUD sprite parks where its
+## player's pip grid used to sit (seeded in stage.gd) and `say`s its score every
+## tick, in the "large" face so it reads at the viewport's own resolution. This is
+## the M6 payoff the deferred-list named — a real numeric scoreboard *replacing*
+## the M4/M5 pip clones — and it is deliberately tiny: `say` already stringifies a
+## number reporter, so the readout is just `say (score)` in a forever loop, with no
+## new opcode and no font additions (the digit glyphs were already in the atlas).
 ##
-## M5 makes the board clear between rounds. Each clone is stamped with the `round`
-## it was born in (`born_round`) and then watches the global `round`; when the ball
-## starts a new round and bumps it, the clone deletes itself. The maker likewise
-## notices the new round (via its own `my_round`) and resets `count` so it rebuilds
-## the row from zero. (Both read the *global* `round`; neither keeps a local one.)
-static func _pips(score_name: String, origin_x: float, origin_y: float) -> Array:
+## Re-rendering each tick allocates a fresh costume 60x/sec; that is fine for a
+## one-digit readout and matches Scratch's redraw model. Guarding it to re-`say`
+## only when the score changes is left as polish.
+static func _score_hud(score_name: String) -> Array:
 	return [
-		_clone_hat([
-			_set_var("col", _mod(_sub(_var("index"), 1), PIP_COLS)),
-			_set_var("row", _div(_sub(_sub(_var("index"), 1), _var("col")), PIP_COLS)),
-			_go_to(
-				_add(origin_x, _mul(_var("col"), PIP_GAP)),
-				_add(origin_y, _mul(_var("row"), PIP_GAP)),
-			),
-			# Then sit and watch for the round to advance past the one we were born
-			# in (the ball bumps the global `round`), and delete ourselves when it
-			# does — clearing the board for the next round.
-			_forever([
-				_if(_gt(_var("round"), _var("born_round")), [_delete_clone()]),
-			]),
-		]),
 		_hat([
-			_set_var("count", 0),
 			_forever([
-				# A new round started: our clones are deleting themselves, so reset
-				# the count to rebuild from zero for this round.
-				_if(_gt(_var("round"), _var("my_round")), [
-					_set_var("count", 0),
-					_set_var("my_round", _var("round")),
-				]),
-				# When the score has outrun our pip count, add one more pip. Stamp the
-				# current round onto it so the clone knows when to delete itself.
-				_if(_gt(_var(score_name), _var("count")), [
-					_change("count", 1),
-					_set_var("index", _var("count")),
-					_set_var("born_round", _var("round")),
-					_clone(),
-				]),
+				_say(_var(score_name), "large"),
 			]),
 		]),
 	]
 
 
-static func p1_pips() -> Array:
-	return _pips("p1_score", 20.0, 20.0)
+static func p1_hud() -> Array:
+	return _score_hud("p1_score")
 
 
-static func p2_pips() -> Array:
-	return _pips("p2_score", 430.0, 20.0)
+static func p2_hud() -> Array:
+	return _score_hud("p2_score")
 
 
 # --- Tiny block builders (just to keep the data above readable) ------------

@@ -5,21 +5,25 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 6 — on-screen text
+## Current state: Milestone 7 — numeric HUD
 
-**Goal of this milestone:** finally put **text on screen** — the payoff every prior
-milestone deferred ("no on-screen way to announce the winner yet"). M6 adds a
-**bitmap font** baked from `font.png` (a glyph atlas of `A–Z` then `0–9`, in two
-sizes — a 3×5 face and a larger 5×9 face) and a **`say`** block that renders a
-string into a transparent costume and wears it on the sprite. The
-motivating demo adds an **Announcer** sprite: it parks off-screen, watches the
-rounds-won totals, and the instant a player takes the match it jumps to center,
-`say`s **"P1 WINS" / "P2 WINS"** in the large face at the viewport's own resolution
-(no scaling), then fires `stop "all"` — so the game-over freeze now lands with the
-winner *named on screen*. The ball no longer ends the match
-itself (the freeze has to happen *after* the banner is painted); it just stops
-clearing the board on the clinching round, leaving the final pips up behind the
-banner.
+**Goal of this milestone:** turn the M6 font into a **live scoreboard**, retiring the
+M4/M5 clone-built pip grids for a **real numeric readout**. Two **HUD** sprites (one
+per player) park where the pips used to and `say` their score every tick, in the
+`"large"` face. It is deliberately the thinnest milestone in the project: `say`
+already stringifies a number reporter, so the readout is just `say (score)` inside a
+`forever` — **no new opcode, and no font additions** (the digit glyphs `0–9` were
+already in the atlas). The visible change is the scoreboard: instead of a growing
+grid of green pips, each side shows a single climbing digit (0–5), resetting to 0
+between rounds, and the **winning `ROUND_POINTS` stays frozen on screen** under the
+"P1 WINS" / "P2 WINS" banner.
+
+The one piece of real design was the freeze. M5's pip grid was decoupled from the
+live score (it counted clones, cleared only when the global `round` advanced), so the
+ball could zero the scores every round-end and the final pips still showed. The HUD
+reads the *live* score, so `_on_round_won` had to move its score-zeroing **inside**
+the "match continues" branch — on the clinching round the scores are left standing so
+the winning number freezes on screen. See [Numeric HUD (M7)](#numeric-hud-m7).
 
 There is still deliberately **no** visual editor, drag-and-drop, or UI panel yet.
 Text is uppercase letters + digits only — the atlas has no lowercase or
@@ -34,12 +38,12 @@ punctuation. See [Deliberately deferred](#deliberately-deferred-to-a-later-miles
 4. A yellow ball serves from the center at a **randomized angle** and bounces off
    the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
-   that scored. Each point adds a green **pip** to that player's grid (top-left
-   for P1, top-right for P2). **First to `ROUND_POINTS` (5) takes the round**: the
-   pips clear, scores reset, and the next round serves. **Taking `ROUNDS_TO_WIN`
-   (2) rounds wins the match**, at which point the **"P1 WINS" / "P2 WINS"** banner
-   appears at center and every script halts, freezing the game with the winner named
-   and the final round's pips on screen.
+   that scored. Each point increments that player's **numeric score readout** (a
+   single digit, top-left for P1, top-right for P2). **First to `ROUND_POINTS` (5)
+   takes the round**: both readouts reset to 0 and the next round serves. **Taking
+   `ROUNDS_TO_WIN` (2) rounds wins the match**, at which point the **"P1 WINS" /
+   "P2 WINS"** banner appears at center and every script halts, freezing the game
+   with the winner named and the winning score (5) left on screen.
 
 ## Core design (the parts meant to outlive this milestone)
 
@@ -55,7 +59,7 @@ Substacks (the body of `forever`/`if`, an `if` condition) are nested `Array`s /
 nested block dictionaries under `"inputs"`. This is fully serializable and is
 exactly the shape a visual editor would emit later. See
 [scripts/pong_scripts.gd](scripts/pong_scripts.gd) for the Pong scripts (two
-paddles, the ball, the two clone-built scoreboards, and the M6 announcer); it uses
+paddles, the ball, the two numeric score readouts, and the announcer); it uses
 tiny static builder helpers (`_if`, `_move`, …) purely to keep the data readable —
 the output is still plain dictionaries/arrays.
 
@@ -135,9 +139,12 @@ each interpreter now **retains its `_script`**.
 Clones are **not** added to the name registry — they share the original's name
 but aren't individually addressable, so `find_target` / `touching_sprite?` keep
 resolving the single original (and `_bounce` never sees a clone). The clone stays
-alive because its interpreter is retained in `_interpreters`. The pip scoreboard
-relies on all of this: the original parks off-screen and spawns one clone per
-point; each clone derives its grid cell from its inherited `index`.
+alive because its interpreter is retained in `_interpreters`. The M4/M5 pip
+scoreboard relied on all of this (the original parked off-screen and spawned one
+clone per point, each deriving its grid cell from its inherited `index`); **M7's
+numeric HUD replaced that scoreboard**, so the clone primitives now ship unexercised
+by the demo, the same way `stop "this script"` does — see
+[Numeric HUD (M7)](#numeric-hud-m7).
 
 ### Clone lifecycle (M5)
 
@@ -155,14 +162,14 @@ unwinds *that one* coroutine within a frame — the per-script counterpart to ho
   `create_clone_of`, guards it — matching Scratch). Erasing the interpreter mid-
   unwind is safe: the suspended coroutine keeps the object alive until it returns.
 
-The best-of-N scoreboard exercises this: each pip clone is stamped with the
-`round` it was born in and watches the global `round`; when the ball bumps `round`
-at the start of a new round, every clone deletes itself and the board clears. The
-demo bumps `round` only on rounds that *continue* — on the clinching round the
-ball skips the whole board-clearing/serve step, so the final pips stay up while the
-Announcer freezes the game (see [On-screen text (M6)](#on-screen-text-m6)).
-(`stop "this script"` has no load-bearing use in this demo; it ships as the
-documented sibling primitive.)
+The M5 best-of-N scoreboard exercised this: each pip clone was stamped with the
+`round` it was born in and watched the global `round`; when the ball bumped `round`
+at the start of a new round, every clone deleted itself and the board cleared.
+**M7's numeric HUD retired the pip clones**, so `delete_this_clone` now ships
+unexercised by the demo (alongside `stop "this script"`), and nothing reads `round`
+anymore — the ball still bumps it harmlessly. The `round`-driven board-clear is
+preserved here as the documented design; see [Numeric HUD (M7)](#numeric-hud-m7)
+for what replaced it and why the freeze logic had to change.
 
 ### On-screen text (M6)
 
@@ -198,6 +205,37 @@ one script that knows how to draw the result is the one that ends the match. It
 `say` sets the costume synchronously, then `stop "all"` flips the global flag in the
 same frame — every coroutine (the Announcer included) unwinds, frozen with the banner up.
 
+### Numeric HUD (M7)
+
+M6 left `say` able to stringify a number reporter ("the path to a real HUD") but the
+demo only painted literal banners and the score still showed as M4/M5's grid of clone
+pips. M7 cashes that in: two **HUD** sprites (`P1Hud`, `P2Hud`) replace the pip
+sprites at the same corners and run the project's smallest script —
+
+```gdscript
+[ when_flag_clicked → forever → say (variable score) in "large" ]
+```
+
+— so each readout re-renders its live score through the shared font every tick. There
+is **no new opcode and no font change**: `say` already stringifies, and `0–9` were
+already in the atlas. The HUD sprites carry no costume of their own (a transparent
+1×1 placeholder, like the Announcer); `say` supplies one each tick, in white. Drawing
+at the `"large"` face, scale 1, follows M6's no-scaling rule — a single digit is small
+but legible at the viewport's own resolution.
+
+The load-bearing change was in **`_on_round_won`**, not the HUD script. M5 zeroed both
+scores *unconditionally* at every round-end and relied on the pip clones — which were
+decoupled from the live score and only cleared on a `round` bump — to keep the final
+pips up through the freeze. The HUD reads the *live* score, so unconditional zeroing
+would freeze it showing "0 0" under the banner. The fix: move the score-zeroing
+(and the `round` bump and re-serve) **inside** the `if rounds < ROUNDS_TO_WIN` branch.
+A continuing round still zeroes (clearing the `score > ROUND_POINTS-1` condition so it
+can't bank twice); the clinching round skips the branch, leaving the winning
+`ROUND_POINTS` on screen while the ball loops harmlessly until the Announcer freezes
+the game. (Re-rendering a costume 60×/sec is wasteful but matches Scratch's redraw
+model and is fine for two one-digit readouts; guarding it to re-`say` only on change
+is left as polish.)
+
 ## Opcodes implemented
 
 | opcode | kind | inputs | notes |
@@ -209,7 +247,7 @@ same frame — every coroutine (the Announcer included) unwinds, frozen with the
 | `move_steps` | statement | `steps` | moves `steps` px along the facing direction |
 | `turn_degrees` | statement | `degrees` | rotates facing direction clockwise |
 | `point_in_direction` | statement | `direction` | number sets direction absolutely; `"bounce"` reflects off whatever is touched (see below) |
-| `go_to` | statement | `x`, `y` | sets position (inputs may be expressions); resets the ball, clamps paddles, places pips |
+| `go_to` | statement | `x`, `y` | sets position (inputs may be expressions); resets the ball, clamps paddles, parks the announcer/HUD |
 | `wait_seconds` | statement | `seconds` | awaits a SceneTree timer; the serve delay |
 | `touching_edge?` | reporter | `side` | true at a viewport edge; `side` ∈ {top,bottom,left,right,any}, default `any` |
 | `touching_sprite?` | reporter | `name` | AABB overlap with the named sprite, resolved through the registry |
@@ -219,7 +257,7 @@ same frame — every coroutine (the Announcer included) unwinds, frozen with the
 | `say` | statement | `text`, `size` | renders `text` (stringified) through the bitmap font in the `size` face (`"small"` default / `"large"`) and sets it as the sprite's costume; the winner banner |
 | `stop` | statement | `mode` | `"all"` halts every script (the game-over freeze); `"this script"` unwinds only the calling coroutine (clears its `_alive` flag) |
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
-| `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original. Clears the round's pips |
+| `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original |
 | `variable` | reporter | `name` | reads a variable, resolving local-first then global |
 | `add` / `subtract` / `multiply` / `divide` / `mod` | reporter | `a`, `b` | arithmetic; `divide`/`mod` guard ÷0 → 0 |
 | `equals` / `greater_than` / `less_than` | reporter | `a`, `b` | numeric comparison → bool |
@@ -247,7 +285,7 @@ scripts/
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two scoreboards, announcer), as data
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data
 CLAUDE.md                  This file
 ```
 
@@ -273,10 +311,16 @@ CLAUDE.md                  This file
   `create_clone` and `delete_this_clone` only act on `"myself"` / the running
   clone. Spawning or culling another target's clones needs the registry to track
   clones, not just originals.
-- **A live numeric HUD / lowercase + punctuation** — `say` renders any string, and
-  stringifies its input so a number reporter already shows as a readout, but the
-  demo only paints literal banners and the atlas covers just `A–Z`/`0–9`. A real
-  numeric scoreboard (replacing the pips) and a wider glyph set are the next steps.
+- **Labelled HUD / string `join` / lowercase + punctuation** — M7's HUD shows a bare
+  number; a labelled readout like `P1:5` needs a `join` reporter (to combine a literal
+  with the score) and at least a colon glyph. The atlas still covers only `A–Z`/`0–9`,
+  so labels, lowercase, and punctuation wait until a format actually needs them. (When
+  added, the clean spot is extending each digit row rightward past `9` — no new atlas
+  rows, no moving existing glyphs.)
+- **Multi-digit HUD alignment** — the HUD sprite is centered, so a bare number growing
+  from one digit to two would shift by half a glyph. This demo's scores are always one
+  digit (reset at 5, rounds cap at 2), so it never surfaces; left-aligning a growing
+  readout is deferred.
 - **Event hats (`when_key_pressed`)** — needs an event-dispatch system. Polling
   `key_pressed?` inside `forever` stays within the existing loop model.
 

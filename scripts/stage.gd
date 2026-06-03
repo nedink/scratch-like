@@ -61,20 +61,15 @@ func _ready() -> void:
 	set_var("round", 1)
 	ball.variables["speed"] = PongScripts.BALL_SPEED
 
-	# Milestone 4: a score readout made of clones. Each pip sprite parks itself
-	# off-screen and clones one small marker per point (see pong_scripts.gd).
-	var pip := Color(0.4, 0.9, 0.5)
-	var off_screen := Vector2(-100, -100)
-	var p1_pips := _add_sprite("P1Pips", off_screen, 10, 10, pip)
-	var p2_pips := _add_sprite("P2Pips", off_screen, 10, 10, pip)
-	# Seed the locals the layout math writes to, so they resolve as locals (and
-	# are inherited by each clone) rather than leaking into the global store.
-	# `my_round` lets the maker notice a new round and restart its pip count;
-	# `born_round` is stamped onto each clone so it knows when to delete itself.
-	# Note there is deliberately no local `round` — both maker and clone read the
-	# *global* `round` the ball drives; a local would shadow it.
-	for pips in [p1_pips, p2_pips]:
-		pips.variables = {"count": 0, "index": 0, "col": 0, "row": 0, "my_round": 1, "born_round": 1}
+	# Milestone 7: a live numeric score readout that replaces M4/M5's clone-built
+	# pip grids. Each HUD sprite sits where its player's pips used to (top-left for
+	# P1, top-right for P2) and `say`s its score every tick (see pong_scripts.gd).
+	# The sprites carry no costume of their own — `say` supplies one (white glyphs in
+	# the "large" face) — so they start as a transparent 1x1 placeholder, like the
+	# Announcer.
+	var transparent := Color(1, 1, 1, 0)
+	var p1_hud := _add_sprite("P1Hud", Vector2(60, 40), 1, 1, transparent)
+	var p2_hud := _add_sprite("P2Hud", Vector2(740, 40), 1, 1, transparent)
 
 	# Milestone 6: a text banner. The Announcer parks off-screen until a player
 	# takes the match, then jumps to center, `say`s the winner (a font.png costume),
@@ -99,8 +94,8 @@ func _ready() -> void:
 	_run(left, PongScripts.left_paddle())
 	_run(right, PongScripts.right_paddle())
 	_run(ball, PongScripts.ball())
-	_run(p1_pips, PongScripts.p1_pips())
-	_run(p2_pips, PongScripts.p2_pips())
+	_run(p1_hud, PongScripts.p1_hud())
+	_run(p2_hud, PongScripts.p2_hud())
 	_run(announcer, PongScripts.announcer())
 
 
