@@ -5,22 +5,24 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 5 — clone lifecycle
+## Current state: Milestone 6 — on-screen text
 
-**Goal of this milestone:** complete the clone lifecycle M4 left half-built. M4
-could only *create* clones; M5 adds **`delete_this_clone`** (a clone removes
-itself) and its sibling **`stop "this script"`** (one coroutine unwinds without
-touching the others). Both ride the same new primitive: a **per-interpreter
-`_alive` flag**, polled exactly where `stop "all"` already polls the Stage's
-global flag. The motivating demo turns Pong into a **best-of-N match** — a round
-ends at `ROUND_POINTS`, and the pip scoreboard must now *clear and rebuild* each
-round (every pip clone deletes itself when the round advances): exactly the reset
-M4's create-only clones couldn't do. Taking `ROUNDS_TO_WIN` rounds still fires
-`stop "all"` for the full game-over freeze, leaving the final pips on screen.
+**Goal of this milestone:** finally put **text on screen** — the payoff every prior
+milestone deferred ("no on-screen way to announce the winner yet"). M6 adds a
+**bitmap font** baked from `font.png` (a 3×5-pixel glyph atlas: `A–Z` on the top
+row, `0–9` on the second, 1px letter and line spacing) and a **`say`** block that
+renders a string into a transparent costume and wears it on the sprite. The
+motivating demo adds an **Announcer** sprite: it parks off-screen, watches the
+rounds-won totals, and the instant a player takes the match it jumps to center,
+`say`s **"P1 WINS" / "P2 WINS"**, then fires `stop "all"` — so the game-over freeze
+now lands with the winner *named on screen*. The ball no longer ends the match
+itself (the freeze has to happen *after* the banner is painted); it just stops
+clearing the board on the clinching round, leaving the final pips up behind the
+banner.
 
-There is still deliberately **no** visual editor, drag-and-drop, or UI panel yet,
-and **no text rendering** (the score is shown as a count of pips, not a number).
-See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+There is still deliberately **no** visual editor, drag-and-drop, or UI panel yet.
+Text is uppercase letters + digits only — the atlas has no lowercase or
+punctuation. See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 ## How to run
 
@@ -34,8 +36,9 @@ See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
    that scored. Each point adds a green **pip** to that player's grid (top-left
    for P1, top-right for P2). **First to `ROUND_POINTS` (5) takes the round**: the
    pips clear, scores reset, and the next round serves. **Taking `ROUNDS_TO_WIN`
-   (2) rounds wins the match**, at which point every script halts and the game
-   freezes with the final round's pips on screen.
+   (2) rounds wins the match**, at which point the **"P1 WINS" / "P2 WINS"** banner
+   appears at center and every script halts, freezing the game with the winner named
+   and the final round's pips on screen.
 
 ## Core design (the parts meant to outlive this milestone)
 
@@ -51,18 +54,26 @@ Substacks (the body of `forever`/`if`, an `if` condition) are nested `Array`s /
 nested block dictionaries under `"inputs"`. This is fully serializable and is
 exactly the shape a visual editor would emit later. See
 [scripts/pong_scripts.gd](scripts/pong_scripts.gd) for the Pong scripts (two
-paddles, the ball, and the two clone-built scoreboards); it uses tiny static
-builder helpers (`_if`, `_move`, …) purely to keep the data readable — the output
-is still plain dictionaries/arrays.
+paddles, the ball, the two clone-built scoreboards, and the M6 announcer); it uses
+tiny static builder helpers (`_if`, `_move`, …) purely to keep the data readable —
+the output is still plain dictionaries/arrays.
 
 ### The interpreter is a coroutine-driven tree walker
 
 [scripts/interpreter.gd](scripts/interpreter.gd):
 
 - Running a stack of blocks is an `await`-ing method — a GDScript coroutine.
-- `forever` runs its body, then does `await get_tree().process_frame`, yielding
-  one frame per iteration so it never blocks the engine. `wait_seconds` yields
-  the same cooperative way (awaits a SceneTree timer).
+- `forever` runs its body, then does `await get_tree().physics_frame`, yielding
+  one **tick** per iteration so it never blocks the engine. It ticks on the
+  *physics* frame, not the render frame, on purpose: blocks count ticks, not
+  seconds (`move_steps` moves a fixed N px per loop), so a constant *speed* only
+  emerges if the loop runs at a constant rate. The physics frame fires at a fixed
+  `physics_ticks_per_second` (60) regardless of render FPS and is clamped per
+  render frame, which makes motion frame-rate-independent and keeps a slow or
+  bursty startup from flinging a sprite across the screen. (Delta-scaling each
+  move instead would wrongly make a *one-shot* `move 10` cover a frame-rate-
+  dependent distance; the fixed tick is Scratch's own model.) `wait_seconds`
+  instead awaits a real-time SceneTree timer — wall-clock seconds, not ticks.
 - Dispatch is table-driven: `opcode` (String) → handler `Callable`. Statement
   blocks and reporter/condition blocks have separate tables. **Adding a new
   block type = register one entry + write its handler method.**
@@ -146,10 +157,34 @@ unwinds *that one* coroutine within a frame — the per-script counterpart to ho
 The best-of-N scoreboard exercises this: each pip clone is stamped with the
 `round` it was born in and watches the global `round`; when the ball bumps `round`
 at the start of a new round, every clone deletes itself and the board clears. The
-match-end freeze deliberately bumps `round` only on rounds that *continue* — the
-clinching round fires `stop "all"` first, so the final pips stay up.
-(`stop "this script"` has no load-bearing use in this demo, which keeps `stop
-"all"` for the match freeze; it ships as the documented sibling primitive.)
+demo bumps `round` only on rounds that *continue* — on the clinching round the
+ball skips the whole board-clearing/serve step, so the final pips stay up while the
+Announcer freezes the game (see [On-screen text (M6)](#on-screen-text-m6)).
+(`stop "this script"` has no load-bearing use in this demo; it ships as the
+documented sibling primitive.)
+
+### On-screen text (M6)
+
+[scripts/font.gd](scripts/font.gd) is a `PixelFont`: it loads `font.png` once and
+`render(text, color)`s a string into a fresh transparent `ImageTexture`, copying
+each white glyph pixel from the atlas as `color`. The atlas is a 3×5-pixel grid —
+`A–Z` on the first row, `0–9` on the second — stepped every 4px (3 + 1px letter
+spacing); lines step every 6px (5 + 1px). `render` uppercases letters, honors
+`"\n"`, and leaves a glyph-sized gap for a space or any unsupported character. The
+Stage builds one shared `PixelFont` (like the target registry — a runtime resource
+every sprite reaches, never reloaded per sprite) and exposes it via `font()`.
+
+The **`say`** block makes that text a sprite's *costume*: it stringifies its input,
+renders it through the Stage's font, and assigns the result to the target node's
+texture, forcing nearest-neighbor filtering so the tiny glyphs stay crisp when the
+sprite is scaled up. Stringifying means a number reporter shows as a numeric
+readout — the path to a real HUD — though this demo only uses literal banners.
+
+The Announcer is why `stop "all"` **moved off the ball**: the freeze must land
+*after* the banner is painted, and it must read the same rounds-won totals, so the
+one script that knows how to draw the result is the one that ends the match. `say`
+sets the costume synchronously, then `stop "all"` flips the global flag in the same
+frame — every coroutine (the Announcer included) unwinds, frozen with the banner up.
 
 ## Opcodes implemented
 
@@ -169,6 +204,7 @@ clinching round fires `stop "all"` first, so the final pips stay up.
 | `key_pressed?` | reporter | `key` | polls a key by name (`OS.find_keycode_from_string` → `Input.is_physical_key_pressed`). Use canonical names: `"W"`, `"S"`, `"Up"`, `"Down"` |
 | `set_var` | statement | `name`, `value` | sets a variable (local-first, then global; unseeded → creates a global) |
 | `change_var` | statement | `name`, `by` | adds `by` to a variable — the score increment |
+| `say` | statement | `text` | renders `text` (stringified) through the bitmap font and sets it as the sprite's costume; the winner banner |
 | `stop` | statement | `mode` | `"all"` halts every script (the game-over freeze); `"this script"` unwinds only the calling coroutine (clears its `_alive` flag) |
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
 | `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original. Clears the round's pips |
@@ -193,11 +229,13 @@ clinching round fires `stop "all"` first, so the final pips stay up.
 project.godot              Godot project config; main scene = main.tscn; 800x600 window
 main.tscn                  Main scene: a single Node2D "Stage" running stage.gd
 icon.svg                   Default project icon (skeleton)
+font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  stage.gd                 Runtime root: builds sprites, owns the name->Target registry, runs scripts
+  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two clone-built scoreboards), as data
+  font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two scoreboards, announcer), as data
 CLAUDE.md                  This file
 ```
 
@@ -208,8 +246,10 @@ CLAUDE.md                  This file
   `_statement_handlers`; reporters/conditions go in `_reporter_handlers`.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
-- Any potentially long-running block must `await get_tree().process_frame` (or a
-  timer) so it yields to the engine.
+- Any potentially long-running block must `await get_tree().physics_frame` (the
+  fixed-rate logical tick — see the interpreter section) or a real-time timer, so
+  it yields to the engine. Use the tick for per-frame motion, the timer for
+  wall-clock waits.
 - Cross-sprite blocks resolve other entities through the stage registry
   (`stage.find_target(name)`), never by reaching into the scene tree directly.
 - Stay scoped to the current milestone; don't add block types beyond what the
@@ -221,8 +261,10 @@ CLAUDE.md                  This file
   `create_clone` and `delete_this_clone` only act on `"myself"` / the running
   clone. Spawning or culling another target's clones needs the registry to track
   clones, not just originals.
-- **On-screen text / `say` / HUD** — a text-rendering "costume" so a sprite can
-  display a value (a real numeric score instead of pips). Still the path to a HUD.
+- **A live numeric HUD / lowercase + punctuation** — `say` renders any string, and
+  stringifies its input so a number reporter already shows as a readout, but the
+  demo only paints literal banners and the atlas covers just `A–Z`/`0–9`. A real
+  numeric scoreboard (replacing the pips) and a wider glyph set are the next steps.
 - **Event hats (`when_key_pressed`)** — needs an event-dispatch system. Polling
   `key_pressed?` inside `forever` stays within the existing loop model.
 

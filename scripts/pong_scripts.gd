@@ -97,8 +97,9 @@ static func ball() -> Array:
 					_point(_serve_left()),
 					_wait(SERVE_DELAY),
 				]),
-				# Round end: first to ROUND_POINTS takes the round (see _on_round_won,
-				# which also handles the match-end freeze before clearing the board).
+				# Round end: first to ROUND_POINTS takes the round (see _on_round_won;
+				# on the match-winning round it leaves the board alone and the Announcer
+				# freezes the game with its banner).
 				_if(_gt(_var("p1_score"), ROUND_POINTS - 1), _on_round_won("p1_rounds", _serve_right())),
 				_if(_gt(_var("p2_score"), ROUND_POINTS - 1), _on_round_won("p2_rounds", _serve_left())),
 			]),
@@ -118,23 +119,55 @@ static func _serve_left() -> Dictionary:
 
 
 ## The blocks that run when a player takes a round (the body of the round-end `if`).
-## Bank the round on `rounds_var`, then — before touching the board — check for the
-## match win: `stop "all"` trips the run-stack's guard, so the board-clearing reset
-## below never runs and the game freezes with the final round's pips still up. If
-## the match isn't over, zero both per-round scores and bump the global `round` (the
-## signal every pip clone deletes itself on), then re-serve from center along
-## `serve`. Ordering is load-bearing: bump `round` only on rounds that continue, or
-## the clones would clear during the serve delay before the freeze lands.
+## Bank the round on `rounds_var` and *always* zero both per-round scores — that
+## clears the `score > ROUND_POINTS-1` condition so this round-won block can't fire
+## twice (it no longer ends the match itself, so the ball keeps looping the frame or
+## two it takes the Announcer to freeze the game). Then, *only if the match isn't
+## over*, bump the global `round` (the signal every pip clone deletes itself on) and
+## re-serve from center along `serve`. On the match-winning round that step is
+## skipped, so `round` never advances and the final pips stay up — the Announcer,
+## watching the same rounds totals, paints the banner and fires `stop "all"`. M6
+## moved the freeze there so the win shows on screen instead of just stopping.
+## Ordering is still load-bearing: bump `round` only on rounds that continue.
 static func _on_round_won(rounds_var: String, serve: Dictionary) -> Array:
 	return [
 		_change(rounds_var, 1),
-		_if(_gt(_var(rounds_var), ROUNDS_TO_WIN - 1), [_stop("all")]),
 		_set_var("p1_score", 0),
 		_set_var("p2_score", 0),
-		_change("round", 1),
-		_go_to(CENTER.x, CENTER.y),
-		_point(serve),
-		_wait(SERVE_DELAY),
+		_if(_lt(_var(rounds_var), ROUNDS_TO_WIN), [
+			_change("round", 1),
+			_go_to(CENTER.x, CENTER.y),
+			_point(serve),
+			_wait(SERVE_DELAY),
+		]),
+	]
+
+
+## The match announcer (Milestone 6). It parks off-screen (seeded in stage.gd) and
+## watches the global rounds-won totals the ball drives. The instant a player reaches
+## ROUNDS_TO_WIN it jumps to center, `say`s their banner — which swaps in a font.png
+## costume — and fires `stop "all"`. Because `say` sets the costume synchronously
+## before the stop, the game-over freeze lands with the winner named on screen.
+##
+## This is why the ball no longer stops the game itself: the freeze has to happen
+## *after* the text is painted, and it has to read the same rounds totals, so the
+## one script that knows how to draw the result is the one that ends the match.
+static func announcer() -> Array:
+	return [
+		_hat([
+			_forever([
+				_if(_gt(_var("p1_rounds"), ROUNDS_TO_WIN - 1), [
+					_go_to(CENTER.x, CENTER.y),
+					_say("P1 WINS"),
+					_stop("all"),
+				]),
+				_if(_gt(_var("p2_rounds"), ROUNDS_TO_WIN - 1), [
+					_go_to(CENTER.x, CENTER.y),
+					_say("P2 WINS"),
+					_stop("all"),
+				]),
+			]),
+		]),
 	]
 
 
@@ -260,12 +293,22 @@ static func _gt(a: Variant, b: Variant) -> Dictionary:
 	return {"opcode": "greater_than", "inputs": {"a": a, "b": b}}
 
 
+static func _lt(a: Variant, b: Variant) -> Dictionary:
+	return {"opcode": "less_than", "inputs": {"a": a, "b": b}}
+
+
 static func _random(from: float, to: float) -> Dictionary:
 	return {"opcode": "random", "inputs": {"from": from, "to": to}}
 
 
 static func _stop(mode: String) -> Dictionary:
 	return {"opcode": "stop", "inputs": {"mode": mode}}
+
+
+# On-screen text (Milestone 6).
+
+static func _say(text: Variant) -> Dictionary:
+	return {"opcode": "say", "inputs": {"text": text}}
 
 
 # Cloning (Milestone 4).

@@ -26,11 +26,19 @@ var _variables: Dictionary = {}
 
 ## Cleared by the `stop "all"` block. Every forever / run-stack polls this and
 ## bails when it goes false, so the whole game halts within a frame — the
-## game-over freeze, since M3 has no on-screen way to announce the winner yet.
+## game-over freeze. As of M6 the Announcer paints the winner's banner in the
+## same frame it fires this, so the freeze finally lands with the win on screen.
 var _running: bool = true
+
+## The shared bitmap font (M6). Built once from font.png; the interpreter renders
+## `say` text through it. Held on the Stage like the target registry — one runtime
+## resource every sprite reaches, never reloaded per sprite.
+var _font: PixelFont
 
 
 func _ready() -> void:
+	_font = PixelFont.new()
+
 	# Two tall thin paddles on the rails, one small ball in the center.
 	var paddle := Color(0.9, 0.9, 0.95)
 	var ball_color := Color(1.0, 0.8, 0.25)
@@ -53,10 +61,6 @@ func _ready() -> void:
 	set_var("round", 1)
 	ball.variables["speed"] = PongScripts.BALL_SPEED
 
-	_run(left, PongScripts.left_paddle())
-	_run(right, PongScripts.right_paddle())
-	_run(ball, PongScripts.ball())
-
 	# Milestone 4: a score readout made of clones. Each pip sprite parks itself
 	# off-screen and clones one small marker per point (see pong_scripts.gd).
 	var pip := Color(0.4, 0.9, 0.5)
@@ -71,8 +75,33 @@ func _ready() -> void:
 	# *global* `round` the ball drives; a local would shadow it.
 	for pips in [p1_pips, p2_pips]:
 		pips.variables = {"count": 0, "index": 0, "col": 0, "row": 0, "my_round": 1, "born_round": 1}
+
+	# Milestone 6: a text banner. The Announcer parks off-screen until a player
+	# takes the match, then jumps to center, `say`s the winner (a font.png costume),
+	# and fires `stop "all"` itself — so the game-over freeze lands with the winner
+	# named on screen, the payoff earlier milestones kept deferring. It is scaled up
+	# (the 3x5 glyphs are tiny) and nearest-filtered by `say` so the pixels stay crisp.
+	var announcer := _add_sprite("Announcer", Vector2(-400, -400), 1, 1, Color(1, 1, 1, 0))
+	announcer.node.scale = Vector2(8, 8)
+
+	# "Press the green flag" on the first *rendered* frame, not during scene
+	# construction. A script's first `forever` iteration runs synchronously the
+	# moment it starts (the interpreter only yields at the first `await`), so
+	# starting scripts here in _ready would run all the edge/collision logic before
+	# the SceneTree has processed a single frame — when `get_viewport_rect()` may not
+	# yet report the configured window size. With a zero/stale viewport, every sprite
+	# reads itself as past an edge (paddles snap to a rail, the ball "scores" at
+	# center) and they trip each other's triggers. Waiting one frame guarantees the
+	# viewport is sized before any block runs. (Intermittent because the viewport is
+	# ready early on some launches but not others.)
+	await get_tree().process_frame
+
+	_run(left, PongScripts.left_paddle())
+	_run(right, PongScripts.right_paddle())
+	_run(ball, PongScripts.ball())
 	_run(p1_pips, PongScripts.p1_pips())
 	_run(p2_pips, PongScripts.p2_pips())
+	_run(announcer, PongScripts.announcer())
 
 
 ## Look up another target by the name it was registered under. Returns null if
@@ -85,6 +114,12 @@ func find_target(target_name: String) -> Target:
 ## every other sprite on the stage.
 func target_names() -> Array:
 	return _targets.keys()
+
+
+## The shared bitmap font, so the interpreter's `say` block can render text
+## without each sprite reloading the atlas.
+func font() -> PixelFont:
+	return _font
 
 
 # --- Global variables & run state (Milestone 3) ----------------------------

@@ -13,13 +13,22 @@ extends RefCounted
 ## and no class hierarchy of "block" objects — exactly the data a visual editor
 ## would emit later.
 ##
-## Execution model — GDScript coroutines:
+## Execution model — GDScript coroutines on a fixed logical tick:
 ##   * Running a stack of blocks is an `await`-ing method, i.e. a coroutine.
-##   * Long-running control blocks (`forever`) `await get_tree().process_frame`
+##   * Long-running control blocks (`forever`) `await get_tree().physics_frame`
 ##     once per iteration, so the script cooperatively yields back to the engine
-##     every frame instead of blocking it in an infinite loop.
+##     every *tick* instead of blocking it in an infinite loop.
+##   * We deliberately tick on the **physics** frame, not the render frame. Blocks
+##     count ticks, not seconds (`move_steps` moves a fixed N px per loop), so a
+##     constant speed only falls out if the loop runs at a constant rate. The
+##     physics frame fires at a fixed `physics_ticks_per_second` (default 60)
+##     regardless of render FPS, and the engine clamps how many fire per render
+##     frame — so motion is frame-rate-independent and a slow/bursty startup can't
+##     fling a sprite across the screen. (This is Scratch's own fixed-tick model;
+##     scaling each move by frame delta instead would wrongly turn a *one-shot*
+##     `move 10` into a frame-rate-dependent distance.)
 ##   * We start a script with a plain (non-awaited) call. The coroutine then
-##     keeps itself alive by awaiting the SceneTree's per-frame signal.
+##     keeps itself alive by awaiting the SceneTree's per-tick signal.
 ##
 ## Dispatch:
 ##   * Opcode -> handler `Callable`, looked up in a table. Adding a new block
@@ -27,13 +36,13 @@ extends RefCounted
 
 ## The Stage this interpreter runs under. Two reasons we hold it instead of a
 ## bare SceneTree (as M1 did):
-##   * coroutines still need `await _tree.process_frame` — we get the tree from
+##   * coroutines still need `await _tree.physics_frame` — we get the tree from
 ##     the Stage, which is a Node;
 ##   * cross-sprite blocks (`touching_sprite?`) resolve other entities through
 ##     `_stage.find_target(name)`.
 var _stage: Stage
 
-## SceneTree, cached from the Stage so coroutines can `await _tree.process_frame`
+## SceneTree, cached from the Stage so coroutines can `await _tree.physics_frame`
 ## (a RefCounted has no get_tree() of its own).
 var _tree: SceneTree
 
@@ -79,6 +88,7 @@ func _register_handlers() -> void:
 		"wait_seconds": _on_wait_seconds,
 		"set_var": _on_set_var,
 		"change_var": _on_change_var,
+		"say": _on_say,
 		"stop": _on_stop,
 		"create_clone": _on_create_clone,
 		"when_i_start_as_a_clone": _on_when_i_start_as_a_clone,
@@ -173,15 +183,18 @@ func _on_when_flag_clicked(block: Dictionary) -> void:
 	await _run_stack(_body(block))
 
 
-## forever { body }  — run the body, yield one frame, repeat forever.
-## The per-iteration `await` is what keeps this from freezing the engine.
+## forever { body }  — run the body, yield one tick, repeat forever.
+## The per-iteration `await` is what keeps this from freezing the engine. We yield
+## on the *physics* frame (a fixed-rate tick), not the render frame, so a script
+## that moves N px per loop holds a constant speed no matter the render FPS — see
+## the fixed-tick note at the top of the file.
 func _on_forever(block: Dictionary) -> void:
 	var body := _body(block)
 	while _stage.is_running() and _alive:
 		await _run_stack(body)
 		if not _stage.is_running() or not _alive:
 			return
-		await _tree.process_frame
+		await _tree.physics_frame
 
 
 ## if condition { body }
@@ -304,6 +317,18 @@ func _on_stop(block: Dictionary) -> void:
 			_alive = false
 		_:
 			push_warning("Interpreter: unsupported stop mode '%s'" % mode)
+
+
+## say: replace this sprite's costume with `text` rendered through the Stage's
+## bitmap font (M6). The input is stringified first, so a number reporter shows as
+## a numeric readout. We force nearest-neighbor filtering so the tiny 3x5 glyphs
+## stay crisp when the sprite is scaled up. Unlike Scratch's speech bubble, the
+## text *is* the costume — exactly the "text-rendering costume" path the docs noted.
+func _on_say(block: Dictionary) -> void:
+	var text := str(_value(block, "text"))
+	var sprite := _target.node as Sprite2D
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.texture = _stage.font().render(text)
 
 
 ## variable: read a variable's value (local-first, then global).
