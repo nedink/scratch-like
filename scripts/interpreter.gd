@@ -44,6 +44,12 @@ var _target: Target
 ## launch the `when_i_start_as_a_clone` hats. Set by run() / run_as_clone().
 var _script: Array = []
 
+## Per-interpreter "keep running" flag — the per-script counterpart to the Stage's
+## global `_running`. `_run_stack` and `_on_forever` poll it alongside the Stage
+## flag, so flipping it false unwinds *just this* coroutine within a frame. Both
+## `stop "this script"` and `delete_this_clone` work by clearing it.
+var _alive: bool = true
+
 ## opcode (String) -> Callable for blocks that *do* something (statements).
 var _statement_handlers: Dictionary = {}
 
@@ -76,6 +82,7 @@ func _register_handlers() -> void:
 		"stop": _on_stop,
 		"create_clone": _on_create_clone,
 		"when_i_start_as_a_clone": _on_when_i_start_as_a_clone,
+		"delete_this_clone": _on_delete_this_clone,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
@@ -125,8 +132,9 @@ func run_as_clone(script: Array) -> void:
 ## (e.g. forever) suspends the whole stack until it resumes.
 func _run_stack(blocks: Array) -> void:
 	for block in blocks:
-		# Bail mid-stack the moment `stop "all"` fires, so no further blocks run.
-		if not _stage.is_running():
+		# Bail mid-stack the moment `stop "all"` fires (Stage flag) or this script
+		# alone is stopped/deleted (`_alive`), so no further blocks run.
+		if not _stage.is_running() or not _alive:
 			return
 		await _execute(block)
 
@@ -169,9 +177,9 @@ func _on_when_flag_clicked(block: Dictionary) -> void:
 ## The per-iteration `await` is what keeps this from freezing the engine.
 func _on_forever(block: Dictionary) -> void:
 	var body := _body(block)
-	while _stage.is_running():
+	while _stage.is_running() and _alive:
 		await _run_stack(body)
-		if not _stage.is_running():
+		if not _stage.is_running() or not _alive:
 			return
 		await _tree.process_frame
 
@@ -282,16 +290,20 @@ func _on_change_var(block: Dictionary) -> void:
 	_set_variable(name, float(_get_variable(name)) + float(_value(block, "by")))
 
 
-## stop: end execution. Only "all" is supported — it flips the Stage's running
-## flag, which every forever / run-stack polls, so all scripts unwind within a
-## frame. (Stopping just *this* script would need per-coroutine unwinding and is
-## deferred; "all" is all the game-over freeze needs.)
+## stop: end execution.
+##   * "all" flips the Stage's running flag, which every forever / run-stack
+##     polls, so every script unwinds within a frame (the game-over freeze).
+##   * "this script" clears just this interpreter's `_alive` flag, so only this
+##     coroutine unwinds — other sprites keep running.
 func _on_stop(block: Dictionary) -> void:
 	var mode := String(block.get("inputs", {}).get("mode", "all"))
-	if mode == "all":
-		_stage.stop_all()
-	else:
-		push_warning("Interpreter: unsupported stop mode '%s'" % mode)
+	match mode:
+		"all":
+			_stage.stop_all()
+		"this script":
+			_alive = false
+		_:
+			push_warning("Interpreter: unsupported stop mode '%s'" % mode)
 
 
 ## variable: read a variable's value (local-first, then global).
@@ -391,6 +403,18 @@ func _on_create_clone(block: Dictionary) -> void:
 		push_warning("Interpreter: create_clone only supports 'myself' (got '%s')" % which)
 		return
 	_stage.create_clone_of(_target, _script)
+
+
+## delete_this_clone: remove the running clone — clear `_alive` so this coroutine
+## unwinds within a frame, and hand the Stage the node to free and the interpreter
+## to release. A no-op on an original (matching Scratch): only clones can delete
+## themselves, and `create_clone` only ever makes "myself" clones.
+func _on_delete_this_clone(_block: Dictionary) -> void:
+	if not _target.is_clone:
+		push_warning("Interpreter: delete_this_clone called on a non-clone; ignoring")
+		return
+	_alive = false
+	_stage.remove_clone(self, _target)
 
 
 # --- Helpers ---------------------------------------------------------------

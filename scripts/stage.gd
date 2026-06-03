@@ -44,6 +44,13 @@ func _ready() -> void:
 	# proves the local store works alongside the globals.
 	set_var("p1_score", 0)
 	set_var("p2_score", 0)
+	# Milestone 5 best-of-N state: per-round scores (above) reset each round, while
+	# rounds-won persist for the match, and a monotonic `round` counter signals the
+	# pip clones to clear (each clone deletes itself once `round` passes its birth
+	# round). All global so the ball can drive them and the pip sprites can watch.
+	set_var("p1_rounds", 0)
+	set_var("p2_rounds", 0)
+	set_var("round", 1)
 	ball.variables["speed"] = PongScripts.BALL_SPEED
 
 	_run(left, PongScripts.left_paddle())
@@ -58,8 +65,12 @@ func _ready() -> void:
 	var p2_pips := _add_sprite("P2Pips", off_screen, 10, 10, pip)
 	# Seed the locals the layout math writes to, so they resolve as locals (and
 	# are inherited by each clone) rather than leaking into the global store.
+	# `my_round` lets the maker notice a new round and restart its pip count;
+	# `born_round` is stamped onto each clone so it knows when to delete itself.
+	# Note there is deliberately no local `round` — both maker and clone read the
+	# *global* `round` the ball drives; a local would shadow it.
 	for pips in [p1_pips, p2_pips]:
-		pips.variables = {"count": 0, "index": 0, "col": 0, "row": 0}
+		pips.variables = {"count": 0, "index": 0, "col": 0, "row": 0, "my_round": 1, "born_round": 1}
 	_run(p1_pips, PongScripts.p1_pips())
 	_run(p2_pips, PongScripts.p2_pips())
 
@@ -146,10 +157,21 @@ func create_clone_of(source: Target, script: Array) -> void:
 	var clone := Target.new(clone_node, source.name)
 	clone.direction = source.direction
 	clone.variables = source.variables.duplicate()
+	clone.is_clone = true
 
 	var interpreter := Interpreter.new(self, clone)
 	_interpreters.append(interpreter)
 	interpreter.run_as_clone(script)
+
+
+## Tear down a clone (the `delete_this_clone` block): free its node and release its
+## interpreter. The interpreter has already cleared its own `_alive`, so its
+## coroutine is unwinding; erasing it here is safe because the suspended coroutine
+## still holds a reference until it returns, and queue_free defers node removal to
+## frame end. Unlike `stop "all"`, this touches only the one clone.
+func remove_clone(interpreter: Interpreter, clone: Target) -> void:
+	clone.node.queue_free()
+	_interpreters.erase(interpreter)
 
 
 ## Generate a plain colored rectangle in code so the project has no dependency

@@ -26,6 +26,11 @@ var direction: float = 90.0
 ## same name (Scratch semantics). The ball keeps its `speed` here.
 var variables: Dictionary = {}
 
+## True only for runtime clones (set by Stage.create_clone_of). `delete_this_clone`
+## refuses to run on an original — matching Scratch, where the block is a no-op
+## outside a clone.
+var is_clone: bool = false
+
 
 func _init(target_node: Node2D, target_name: String) -> void:
 	node = target_node

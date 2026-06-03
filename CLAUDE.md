@@ -5,15 +5,18 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 4 — sprite cloning
+## Current state: Milestone 5 — clone lifecycle
 
-**Goal of this milestone:** add Scratch's **clone** primitive — a sprite spawning
-runtime copies of itself that run their own `when_i_start_as_a_clone` script and
-inherit the original's local variables. The motivating demo is the on-screen
-**scoreboard M3 couldn't draw**: each player has a pip sprite that parks itself
-off-screen and clones one small marker per point, laid out in a top-corner grid
-that wraps to a new row every five — placed entirely by block arithmetic
-(`mod`/`divide`/`multiply`) over the clone's inherited `index`.
+**Goal of this milestone:** complete the clone lifecycle M4 left half-built. M4
+could only *create* clones; M5 adds **`delete_this_clone`** (a clone removes
+itself) and its sibling **`stop "this script"`** (one coroutine unwinds without
+touching the others). Both ride the same new primitive: a **per-interpreter
+`_alive` flag**, polled exactly where `stop "all"` already polls the Stage's
+global flag. The motivating demo turns Pong into a **best-of-N match** — a round
+ends at `ROUND_POINTS`, and the pip scoreboard must now *clear and rebuild* each
+round (every pip clone deletes itself when the round advances): exactly the reset
+M4's create-only clones couldn't do. Taking `ROUNDS_TO_WIN` rounds still fires
+`stop "all"` for the full game-over freeze, leaving the final pips on screen.
 
 There is still deliberately **no** visual editor, drag-and-drop, or UI panel yet,
 and **no text rendering** (the score is shown as a count of pips, not a number).
@@ -29,8 +32,10 @@ See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
    the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
    that scored. Each point adds a green **pip** to that player's grid (top-left
-   for P1, top-right for P2). **First to 11 wins**, at which point every script
-   halts and the game freezes with the final pips on screen.
+   for P1, top-right for P2). **First to `ROUND_POINTS` (5) takes the round**: the
+   pips clear, scores reset, and the next round serves. **Taking `ROUNDS_TO_WIN`
+   (2) rounds wins the match**, at which point every script halts and the game
+   freezes with the final round's pips on screen.
 
 ## Core design (the parts meant to outlive this milestone)
 
@@ -100,8 +105,10 @@ seeded in code up front (in `Stage._ready`) — that seeding stands in for a fut
 editor's "make a variable" step.
 
 `stop "all"` clears a `Stage._running` flag that `forever` and `_run_stack` poll
-before each step, so every coroutine unwinds within a frame. (This is the same
-flag-polling mechanism a future `delete this clone` would reuse per-Target.)
+before each step, so every coroutine unwinds within a frame. (M5 generalizes this:
+the same two poll sites also check a per-interpreter `_alive` flag, which is how
+`stop "this script"` and `delete_this_clone` unwind a single coroutine — see
+[Clone lifecycle (M5)](#clone-lifecycle-m5).)
 
 ### Cloning (M4)
 
@@ -118,9 +125,31 @@ but aren't individually addressable, so `find_target` / `touching_sprite?` keep
 resolving the single original (and `_bounce` never sees a clone). The clone stays
 alive because its interpreter is retained in `_interpreters`. The pip scoreboard
 relies on all of this: the original parks off-screen and spawns one clone per
-point; each clone derives its grid cell from its inherited `index` and never
-moves again. This first cut is **create-only** — `delete_this_clone` is deferred
-(nothing needs removing before the game-over freeze).
+point; each clone derives its grid cell from its inherited `index`.
+
+### Clone lifecycle (M5)
+
+M4 was create-only; M5 lets a clone **delete itself** and lets any script **stop
+just itself**, both on one new primitive: a per-interpreter `_alive` flag. The two
+poll sites that already watch the Stage's `is_running()` (`_run_stack` before each
+block, `_on_forever` each loop) now also check `_alive`, so flipping it false
+unwinds *that one* coroutine within a frame — the per-script counterpart to how
+`stop "all"` flips the global flag.
+
+- `stop "this script"` simply sets `_alive = false`.
+- `delete_this_clone` sets `_alive = false` **and** calls `Stage.remove_clone`,
+  which `queue_free()`s the clone's node and erases its interpreter from
+  `_interpreters`. It is a no-op on an original (a `Target.is_clone` flag, set in
+  `create_clone_of`, guards it — matching Scratch). Erasing the interpreter mid-
+  unwind is safe: the suspended coroutine keeps the object alive until it returns.
+
+The best-of-N scoreboard exercises this: each pip clone is stamped with the
+`round` it was born in and watches the global `round`; when the ball bumps `round`
+at the start of a new round, every clone deletes itself and the board clears. The
+match-end freeze deliberately bumps `round` only on rounds that *continue* — the
+clinching round fires `stop "all"` first, so the final pips stay up.
+(`stop "this script"` has no load-bearing use in this demo, which keeps `stop
+"all"` for the match freeze; it ships as the documented sibling primitive.)
 
 ## Opcodes implemented
 
@@ -140,8 +169,9 @@ moves again. This first cut is **create-only** — `delete_this_clone` is deferr
 | `key_pressed?` | reporter | `key` | polls a key by name (`OS.find_keycode_from_string` → `Input.is_physical_key_pressed`). Use canonical names: `"W"`, `"S"`, `"Up"`, `"Down"` |
 | `set_var` | statement | `name`, `value` | sets a variable (local-first, then global; unseeded → creates a global) |
 | `change_var` | statement | `name`, `by` | adds `by` to a variable — the score increment |
-| `stop` | statement | `mode` | only `"all"` is supported: halts every script (the game-over freeze) |
+| `stop` | statement | `mode` | `"all"` halts every script (the game-over freeze); `"this script"` unwinds only the calling coroutine (clears its `_alive` flag) |
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
+| `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original. Clears the round's pips |
 | `variable` | reporter | `name` | reads a variable, resolving local-first then global |
 | `add` / `subtract` / `multiply` / `divide` / `mod` | reporter | `a`, `b` | arithmetic; `divide`/`mod` guard ÷0 → 0 |
 | `equals` / `greater_than` / `less_than` | reporter | `a`, `b` | numeric comparison → bool |
@@ -187,16 +217,14 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **`delete_this_clone`** — clones are create-only for now. Deleting one cleanly
-  means halting just its coroutine (a per-Target `alive` flag polled the way
-  `stop "all"` polls `Stage._running`) and freeing its node. Needed once anything
-  resets (a new round clearing the pips), but nothing does yet.
+- **Deleting *another* sprite's clones / `create_clone` of a named sprite** —
+  `create_clone` and `delete_this_clone` only act on `"myself"` / the running
+  clone. Spawning or culling another target's clones needs the registry to track
+  clones, not just originals.
 - **On-screen text / `say` / HUD** — a text-rendering "costume" so a sprite can
   display a value (a real numeric score instead of pips). Still the path to a HUD.
 - **Event hats (`when_key_pressed`)** — needs an event-dispatch system. Polling
   `key_pressed?` inside `forever` stays within the existing loop model.
-- **`stop "this script"`** — only `"all"` exists; stopping a single coroutine
-  cleanly needs the same per-interpreter unwinding as `delete_this_clone`.
 
 > Note: collision is axis-aligned box overlap (`Rect2.intersects`); a sprite's
 > world box is centered on its node position (Sprite2D is centered by default).
