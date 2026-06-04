@@ -5,37 +5,51 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 7 — numeric HUD
+## Current state: Milestone 8 — the visual block renderer (the editor, read-only)
 
-**Goal of this milestone:** turn the M6 font into a **live scoreboard**, retiring the
-M4/M5 clone-built pip grids for a **real numeric readout**. Two **HUD** sprites (one
-per player) park where the pips used to and `say` their score every tick, in the
-`"large"` face. It is deliberately the thinnest milestone in the project: `say`
-already stringifies a number reporter, so the readout is just `say (score)` inside a
-`forever` — **no new opcode, and no font additions** (the digit glyphs `0–9` were
-already in the atlas). The visible change is the scoreboard: instead of a growing
-grid of green pips, each side shows a single climbing digit (0–5), resetting to 0
-between rounds, and the **winning `ROUND_POINTS` stays frozen on screen** under the
-"P1 WINS" / "P2 WINS" banner.
+**Goal of this milestone:** make the long-planned **pivot to the editor**. For seven
+milestones this was built *runtime-first* so the execution model would be solid
+before any UI; the runtime is now complete enough (control flow, expressions,
+variables, clones, bitmap text, a live HUD) that M8 lays the editor's first stone: a
+**read-only block renderer**. It draws an existing sprite's block script as a stack
+of visual Scratch-style blocks — category colors, nested C-blocks, inline reporters —
+with **no interaction yet** (no dragging, no palette, no building).
 
-The one piece of real design was the freeze. M5's pip grid was decoupled from the
-live score (it counted clones, cleared only when the global `round` advanced), so the
-ball could zero the scores every round-end and the final pips still showed. The HUD
-reads the *live* score, so `_on_round_won` had to move its score-zeroing **inside**
-the "match continues" branch — on the clinching round the scores are left standing so
-the winning number freezes on screen. See [Numeric HUD (M7)](#numeric-hud-m7).
+The headline idea is a **symmetry**: `interpreter.gd` tree-walks the block data to
+*execute* it; the renderer ([scripts/block_view.gd](scripts/block_view.gd)) walks the
+**exact same data** to *draw* it. Because blocks are already plain serializable
+dictionaries/arrays "exactly the shape a visual editor would emit", **the data model
+needs zero changes** — M8 is purely a new view over it, and adds **no new opcode**.
+The renderer is even **table-driven the same way the interpreter is**: the interpreter
+maps `opcode → handler Callable`; the renderer maps `opcode → {category, template}`.
+Adding a block to the editor is one entry in that table — the same one-line extension
+story. See [Block renderer (M8)](#block-renderer-m8).
 
-There is still deliberately **no** visual editor, drag-and-drop, or UI panel yet.
-Text is uppercase letters + digits only — the atlas has no lowercase or
-punctuation. See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+The editor also becomes the project's **front door**: F5 now launches the editor
+(`editor.tscn`), not the game. The game is unchanged and reached *through* the editor
+— a **RUN** button switches to `main.tscn` (the Stage) and plays the M7 Pong exactly
+as before.
+
+There is still deliberately **no drag-and-drop, palette, or script-building** — those
+are the next editor milestones (M9/M10). The rendered script is the hardcoded
+`PongScripts` data; RUN launches the existing game, not an edited script. Note that
+**editor chrome uses Godot's built-in UI font, not the bitmap `PixelFont`**: block
+labels need lowercase + punctuation (`move_steps`, `touching_edge?`, `>`), which the
+atlas deliberately lacks. The "defer new glyphs" rule governs *in-game* rendered text
+(sprite costumes via `say`), so editor tooling text is a separate layer that sits
+outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 ## How to run
 
 1. Open the **Godot 4.6** editor (this project uses the GL Compatibility
    renderer, so it runs on most hardware).
 2. `Import` / open this folder (it already contains `project.godot`).
-3. Press **F5** (Run Project). The main scene `main.tscn` launches the `Stage`.
-4. A yellow ball serves from the center at a **randomized angle** and bounces off
+3. Press **F5** (Run Project). The main scene is now `editor.tscn`: the **block
+   editor** opens, showing a sprite selector and one sprite's script rendered as a
+   stack of visual blocks (pick another sprite from the dropdown to inspect it).
+4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
+   `Stage`). From here the M7 Pong plays exactly as before:
+   A yellow ball serves from the center at a **randomized angle** and bounces off
    the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
    that scored. Each point increments that player's **numeric score readout** (a
@@ -243,7 +257,56 @@ the game. (Re-rendering a costume 60×/sec is wasteful but matches Scratch's red
 model and is fine for two one-digit readouts; guarding it to re-`say` only on change
 is left as polish.)
 
+### Block renderer (M8)
+
+The first piece of the **editor**. [scripts/block_view.gd](scripts/block_view.gd) is
+the **drawing counterpart to the interpreter**: where `interpreter.gd` tree-walks a
+script (an `Array` of `{opcode, inputs}` dicts, substacks nested under `"inputs"`) to
+*execute* it, `BlockView` walks the **same data** to render it as a tree of Godot
+`Control` nodes. No data-model change was needed — the blocks were already "exactly
+the shape a visual editor would emit", so this milestone is purely additive.
+
+The renderer is **table-driven, mirroring the interpreter's dispatch table**.
+`interpreter.gd` registers `opcode → handler Callable`; `BlockView._OPCODES` registers
+`opcode → {category, template}`, where `template` is a label string with
+`{input_name}` placeholders (`"move {steps} steps"`, `"{a} > {b}"`). Adding a block to
+the editor is one `_OPCODES` entry — the same one-line extension story the runtime
+has. `_CATEGORY_COLORS` gives each category Scratch's palette colour (motion blue,
+control gold, sensing cyan, operators green, variables orange, looks purple, events
+yellow).
+
+The recursion mirrors the interpreter's, too:
+
+- a stack (`Array`) → `build_stack` (cf. `_run_stack`) → a `VBoxContainer`;
+- a statement → `build_block` → a category-coloured `PanelContainer`; for the
+  C-blocks `forever`/`if`, the `body` is rendered as an **indented nested stack**
+  inside the same panel so the "C" wrap reads;
+- a reporter input (a dict with `"opcode"`) → `build_reporter` → an inline rounded
+  pill that **recurses into its own inputs to any depth** (cf. `_evaluate`), so the
+  ball's serve angle `90 + (pick random -45 to 45)` draws as nested pills;
+- a literal input → `build_input` → a small white field (shared `_stringify` drops a
+  whole-number float's `.0`, matching the interpreter).
+
+A C-block body is **not** a placeholder in the template — it is rendered separately
+and indented; only value/condition inputs are placeholders. Block shapes are
+approximated with `StyleBoxFlat` corner radii (pill = reporter, light corners =
+statement); true Scratch notch/hexagon geometry is cosmetic and deferred.
+
+[scripts/editor.gd](scripts/editor.gd) is the scene root (the `editor.tscn` front
+door), parallel to `stage.gd`: it builds its UI **in code** (a bare root `Control` +
+script, like `main.tscn` is a bare `Node2D` + `stage.gd`). It holds a name→script
+list (a small duplicate of the wiring in `stage.gd._ready`; a later milestone where
+the editor *owns* the project model would unify them), a sprite-selector
+`OptionButton` that rebuilds the canvas through `BlockView.build_script`, and a
+**RUN** button that hands off to the game via
+`get_tree().change_scene_to_file("res://main.tscn")`. A small theme `default_font_size`
+keeps the chunky blocks legible inside the integer-stretched 480×360 viewport.
+
 ## Opcodes implemented
+
+**M8 added no opcodes** — the block renderer is a pure *view* over the existing
+language. Every opcode below also has a `BlockView._OPCODES` entry so it draws.
+
 
 | opcode | kind | inputs | notes |
 | --- | --- | --- | --- |
@@ -283,11 +346,14 @@ is left as polish.)
 ## File layout
 
 ```
-project.godot              Godot project config; main scene = main.tscn; 480x360 window
-main.tscn                  Main scene: a single Node2D "Stage" running stage.gd
+project.godot              Godot project config; main scene = editor.tscn (M8); 480x360 window
+editor.tscn                Main scene (M8): a bare root Control running editor.gd — the editor front door
+main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
+  editor.gd                Editor root (M8): builds the editor UI in code; sprite selector + RUN; renders via BlockView
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template} table
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -300,7 +366,10 @@ CLAUDE.md                  This file
 
 - New block? Add a handler method and one entry in `_register_handlers()` in
   [scripts/interpreter.gd](scripts/interpreter.gd). Statements go in
-  `_statement_handlers`; reporters/conditions go in `_reporter_handlers`.
+  `_statement_handlers`; reporters/conditions go in `_reporter_handlers`. **Also add
+  one `_OPCODES` entry** (`category` + label `template`) in
+  [scripts/block_view.gd](scripts/block_view.gd) so the editor can draw it — the
+  symmetric one-line step. An opcode with no entry still renders, as a grey box.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -314,6 +383,17 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
+- **Editor interaction: drag / snap / detach (M9)** — M8's renderer is **read-only**.
+  Dragging a block around a canvas and snapping it into/out of a stack needs
+  hit-testing, a ghost-drop preview, insertion points, and a detach/reparent model on
+  top of the renderer. The `Control` tree `BlockView` emits is the foundation.
+- **Editor: palette + build-and-run (M10)** — a palette of all opcodes to drag from,
+  assembling a script from scratch, then serializing it back to the block-dictionary
+  data and **running the edited script** in the Stage (today RUN launches the
+  hardcoded `PongScripts` game unchanged; editing literals isn't wired either).
+- **True Scratch block geometry** — M8 approximates block/reporter/boolean shapes with
+  `StyleBoxFlat` corner radii; real connector notches and hexagonal booleans are
+  cosmetic and wait until the drag/snap model (M9) needs precise connection points.
 - **Deleting *another* sprite's clones / `create_clone` of a named sprite** —
   `create_clone` and `delete_this_clone` only act on `"myself"` / the running
   clone. Spawning or culling another target's clones needs the registry to track
