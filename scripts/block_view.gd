@@ -70,6 +70,12 @@ static var _CATEGORY_COLORS := {
 ##     excluded. (Rendering ignores `kind`; HAT_OPCODES/C_OPCODES still drive shape.)
 ##   * `defaults` — the `inputs` dict a freshly-spawned block starts with, read by
 ##     make_block(). C-blocks/hats default an empty `body` array.
+##
+## M13 added one optional field:
+##   * `enums` — `input_key -> [allowed values]` for slots that are really a fixed choice
+##     (`stop {mode}`, `say … in {size}`, `create clone of {target}`, `touching {side} edge?`).
+##     Such a slot renders as a dropdown (build_input -> _enum_field) instead of a free-text
+##     field; an opcode with no `enums` (or a key not listed) keeps the M12 text field.
 const _OPCODES := {
 	# events (hats)
 	"when_flag_clicked": {"category": "events", "kind": "hat", "template": "when flag clicked", "defaults": {"body": []}},
@@ -78,8 +84,8 @@ const _OPCODES := {
 	"forever": {"category": "control", "kind": "statement", "template": "forever", "defaults": {"body": []}},
 	"if": {"category": "control", "kind": "statement", "template": "if {condition} then", "defaults": {"condition": true, "body": []}},
 	"wait_seconds": {"category": "control", "kind": "statement", "template": "wait {seconds} seconds", "defaults": {"seconds": 1}},
-	"stop": {"category": "control", "kind": "statement", "template": "stop {mode}", "defaults": {"mode": "all"}},
-	"create_clone": {"category": "control", "kind": "statement", "template": "create clone of {target}", "defaults": {"target": "myself"}},
+	"stop": {"category": "control", "kind": "statement", "template": "stop {mode}", "defaults": {"mode": "all"}, "enums": {"mode": ["all", "this script"]}},
+	"create_clone": {"category": "control", "kind": "statement", "template": "create clone of {target}", "defaults": {"target": "myself"}, "enums": {"target": ["myself"]}},
 	"delete_this_clone": {"category": "control", "kind": "statement", "template": "delete this clone", "defaults": {}},
 	# motion
 	"move_steps": {"category": "motion", "kind": "statement", "template": "move {steps} steps", "defaults": {"steps": 10}},
@@ -87,9 +93,9 @@ const _OPCODES := {
 	"point_in_direction": {"category": "motion", "kind": "statement", "template": "point in direction {direction}", "defaults": {"direction": 90}},
 	"go_to": {"category": "motion", "kind": "statement", "template": "go to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
 	# looks
-	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}},
+	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	# sensing
-	"touching_edge?": {"category": "sensing", "kind": "reporter", "template": "touching {side} edge?", "defaults": {"side": "any"}},
+	"touching_edge?": {"category": "sensing", "kind": "reporter", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
 	"touching_sprite?": {"category": "sensing", "kind": "reporter", "template": "touching {name}?", "defaults": {"name": ""}},
 	"key_pressed?": {"category": "sensing", "kind": "reporter", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
 	# variables
@@ -190,16 +196,22 @@ static func build_reporter(block: Dictionary) -> Control:
 
 
 ## Render one input value, read from `inputs[key]`: a nested reporter dictionary ->
-## a pill (build_reporter); any literal (number / string / bool) -> a small white
-## **editable** field (M12). The literal field is stamped with the live `inputs` dict
-## + `key` so whoever wires editing (the canvas) can write the typed value straight
-## back into the data — `inputs` is a reference, so that write *is* the edit. (The
-## palette renders the same field but leaves it inert; only the canvas wires it.)
-static func build_input(inputs: Dictionary, key: String) -> Control:
+## a pill (build_reporter); an enum slot (non-empty `options`, M13) -> a dropdown
+## (_enum_field); any other literal -> a small white **editable** field (M12), shaped
+## by its value type (oval for a number, rectangular for text — M13). Whichever widget
+## results is stamped with the live `inputs` dict + `key` so whoever wires editing (the
+## canvas) can write the chosen value straight back into the data — `inputs` is a
+## reference, so that write *is* the edit. (The palette renders the same widgets but
+## leaves them inert; only the canvas wires them.)
+static func build_input(inputs: Dictionary, key: String, options: Array = []) -> Control:
 	var value: Variant = inputs.get(key)
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
 		return build_reporter(value)
-	var field := _literal_field(_stringify(value))
+	var field: Control
+	if options.is_empty():
+		field = _literal_field(_stringify(value), typeof(value))
+	else:
+		field = _enum_field(options, _stringify(value))
 	field.set_meta("lit_inputs", inputs)
 	field.set_meta("lit_key", key)
 	return field
@@ -268,6 +280,8 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	var inputs: Dictionary = block.get("inputs", {})
+	var info: Dictionary = _OPCODES.get(String(block.get("opcode", "")), {})
+	var enums: Dictionary = info.get("enums", {})
 
 	var literal := ""
 	var i := 0
@@ -277,7 +291,7 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			literal = ""
 			var close := template.find("}", i)
 			var key := template.substr(i + 1, close - i - 1)
-			row.add_child(build_input(inputs, key))
+			row.add_child(build_input(inputs, key, enums.get(key, [])))
 			i = close + 1
 		else:
 			literal += template[i]
@@ -312,12 +326,20 @@ static func _empty_slot() -> Control:
 	return slot
 
 
-## A literal input value: dark text on a small white rounded field. As of M12 this is
-## an editable LineEdit (it was a static Label through M11) — the canvas wires its
+## A literal input value: dark text on a small white field. As of M12 this is an editable
+## LineEdit (it was a static Label through M11) — the canvas wires its
 ## text_submitted/focus_exited to write the typed value back into the block data; the
 ## palette leaves it inert (mouse-ignored). It grows to fit its text and keeps a small
 ## minimum width so an empty field is still clickable.
-static func _literal_field(text: String) -> LineEdit:
+##
+## M13 shapes the field by the slot's value type, Scratch-style: a numeric slot is an
+## oval (large corner radius), a string/bool slot a rectangle (slight radius), so the two
+## kinds read apart at a glance. The type is the slot's *current* value type — the same
+## signal coerce_literal keys off — so a numeric slot holding the "bounce" sentinel
+## (a String) reads as text, consistent with how its value coerces.
+static func _literal_field(text: String, value_type := TYPE_STRING) -> LineEdit:
+	var numeric := value_type == TYPE_INT or value_type == TYPE_FLOAT
+	var radius := 11 if numeric else 3
 	var field := LineEdit.new()
 	field.text = text
 	field.expand_to_text_length = true
@@ -325,12 +347,38 @@ static func _literal_field(text: String) -> LineEdit:
 	field.custom_minimum_size = Vector2(16, 0)
 	field.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	field.context_menu_enabled = false
-	field.add_theme_stylebox_override("normal", _box(Color.WHITE, 8))
-	field.add_theme_stylebox_override("focus", _box(Color("#fff4c2"), 8))
+	field.add_theme_stylebox_override("normal", _box(Color.WHITE, radius))
+	field.add_theme_stylebox_override("focus", _box(Color("#fff4c2"), radius))
 	field.add_theme_color_override("font_color", Color("#303030"))
 	field.add_theme_color_override("font_uneditable_color", Color("#303030"))
 	field.add_theme_color_override("caret_color", Color("#303030"))
 	return field
+
+
+## An enum slot (M13): a white dropdown listing the opcode's fixed choices, dark text to
+## match the literal field. The current value is pre-selected; if it isn't among the
+## options (an odd value from a hand-written script) it is appended and selected so it
+## stays visible and editable rather than silently snapping to option 0. The canvas wires
+## `item_selected` to write the chosen text back into the block data; the palette leaves
+## it inert (mouse-ignored, like the literal field).
+static func _enum_field(options: Array, current: String) -> OptionButton:
+	var dd := OptionButton.new()
+	dd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	dd.fit_to_longest_item = true
+	var selected := -1
+	for i in options.size():
+		dd.add_item(String(options[i]))
+		if String(options[i]) == current:
+			selected = i
+	if selected == -1:
+		dd.add_item(current)
+		selected = dd.item_count - 1
+	dd.select(selected)
+	for state in ["normal", "hover", "pressed", "focus"]:
+		dd.add_theme_stylebox_override(state, _box(Color.WHITE, 6))
+	for color in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		dd.add_theme_color_override(color, Color("#303030"))
+	return dd
 
 
 # --- Helpers ---------------------------------------------------------------

@@ -5,37 +5,40 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 12 — editing a literal's value
+## Current state: Milestone 13 — dropdowns for enum slots + typed slot shapes
 
-**Goal of this milestone:** let you **change a block's inputs**, not just which blocks are
-present. Through M11 you could add and rearrange blocks, but every input was frozen at the
-value the loaded script or a palette block's `defaults` provided — `move {10}` was stuck at
-10. M12 makes each white literal field an **editable text box**: click it, type, and the
-typed value is written straight back into the block data, so `move {10}` becomes
-`move {8}` and RUN plays the new value.
+**Goal of this milestone:** stop editing *every* input as raw text. M12 made each input a
+free-text box, including slots that are really a **fixed choice** — `stop {mode}` is only
+ever `all` or `this script`, yet you had to type it and a typo just warned at runtime. M13
+gives those slots a **dropdown** of the legal values, and — the paired visual half — draws a
+**numeric slot as an oval and a string slot as a rectangle**, Scratch's own shorthand for
+"this wants a number" vs. "this wants text", so the two kinds read apart at a glance.
 
-This is small because M9 made the data canonical and M8 already drew the field. The literal
-field — formerly a static `Label` — becomes a `LineEdit`
-([`BlockView._literal_field`](#editing-literal-values-m12)) stamped with the **live `inputs`
-dict + key** it renders; the canvas wires its `text_submitted`/`focus_exited` to a commit
-that writes the (type-coerced) text into that dict. Because the dict is the same reference
-the interpreter reads, committing *is* the edit — the editor-side echo of M9 splicing a
-dragged block into a live array. **No new opcode, no data-model change**, again; persistence
-(M10) and RUN carry the edited inputs with no extra plumbing.
+This is small for the usual reason: M9 made the data canonical and M12 already wired a
+widget's chosen value back into it. The two new things both live in `BlockView`'s table:
 
-A press on a field focuses it for typing; a press on the block's coloured body still grabs
-it to drag (the canvas defers to the field only when the press lands on one, and commits any
-active edit when you grab elsewhere) — exactly Scratch, where the input slot captures clicks
-and you drag by the block body. Coercion is **type-directed** to match the interpreter
-([`BlockView.coerce_literal`](#editing-literal-values-m12)): a numeric slot keeps a number,
-a bool slot maps `true`/`false`, anything else stays a string (so a sentinel like
-`point_in_direction`'s `"bounce"` typed into a numeric slot survives).
+- **Enum slots** are declared by one optional `enums` field per `_OPCODES` entry —
+  `input_key -> [allowed values]` (`stop {mode}` → `["all", "this script"]`, `say … in
+  {size}` → `["small", "large"]`, `create clone of {target}` → `["myself"]`, `touching
+  {side} edge?` → `["any", …]`). [`BlockView.build_input`](#enum-dropdowns-and-typed-slot-shapes-m13)
+  renders such a slot as an `OptionButton` ([`_enum_field`](#enum-dropdowns-and-typed-slot-shapes-m13))
+  instead of a `LineEdit`; the canvas wires its `item_selected` to write the chosen text
+  back into the same live `inputs` dict, exactly as it wires a literal field's commit. An
+  opcode with no `enums` keeps the M12 text field. A value not in the list (from a
+  hand-written script) is appended + selected so it stays visible rather than snapping away.
+- **Typed shapes**: [`BlockView._literal_field`](#enum-dropdowns-and-typed-slot-shapes-m13)
+  now takes the slot's value type and picks its corner radius — a fat radius (oval) for
+  `int`/`float`, a slight one (rectangle) for everything else. The signal is the slot's
+  *current* value type, the same thing `coerce_literal` keys off, so a numeric slot holding
+  the `"bounce"` sentinel (a String) reads as text — consistent with how that value coerces.
 
-Enum-ish slots (`stop {mode}`, `say … in {size}`, `create clone of {target}`) are edited as
-**free text**, not dropdowns — a wrong value just warns at runtime; real dropdowns are
-deferred. Dragging *reporters* into slots is still deferred too (the field edits a literal in
-place; it doesn't accept a dropped pill). Edits still **persist for the session** (M10), now
-including changed input values. See
+**No new opcode, no data-model change** — again. The dropdown stores a plain string and the
+shape is pure cosmetics, so persistence (M10) and RUN carry M13's edits with no extra
+plumbing. Coercion ([`BlockView.coerce_literal`](#editing-literal-values-m12)) is unchanged
+and still governs the free-text fields; enum values need none (they're always strings).
+
+Dragging *reporters* into slots is still deferred (the field/dropdown edits a value in
+place; it doesn't accept a dropped pill). Edits still **persist for the session** (M10). See
 [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 The editor remains the project's **front door**: F5 launches the editor (`editor.tscn`),
@@ -64,6 +67,10 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    **Click a white input field** (M12) to edit its value — type a new number/word and
    press Enter (or click away) to commit it into the block; e.g. change `move {10}` to
    `move {8}`. (Clicking the field edits it; grab the coloured part of a block to drag it.)
+   **Numeric slots are oval, text slots rectangular** (M13), so a number field and a word
+   field read apart at a glance. A slot that is really a **fixed choice** (`stop {mode}`,
+   `say … in {size}`, `create clone of {target}`, `touching {side} edge?`) is a **dropdown**
+   (M13) — click it and pick a value instead of typing one.
    Edits **persist** as you switch sprites (the session's project accumulates them);
    there's no reset-to-pristine yet, so relaunch the editor to start clean.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
@@ -454,17 +461,61 @@ canonical — editing a value is just another mutation of the same arrays the ru
   the block grabs it to drag and first calls `gui_release_focus()` to commit any active edit.
   This is Scratch's own split — the input slot captures clicks, the body is the drag handle.
 
-Enum-ish slots (`stop {mode}`, `say … in {size}`) are plain text fields, not dropdowns
-(deferred), and the field edits a literal in place — it doesn't yet accept a *dropped*
-reporter pill (also deferred). See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+Enum-ish slots (`stop {mode}`, `say … in {size}`) were plain text fields in M12, not
+dropdowns — **M13 gives them dropdowns** (below). The field still edits a value in place; it
+doesn't yet accept a *dropped* reporter pill (deferred). See
+[Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+
+### Enum dropdowns and typed slot shapes (M13)
+
+The two halves of M12's "make every literal as free text" deferral, paid off together. Both
+are table-driven additions to `BlockView` — no opcode, no data-model change — so they ride
+M9's data-is-canonical spine and M12's wire-the-widget-back-to-the-data machinery untouched.
+
+- **Enum dropdowns.** An optional **`enums` field** on an `_OPCODES` entry maps
+  `input_key -> [allowed values]` for slots that are a fixed choice: `stop {mode}` ∈
+  {`all`, `this script`}, `say … in {size}` ∈ {`small`, `large`}, `create clone of {target}` =
+  {`myself`}, `touching {side} edge?` ∈ {`any`, `top`, `bottom`, `left`, `right`}.
+  [`BlockView._header_from_template`](scripts/block_view.gd) looks the entry's `enums` up and
+  passes the key's options into [`build_input`](scripts/block_view.gd), which — when the
+  options are non-empty — builds an `OptionButton`
+  ([`_enum_field`](scripts/block_view.gd)) instead of the M12 `LineEdit`. The dropdown carries
+  the **same `lit_inputs`/`lit_key` meta** a literal field does, so the canvas treats it the
+  same: [`BlockCanvas._wire_literals`](scripts/block_canvas.gd) connects its `item_selected`
+  to `_on_enum_selected`, which writes the chosen option text straight into the live `inputs`
+  dict (no coercion — enum values are always strings). A current value **not among the
+  options** (an odd hand-written script) is appended and selected, so it stays visible and
+  editable rather than silently snapping to option 0.
+- **Typed slot shapes.** [`BlockView._literal_field`](scripts/block_view.gd) now takes the
+  slot's **value type** and picks its corner radius: a fat radius (oval) for `int`/`float`, a
+  slight radius (rectangle) for string/bool — Scratch's visual shorthand for number vs. text
+  slots. The type read is the slot's *current* value type, the same signal `coerce_literal`
+  is directed by, so the shape and the coercion always agree (a numeric slot holding the
+  `"bounce"` String sentinel reads — and coerces — as text).
+
+**Edit vs. drag and the palette are unchanged in spirit.** The dropdown is just another
+widget stamped with `lit_key`, so it is already covered everywhere a literal field is:
+[`BlockCanvas._over_literal`](scripts/block_canvas.gd) (now matching any `lit_key` Control,
+not just `LineEdit`) defers a press on it to the GUI — so the dropdown opens / the field
+focuses — instead of grabbing the block to drag; [`_passthrough`](scripts/block_canvas.gd)
+keeps any `lit_key` node interactive; and the palette
+([`BlockPalette._passthrough`](scripts/block_palette.gd)) leaves a chip's dropdown inert by
+mouse-ignoring it (the literal field additionally gets `editable = false`).
+
+Still deferred after M13: **dragging a reporter pill into a slot** (a value slot accepts a
+typed/chosen literal, not a dropped reporter), and **dropdowns scoped to live data** (the
+`{name}` slots of `variable`/`set`/`change` and `touching {name}?` are still free text — a
+real menu there would enumerate the project's actual variables/sprites, which needs the
+editor to own that model). See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 ## Opcodes implemented
 
-**M12 added no opcodes** (nor did M8/M9/M10/M11) — the editor is a pure *view + interaction*
+**M13 added no opcodes** (nor did M8/M9/M10/M11/M12) — the editor is a pure *view + interaction*
 over the existing language. Every opcode below has a `BlockView._OPCODES` entry so it
 draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
-palette (stackable kinds only); M12 lets you edit any literal input's value; and M10 runs
-whatever you assemble from them.
+palette (stackable kinds only); M12 lets you edit any literal input's value (M13 shapes the
+field by type and turns the fixed-choice slots into dropdowns); and M10 runs whatever you
+assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -512,9 +563,9 @@ icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, persists edits + hands them to the Stage on RUN (M10)
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields back to the data (M12); export_script() serializes edits back (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists stackable opcodes as chips; on drag, mints a fresh block and hands it to the canvas
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -533,7 +584,9 @@ CLAUDE.md                  This file
   `template` (drawing) plus `kind` and `defaults` (M11): set `kind` to `"hat"`/
   `"statement"` and give sensible `defaults` for it to appear in the palette as a fresh
   draggable block; a `"reporter"` is drawn but stays out of the palette (no slot-drop
-  yet). An opcode with no entry still renders, as a grey box.
+  yet). If an input is a fixed choice, also give the entry an `enums` field (M13) —
+  `input_key -> [allowed values]` — and that slot renders as a dropdown instead of a
+  free-text field. An opcode with no entry still renders, as a grey box.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -547,11 +600,12 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Dropdowns for enum slots** — M12 edits *every* literal as free text, including slots
-  that are really a fixed choice (`stop {mode}` ∈ {all, this script}, `say … in {size}` ∈
-  {small, large}, `create clone of {target}` = myself). A wrong value just warns at runtime;
-  a real `OptionButton`-style menu per enum slot (keyed off the opcode) is deferred. This is
-  the natural M13 alongside making numeric vs. string slots visually distinct.
+- **Data-scoped dropdowns** — M13 added dropdowns for the *fixed-choice* enum slots (keyed
+  off each opcode's `enums` list), but the `{name}` slots of `variable`/`set_var`/`change_var`
+  and `touching {name}?` are still free text. A real menu there would enumerate the project's
+  actual variables / sprite names, which needs the editor to **own the project model** (the
+  seeded variables and the target registry currently live only in the Stage). Until then a
+  mistyped name just creates a new global / fails to resolve at runtime, as before.
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
 - **Dragging reporters / blocks into input slots** — M9 snaps *statement* blocks into

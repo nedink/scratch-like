@@ -144,16 +144,23 @@ func _passthrough(node: Node, keep_literals := false) -> void:
 		_passthrough(child, keep_literals)
 
 
-## Wire each editable literal field (M12) in a freshly-rendered subtree to commit its
-## typed value back into the block data on Enter or focus loss. The fields carry the live
-## `inputs` dict + key as meta (stamped by BlockView), so committing is a direct write
-## into the same array the runtime reads — the editor-side echo of M9's splice-into-data.
+## Wire each editable input widget in a freshly-rendered subtree to commit its chosen
+## value back into the block data. A literal field (M12, LineEdit) commits on Enter or
+## focus loss; an enum dropdown (M13, OptionButton) commits on selection. Both carry the
+## live `inputs` dict + key as meta (stamped by BlockView), so committing is a direct
+## write into the same array the runtime reads — the editor-side echo of M9's
+## splice-into-data.
 func _wire_literals(node: Node) -> void:
-	if node is LineEdit and node.has_meta("lit_key"):
-		var field := node as LineEdit
-		field.text_submitted.connect(_on_literal_submitted.bind(field))
-		field.focus_exited.connect(_commit_literal.bind(field))
-		return
+	if node.has_meta("lit_key"):
+		if node is LineEdit:
+			var field := node as LineEdit
+			field.text_submitted.connect(_on_literal_submitted.bind(field))
+			field.focus_exited.connect(_commit_literal.bind(field))
+			return
+		if node is OptionButton:
+			var dd := node as OptionButton
+			dd.item_selected.connect(_on_enum_selected.bind(dd))
+			return
 	for child in node.get_children():
 		_wire_literals(child)
 
@@ -161,6 +168,15 @@ func _wire_literals(node: Node) -> void:
 func _on_literal_submitted(_text: String, field: LineEdit) -> void:
 	_commit_literal(field)
 	field.release_focus()
+
+
+## Write an enum dropdown's chosen option back into the block data. Enum values are all
+## strings (the interpreter reads these slots as strings), so the option text is stored
+## verbatim — no coercion, unlike a free-text literal field.
+func _on_enum_selected(index: int, dd: OptionButton) -> void:
+	var inputs: Dictionary = dd.get_meta("lit_inputs")
+	var key := String(dd.get_meta("lit_key"))
+	inputs[key] = dd.get_item_text(index)
 
 
 ## Coerce the field's text to the slot's type and write it into the live block data, then
@@ -238,9 +254,10 @@ func _tagged_panels(node: Node, out: Array = []) -> Array:
 	return out
 
 
-## True when a global point lands on an editable literal field (M12). The press handler
-## uses this to defer to the field instead of starting a block drag — a field is always
-## smaller than the block it sits in, so checking it first lets the inner widget win.
+## True when a global point lands on an editable input widget — a literal field (M12) or
+## an enum dropdown (M13). The press handler uses this to defer to the widget instead of
+## starting a block drag (so the field takes focus / the dropdown opens). The widget is
+## always smaller than the block it sits in, so checking it first lets the inner one win.
 func _over_literal(global_point: Vector2) -> bool:
 	for field in _literal_fields(_layer):
 		if (field as Control).get_global_rect().has_point(global_point):
@@ -249,7 +266,7 @@ func _over_literal(global_point: Vector2) -> bool:
 
 
 func _literal_fields(node: Node, out: Array = []) -> Array:
-	if node is LineEdit and node.has_meta("lit_key"):
+	if node is Control and node.has_meta("lit_key"):
 		out.append(node)
 	for child in node.get_children():
 		_literal_fields(child, out)
