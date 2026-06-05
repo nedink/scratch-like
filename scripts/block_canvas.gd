@@ -20,9 +20,17 @@ extends Control
 ##
 ## Scope deliberately matched to one milestone: statement blocks snap into stacks and
 ## C-block bodies; whole stacks (and hat-led drags) only reposition. The edited result
-## is serialized by export_script() and run by the Stage (M10). Dragging a *reporter*
-## into an input slot and a palette to drag *new* blocks from are still ahead — see
-## CLAUDE.md.
+## is serialized by export_script() and run by the Stage (M10).
+##
+## M14 adds the second drop kind: a **reporter** dragged from the palette drops into a
+## **value/condition slot**. It rides the same machinery — palette mints a fresh dict and
+## hands it here (begin_spawn_drag), the ghost follows the cursor, a highlight marks the
+## target — but the target is a slot (_nearest_slot, found via the `slot_*` meta BlockView
+## stamps on every input widget) instead of a stack gap, and the drop *writes* the reporter
+## into the slot's live `inputs[key]` (overwriting whatever was there) instead of splicing
+## into an array. A reporter released off any slot is **discarded** — it can't become a
+## top-level orphan the interpreter couldn't run. Grabbing a reporter pill already on the
+## canvas is still ahead — see CLAUDE.md.
 ##
 ## Position is the editor's own UI state (a Vector2 per top-level stack), kept here and
 ## out of the block dictionaries, so the data stays exactly the runtime's shape.
@@ -59,7 +67,8 @@ var _press_pos: Vector2          # global position of the initial press
 var _pending: Dictionary = {}    # {array, index} of the block pressed
 var _grab_offset: Vector2        # ghost top-left relative to the cursor, held constant
 var _grabbed: Array = []         # the detached blocks riding the cursor
-var _snap: Dictionary = {}       # current snap target {array, index} or empty
+var _snap: Dictionary = {}       # current snap target (a stack gap or a value slot) or empty
+var _dragging_reporter := false  # the drag is a single reporter pill -> targets slots, not gaps
 
 
 func _ready() -> void:
@@ -283,8 +292,10 @@ func _literal_fields(node: Node, out: Array = []) -> Array:
 func begin_spawn_drag(blocks: Array, global_point: Vector2) -> void:
 	_cancel_drag()
 	_grabbed = blocks
+	# A single reporter targets slots (and ghosts as a pill); anything else is a stack.
+	_dragging_reporter = blocks.size() == 1 and BlockView.is_reporter(String(blocks[0].get("opcode", "")))
 	_grab_offset = Vector2(10, 8)  # cursor sits just inside the block's header
-	_ghost = BlockView.build_stack(_grabbed)
+	_ghost = BlockView.build_reporter(_grabbed[0]) if _dragging_reporter else BlockView.build_stack(_grabbed)
 	_passthrough(_ghost)
 	_ghost.modulate.a = 0.75
 	add_child(_ghost)
@@ -325,19 +336,26 @@ func _begin_drag() -> void:
 ## Move the ghost to follow the cursor and refresh the snap highlight.
 func _update_drag(global_point: Vector2) -> void:
 	_ghost.position = (global_point - _grab_offset) - global_position
-	_snap = _nearest_gap()
+	_snap = _nearest_slot() if _dragging_reporter else _nearest_gap()
 	if _snap.is_empty():
 		_highlight.visible = false
 	else:
 		_highlight.visible = true
 		_highlight.position = _snap["marker"] - global_position
-		_highlight.size = Vector2(maxf(_snap["width"], 24.0), 4)
+		# A slot target highlights its whole rect; a stack gap is a thin bar.
+		_highlight.size = _snap["size"] if _snap.has("size") else Vector2(maxf(_snap["width"], 24.0), 4)
 
 
-## Place the dragged blocks: into the snap gap if one is active, else as a new
-## free-floating stack where the ghost came to rest. Then re-render from the data.
+## Place the dragged blocks. A reporter drops into the targeted slot (overwriting its live
+## `inputs[key]`) or, off any slot, is discarded. A statement stack splices into the snap
+## gap if one is active, else lands as a new free-floating stack. Then re-render from the data.
 func _drop() -> void:
-	if not _snap.is_empty():
+	if _dragging_reporter:
+		if not _snap.is_empty():
+			var inputs: Dictionary = _snap["inputs"]
+			inputs[String(_snap["key"])] = _grabbed[0]
+		# Released off every slot: discard (no top-level orphan reporters).
+	elif not _snap.is_empty():
 		var arr: Array = _snap["array"]
 		var index: int = _snap["index"]
 		for i in range(_grabbed.size()):
@@ -352,7 +370,9 @@ func _drop() -> void:
 ## grabbed blocks are already detached from the data, so re-home them as a loose stack
 ## rather than losing them.
 func _cancel_drag() -> void:
-	if _state == _DRAGGING and not _grabbed.is_empty():
+	# A statement stack is re-homed so it isn't lost; a reporter (fresh from the palette) is
+	# discarded — it has no top-level home.
+	if _state == _DRAGGING and not _grabbed.is_empty() and not _dragging_reporter:
 		_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
 	_clear_drag_overlays()
 
@@ -364,6 +384,7 @@ func _clear_drag_overlays() -> void:
 	_highlight.visible = false
 	_grabbed = []
 	_snap = {}
+	_dragging_reporter = false
 	_state = _IDLE
 	_pending = {}
 
@@ -418,6 +439,51 @@ func _columns(node: Node, out: Array = []) -> Array:
 	for child in node.get_children():
 		_columns(child, out)
 	return out
+
+
+## The nearest value/condition slot to the ghost's top-left, within SNAP_DISTANCE — the
+## reporter-drag counterpart to _nearest_gap. A slot is any rendered input widget (literal
+## field, dropdown, or an existing reporter pill) that BlockView stamped with `slot_*`; the
+## returned dict carries the live `inputs` dict + key so the drop writes straight into the
+## data, plus the slot's global rect (marker + size) so the highlight outlines the whole slot.
+## Distance is measured to the slot's rect (0 when the anchor is inside), so a small slot is
+## still easy to hit. Among slots at (near-)equal distance — e.g. a nested reporter's inner
+## slot and the pill wrapping it both contain the anchor at distance 0 — the **smaller**
+## (deeper) slot wins, so you fill an inner slot rather than replacing the whole reporter
+## (cf. _block_at's smallest-area rule). The epsilon keeps that tie-break from letting a
+## strictly-farther slot win on area alone.
+func _nearest_slot() -> Dictionary:
+	var anchor := global_position + _ghost.position  # ghost top-left, in global space
+	var best := {}
+	var best_dist := SNAP_DISTANCE
+	var best_area := INF
+	for slot in _slots(_layer):
+		var r: Rect2 = (slot as Control).get_global_rect()
+		var d := _dist_to_rect(anchor, r)
+		if d >= SNAP_DISTANCE:
+			continue
+		var area := r.size.x * r.size.y
+		if best.is_empty() or d < best_dist - 0.5 or (d <= best_dist + 0.5 and area < best_area):
+			best_dist = d
+			best_area = area
+			best = {"inputs": slot.get_meta("slot_inputs"), "key": slot.get_meta("slot_key"),
+				"marker": r.position, "size": r.size}
+	return best
+
+
+func _slots(node: Node, out: Array = []) -> Array:
+	if node is Control and node.has_meta("slot_key"):
+		out.append(node)
+	for child in node.get_children():
+		_slots(child, out)
+	return out
+
+
+## Distance from a point to a rectangle: 0 inside, else the gap to the nearest edge/corner.
+func _dist_to_rect(p: Vector2, r: Rect2) -> float:
+	var cx := clampf(p.x, r.position.x, r.end.x)
+	var cy := clampf(p.y, r.position.y, r.end.y)
+	return p.distance_to(Vector2(cx, cy))
 
 
 ## The global top-left of the block at (array, index), found via the rendered panel, so

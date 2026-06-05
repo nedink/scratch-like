@@ -198,23 +198,32 @@ static func build_reporter(block: Dictionary) -> Control:
 ## Render one input value, read from `inputs[key]`: a nested reporter dictionary ->
 ## a pill (build_reporter); an enum slot (non-empty `options`, M13) -> a dropdown
 ## (_enum_field); any other literal -> a small white **editable** field (M12), shaped
-## by its value type (oval for a number, rectangular for text — M13). Whichever widget
-## results is stamped with the live `inputs` dict + `key` so whoever wires editing (the
-## canvas) can write the chosen value straight back into the data — `inputs` is a
-## reference, so that write *is* the edit. (The palette renders the same widgets but
-## leaves them inert; only the canvas wires them.)
+## by its value type (oval for a number, rectangular for text — M13).
+##
+## Two kinds of meta are stamped here:
+##   * `lit_inputs`/`lit_key` — only on an *editable* widget (literal field, dropdown), so
+##     whoever wires editing (the canvas) can write the chosen value straight back into the
+##     data. `inputs` is a reference, so that write *is* the edit. (The palette renders the
+##     same widgets but leaves them inert; only the canvas wires them.)
+##   * `slot_inputs`/`slot_key` — on **every** widget, the reporter pill included. This names
+##     the slot as a drop target so the canvas (M14) can drop a dragged reporter into it,
+##     overwriting `inputs[key]` with the reporter dict. A reporter pill is a slot (you can
+##     drop *onto* it to replace it) but not an editable literal, hence the two metas split.
 static func build_input(inputs: Dictionary, key: String, options: Array = []) -> Control:
 	var value: Variant = inputs.get(key)
+	var widget: Control
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
-		return build_reporter(value)
-	var field: Control
-	if options.is_empty():
-		field = _literal_field(_stringify(value), typeof(value))
+		widget = build_reporter(value)
 	else:
-		field = _enum_field(options, _stringify(value))
-	field.set_meta("lit_inputs", inputs)
-	field.set_meta("lit_key", key)
-	return field
+		if options.is_empty():
+			widget = _literal_field(_stringify(value), typeof(value))
+		else:
+			widget = _enum_field(options, _stringify(value))
+		widget.set_meta("lit_inputs", inputs)
+		widget.set_meta("lit_key", key)
+	widget.set_meta("slot_inputs", inputs)
+	widget.set_meta("slot_key", key)
+	return widget
 
 
 ## Coerce a field's typed text back to a stored value, directed by the slot's previous
@@ -250,20 +259,26 @@ static func make_block(opcode: String) -> Dictionary:
 
 
 ## The opcodes the palette offers, grouped for display: an Array of
-## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. Only stackable kinds (hat /
-## statement) are listed — a reporter has no drop target yet (see CLAUDE.md), so the
-## operators group ends up empty and is dropped.
+## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. As of M14 **every** kind is listed,
+## reporters included — a reporter now has a drop target (a value/condition slot), so you can
+## drag a fresh `+` / `score` / `touching edge?` in. (Through M13 reporters were filtered out
+## because they had nowhere to land.)
 static func palette_groups() -> Array:
 	var groups: Array = []
 	for category in PALETTE_CATEGORY_ORDER:
 		var opcodes: Array = []
 		for opcode in _OPCODES:
-			var info: Dictionary = _OPCODES[opcode]
-			if info.get("category") == category and info.get("kind") != "reporter":
+			if _OPCODES[opcode].get("category") == category:
 				opcodes.append(opcode)
 		if not opcodes.is_empty():
 			groups.append({"category": category, "opcodes": opcodes})
 	return groups
+
+
+## Whether an opcode is a reporter (a value/boolean block that lives in a slot, not a stack).
+## The canvas reads this to ghost a dragged reporter as a pill and to target slots, not gaps.
+static func is_reporter(opcode: String) -> bool:
+	return _OPCODES.get(opcode, {}).get("kind", "") == "reporter"
 
 
 ## The display colour for a category (used by the palette for its group headers). Falls

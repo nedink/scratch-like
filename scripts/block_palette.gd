@@ -13,9 +13,10 @@ extends VBoxContainer
 ## snap highlight, and the drop into the live data, identical to dragging an existing
 ## block. So the palette is just a chooser + a hand-off.
 ##
-## It lists only **stackable** blocks (hats + statements + C-blocks); a reporter pill has
-## no valid drop target until slot-dropping exists (deferred — see CLAUDE.md), so
-## BlockView.palette_groups() filters them out.
+## As of M14 it lists **every** kind — hats, statements, C-blocks, and reporters. A reporter
+## chip is rendered as a pill (build_reporter) so it looks like what lands in a slot; on drag
+## the canvas ghosts it as a pill and targets value/condition slots instead of stack gaps.
+## (Through M13 reporters were filtered out because they had nowhere to drop.)
 ##
 ## Interaction mirrors the canvas's: we drive from _input with manual global hit-testing
 ## and a PENDING→threshold state machine, so nested chip panels never intercept the press
@@ -61,7 +62,10 @@ func _build() -> void:
 		header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(header)
 		for opcode in group["opcodes"]:
-			var chip := BlockView.build_block(BlockView.make_block(opcode))
+			var block := BlockView.make_block(opcode)
+			# A reporter chip is drawn as a pill (build_reporter) so it matches what lands in a
+			# slot; everything stackable keeps the statement/hat shape (build_block).
+			var chip := BlockView.build_reporter(block) if BlockView.is_reporter(opcode) else BlockView.build_block(block)
 			chip.set_meta("palette_opcode", opcode)
 			_passthrough(chip)
 			add_child(chip)
