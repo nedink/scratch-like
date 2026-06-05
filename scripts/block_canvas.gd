@@ -145,6 +145,15 @@ func export_script() -> Array:
 	return out
 
 
+## Re-render every stack from the current data without otherwise touching it. The editor
+## calls this after minting a new variable (M20) so any already-rendered `{name}` dropdown
+## picks up the new option. Positions live in _stacks (untouched here), so blocks stay put;
+## this just rebuilds the Control tree — and thus each dropdown's option list — from the
+## (now-extended) BlockView.project_variables.
+func refresh() -> void:
+	_render()
+
+
 # --- Rendering -------------------------------------------------------------
 
 ## Rebuild every top-level stack from the data and place it at its stored position.

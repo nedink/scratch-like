@@ -35,6 +35,11 @@ const _PENDING := 1  # pressed on a chip, not yet moved past the threshold
 ## The canvas this palette feeds. Set by the editor before any interaction.
 var _canvas: BlockCanvas
 
+## Called when the "Make a Variable" button atop the variables group is pressed (M20). Set by
+## the editor, which owns the project variable model and pops the name/scope dialog. Left unset
+## (an invalid Callable) by any non-editor caller, in which case no button is drawn.
+var _on_make_variable: Callable
+
 var _state: int = _IDLE
 var _press_pos: Vector2
 var _pending_opcode: String = ""
@@ -61,6 +66,15 @@ func _build() -> void:
 		header.add_theme_color_override("font_color", BlockView.category_color(category))
 		header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(header)
+		# The "Make a Variable" affordance sits atop the variables group, as in Scratch (M20). It
+		# is a real Button (not a mouse-ignored chip), so GUI handles its click normally; our
+		# _input ignores it (it carries no `palette_opcode` meta, so _chip_at misses it) and never
+		# starts a drag. It calls back to the editor, which owns the project variable model.
+		if category == "variables" and _on_make_variable.is_valid():
+			var make_btn := Button.new()
+			make_btn.text = "Make a Variable"
+			make_btn.pressed.connect(_on_make_variable)
+			add_child(make_btn)
 		for opcode in group["opcodes"]:
 			var block := BlockView.make_block(opcode)
 			# A reporter chip is drawn as a pill (build_reporter) so it matches what lands in a

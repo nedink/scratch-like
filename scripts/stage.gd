@@ -43,6 +43,14 @@ var _font: PixelFont
 ## Stage instance and is shared by the class, exactly like the scripts it carries.
 static var project_scripts: Dictionary = {}
 
+## The variable model to seed from, the M20 counterpart of project_scripts: an Array of
+## {name, value, scope} dicts the editor hands over right before launching the game. It may
+## include variables *made in the UI* ("Make a Variable"), which is why the runtime can no
+## longer just read PongScripts.variables() directly. Static (survives change_scene_to_file)
+## and falls back to PongScripts.variables() when empty — so launching this scene directly
+## (no editor) still seeds stock Pong's variables, exactly like _script_for / project_scripts.
+static var project_variables: Array = []
+
 
 func _ready() -> void:
 	_font = PixelFont.new()
@@ -58,10 +66,11 @@ func _ready() -> void:
 	# the editor reads its `{name}` dropdown options from, so the two can no longer drift.
 	# A "global" entry lands on the Stage's store; a sprite-scoped one lands on that target's
 	# locals — e.g. the ball's `speed`, which move_steps reads as a variable, proving the
-	# local store works alongside the globals. (This still stands in for a future editor's
-	# "make a variable" step — see PongScripts.variables.) The scores are global so the ball
-	# can drive them and the HUDs can watch; `round` starts at 1 (M5's best-of-N counter).
-	for v in PongScripts.variables():
+	# local store works alongside the globals. As of M20 the model comes from the editor when
+	# it handed one over (so a variable *made in the UI* is seeded too), else PongScripts — see
+	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch;
+	# `round` starts at 1 (M5's best-of-N counter).
+	for v in _variable_model():
 		if v["scope"] == "global":
 			set_var(v["name"], v["value"])
 		else:
@@ -117,6 +126,14 @@ func _ready() -> void:
 ## built under, so edits land on the matching sprite.
 func _script_for(target_name: String, default_script: Array) -> Array:
 	return project_scripts.get(target_name, default_script)
+
+
+## The variable model to seed from (M20): the editor's edited model when it handed one over
+## (it may carry variables made in the UI), else the hardcoded PongScripts model. The
+## variables counterpart of _script_for — launching this scene directly (no editor) still
+## seeds stock Pong's variables.
+func _variable_model() -> Array:
+	return project_variables if not project_variables.is_empty() else PongScripts.variables()
 
 
 ## Look up another target by the name it was registered under. Returns null if

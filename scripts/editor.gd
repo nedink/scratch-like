@@ -40,6 +40,22 @@ var _canvas: BlockCanvas
 ## The block palette (M11): the source of *new* blocks. Hands fresh blocks to the canvas.
 var _palette: BlockPalette
 
+## The project's variable model (M20) — the editor-owned, **mutable** counterpart of _scripts.
+## Seeded from PongScripts.variables() (the single declaration the runtime also reads), then
+## extended by the "Make a Variable" button, which appends a fresh {name, value, scope} entry.
+## _variables_in_scope filters this per sprite for the `{name}` dropdowns; _on_run hands it to
+## the Stage so a variable made here is seeded at RUN. Through M19 the editor read
+## PongScripts.variables() live each call — fine while read-only; M20 needs a stable store to
+## append to, so the editor now owns this copy.
+var _variables: Array = []
+
+## The "Make a Variable" dialog (M20) and its inputs: a name field and a scope selector
+## ("For all sprites" → a global / "For this sprite only" → a local of the edited sprite).
+## Built once in _ready and reused; the palette button pops it via _make_variable.
+var _var_dialog: ConfirmationDialog
+var _var_name_edit: LineEdit
+var _var_scope: OptionButton
+
 
 func _ready() -> void:
 	_scripts = [
@@ -50,6 +66,11 @@ func _ready() -> void:
 		{"name": "P2Hud", "script": PongScripts.p2_hud()},
 		{"name": "Announcer", "script": PongScripts.announcer()},
 	]
+
+	# The editor's own mutable copy of the variable model (M20), seeded from the one runtime
+	# declaration. "Make a Variable" appends to *this* (PongScripts.variables() returns a fresh
+	# array each call, so it was no store to add to); _on_run hands it back to the Stage.
+	_variables = PongScripts.variables().duplicate(true)
 
 	# Hand the project model to the renderer (M17) *before* the palette builds and the canvas
 	# renders, so the `{name}` slots of variable/set/change and touching {name}? draw as
@@ -141,9 +162,12 @@ func _ready() -> void:
 
 	# The palette feeds fresh blocks to the canvas (M11) and doubles as the canvas's trash:
 	# dragging a block back over the palette region deletes it (M16, Scratch's own gesture).
+	# Its "Make a Variable" button (M20) calls back here to mint a new variable.
 	_palette._canvas = _canvas
+	_palette._on_make_variable = _make_variable
 	_canvas._trash = palette_scroll
 
+	_build_variable_dialog()
 	_show(0)
 
 
@@ -178,21 +202,84 @@ func _sprite_names() -> Array:
 
 ## The variable names in scope for `sprite_name` (M19) — the options its `{name}` slots offer.
 ## A variable is in scope when it is a **global** or a **local of this very sprite**; another
-## sprite's locals are hidden, mirroring Scratch (a sprite can't see a sibling's local). Derived
-## from the one project model the runtime also seeds from (PongScripts.variables(), M18) — each
-## entry carries the `scope` this reads ("global" or a sprite name) — so the editor's dropdowns
-## and the Stage's seeding can't drift apart. Re-evaluated per sprite by _show.
+## sprite's locals are hidden, mirroring Scratch (a sprite can't see a sibling's local). Reads
+## the editor-owned model `_variables` (M20) — seeded from PongScripts.variables() (the same
+## declaration the Stage seeds from) and extended by "Make a Variable", each entry carrying the
+## `scope` this reads ("global" or a sprite name). Re-evaluated per sprite by _show.
 ##
 ## (Before M19 this took no argument and listed *every* variable for every sprite — flat, the
 ## deferral M18's scope-in-the-data was the prerequisite for. The Ball's `speed` now shows only
 ## while editing the Ball.)
 func _variables_in_scope(sprite_name: String) -> Array:
 	var names: Array = []
-	for v in PongScripts.variables():
+	for v in _variables:
 		var scope := String(v.get("scope", "global"))
 		if scope == "global" or scope == sprite_name:
 			names.append(v["name"])
 	return names
+
+
+# --- Make a Variable (M20) -------------------------------------------------
+
+## Build the "Make a Variable" dialog once: a name field and a global/local scope selector.
+## Reused on every press of the palette button (popped by _make_variable). Enter in the name
+## field confirms (register_text_enter), matching Scratch's quick flow.
+func _build_variable_dialog() -> void:
+	_var_dialog = ConfirmationDialog.new()
+	_var_dialog.title = "New Variable"
+	_var_dialog.confirmed.connect(_on_new_variable_confirmed)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+
+	var name_label := Label.new()
+	name_label.text = "Variable name:"
+	box.add_child(name_label)
+
+	_var_name_edit = LineEdit.new()
+	_var_name_edit.custom_minimum_size = Vector2(220, 0)
+	box.add_child(_var_name_edit)
+
+	_var_scope = OptionButton.new()
+	_var_scope.add_item("For all sprites")        # index 0 -> "global"
+	_var_scope.add_item("For this sprite only")   # index 1 -> the edited sprite's name
+	box.add_child(_var_scope)
+
+	_var_dialog.add_child(box)
+	add_child(_var_dialog)
+	_var_dialog.register_text_enter(_var_name_edit)
+
+
+## Pop the dialog with a blank, all-sprites default — the palette button's callback.
+func _make_variable() -> void:
+	_var_name_edit.text = ""
+	_var_scope.select(0)
+	_var_dialog.popup_centered(Vector2i(280, 150))
+	_var_name_edit.grab_focus()
+
+
+## Mint the variable: append a fresh {name, value: 0, scope} entry to the owned model (Scratch
+## starts a new variable at 0), then re-scope the dropdowns and refresh the palette + canvas so
+## it shows immediately. Scope is "global" (all sprites) or the edited sprite's name (local).
+## A blank name, or one already in scope for this sprite, is rejected silently — the in-scope
+## check forbids shadowing a name the sprite can already see (a sibling's local, which it can't
+## see, is fine to reuse, matching Scratch).
+func _on_new_variable_confirmed() -> void:
+	var var_name := _var_name_edit.text.strip_edges()
+	if var_name == "":
+		return
+	var sprite_name := String(_scripts[_current]["name"])
+	if var_name in _variables_in_scope(sprite_name):
+		return
+	var scope := "global" if _var_scope.selected == 0 else sprite_name
+	_variables.append({"name": var_name, "value": 0, "scope": scope})
+
+	# The new name must reach the dropdowns the same way M19's scoping does: re-point the scoped
+	# list, rebuild the palette's variable chips, and re-render the canvas so any open `{name}`
+	# dropdown lists it too.
+	BlockView.project_variables = _variables_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
 
 
 ## Serialize the canvas's current edits back into the selected sprite's entry, so they
@@ -213,4 +300,7 @@ func _on_run() -> void:
 	for entry in _scripts:
 		project[entry["name"]] = (entry["script"] as Array).duplicate(true)
 	Stage.project_scripts = project
+	# Hand over the variable model too (M20), so a variable made in the editor is seeded at RUN.
+	# Deep-duplicated like the scripts, so the running game can't mutate the editor's working copy.
+	Stage.project_variables = _variables.duplicate(true)
 	get_tree().change_scene_to_file(_GAME_SCENE)
