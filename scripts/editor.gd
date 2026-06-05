@@ -56,6 +56,17 @@ var _var_dialog: ConfirmationDialog
 var _var_name_edit: LineEdit
 var _var_scope: OptionButton
 
+## The rename / delete dialogs (M21), built once in _ready and reused. A palette variable row's
+## menu pops one of these via _rename_variable / _delete_variable; _renaming / _deleting hold the
+## name the open dialog is acting on (the dialogs' confirmed signals carry no payload). The delete
+## label is rewritten per-invocation to report the usage count.
+var _rename_dialog: ConfirmationDialog
+var _rename_edit: LineEdit
+var _renaming: String = ""
+var _delete_dialog: ConfirmationDialog
+var _delete_label: Label
+var _deleting: String = ""
+
 
 func _ready() -> void:
 	_scripts = [
@@ -165,9 +176,14 @@ func _ready() -> void:
 	# Its "Make a Variable" button (M20) calls back here to mint a new variable.
 	_palette._canvas = _canvas
 	_palette._on_make_variable = _make_variable
+	# Each in-scope variable's palette row (M21) calls back here to rename or delete it.
+	_palette._on_rename_variable = _rename_variable
+	_palette._on_delete_variable = _delete_variable
 	_canvas._trash = palette_scroll
 
 	_build_variable_dialog()
+	_build_rename_dialog()
+	_build_delete_dialog()
 	_show(0)
 
 
@@ -280,6 +296,148 @@ func _on_new_variable_confirmed() -> void:
 	BlockView.project_variables = _variables_in_scope(sprite_name)
 	_palette.rebuild()
 	_canvas.refresh()
+
+
+# --- Rename / delete a variable (M21) --------------------------------------
+
+## Build the rename dialog once: a single name field, prefilled with the current name when popped.
+## Enter confirms (register_text_enter), like the make dialog.
+func _build_rename_dialog() -> void:
+	_rename_dialog = ConfirmationDialog.new()
+	_rename_dialog.title = "Rename Variable"
+	_rename_dialog.confirmed.connect(_on_rename_confirmed)
+
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	var label := Label.new()
+	label.text = "New name:"
+	box.add_child(label)
+	_rename_edit = LineEdit.new()
+	_rename_edit.custom_minimum_size = Vector2(220, 0)
+	box.add_child(_rename_edit)
+
+	_rename_dialog.add_child(box)
+	add_child(_rename_dialog)
+	_rename_dialog.register_text_enter(_rename_edit)
+
+
+## Build the delete-confirmation dialog once. Its label is rewritten each time it pops to name the
+## variable and report how many blocks use it (and that they survive the delete).
+func _build_delete_dialog() -> void:
+	_delete_dialog = ConfirmationDialog.new()
+	_delete_dialog.title = "Delete Variable"
+	_delete_dialog.confirmed.connect(_on_delete_confirmed)
+	_delete_label = Label.new()
+	_delete_dialog.add_child(_delete_label)
+	add_child(_delete_dialog)
+
+
+## Pop the rename dialog for `name` (a palette row's menu callback). The name is selected so the
+## user can type a replacement immediately.
+func _rename_variable(var_name: String) -> void:
+	_renaming = var_name
+	_rename_edit.text = var_name
+	_rename_dialog.popup_centered(Vector2i(280, 130))
+	_rename_edit.grab_focus()
+	_rename_edit.select_all()
+
+
+## Commit a rename: update the model entry's name, then cascade the new name into every script
+## where this variable is the in-scope referent (the current sprite in place via the canvas, the
+## rest via BlockView.rewrite_variable_refs), and re-scope/rebuild/refresh the UI (the M20 trio).
+## A blank name, no-op (unchanged), or a name already in scope for this sprite is rejected silently
+## — the in-scope guard mirrors "Make a Variable" (it forbids colliding with a name the sprite can
+## already see; a sibling's local, which it can't see, is irrelevant).
+func _on_rename_confirmed() -> void:
+	var new_name := _rename_edit.text.strip_edges()
+	if new_name == "" or new_name == _renaming:
+		return
+	var sprite_name := String(_scripts[_current]["name"])
+	if new_name in _variables_in_scope(sprite_name):
+		return
+	var entry := _in_scope_entry(_renaming)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
+	var old_name := _renaming
+
+	_persist_current()  # sync the canvas into _scripts[_current] before the cascade
+	entry["name"] = new_name
+	for i in _scripts.size():
+		if not _is_referent_for(String(_scripts[i]["name"]), old_name, scope):
+			continue
+		if i == _current:
+			_canvas.rename_variable(old_name, new_name)  # in place — preserves canvas positions
+		else:
+			BlockView.rewrite_variable_refs(_scripts[i]["script"], old_name, new_name)
+
+	BlockView.project_variables = _variables_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()  # after re-pointing project_variables, so the new name is an in-scope option
+
+
+## Pop the delete-confirmation dialog for `name`, reporting how many blocks reference it. We persist
+## the canvas first so the current sprite's count reads from up-to-date data. Deletion keeps those
+## blocks (they dangle and re-bind if the variable is re-made), so the dialog says as much.
+func _delete_variable(var_name: String) -> void:
+	_persist_current()
+	_deleting = var_name
+	var entry := _in_scope_entry(var_name)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
+	var uses := 0
+	for i in _scripts.size():
+		if _is_referent_for(String(_scripts[i]["name"]), var_name, scope):
+			uses += BlockView.count_variable_refs(_scripts[i]["script"], var_name)
+	_delete_label.text = "Delete \"%s\"?  Used by %d block(s).\nThey keep the name and re-bind if you make it again." % [var_name, uses]
+	_delete_dialog.popup_centered(Vector2i(380, 140))
+
+
+## Commit a delete: remove only the in-scope model entry; referencing blocks are left untouched
+## (dangling — the renderer still shows the name via M13's append-the-unknown rule, and re-creating
+## the variable re-binds them at the dropdown and at RUN). Re-scope/rebuild/refresh as ever.
+func _on_delete_confirmed() -> void:
+	var sprite_name := String(_scripts[_current]["name"])
+	for i in _variables.size():
+		var v: Dictionary = _variables[i]
+		var scope := String(v.get("scope", "global"))
+		if String(v["name"]) == _deleting and (scope == "global" or scope == sprite_name):
+			_variables.remove_at(i)
+			break
+	BlockView.project_variables = _variables_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
+
+
+## The model entry for `var_name` that the current sprite sees (a global, or a local of this
+## sprite), or {} if none. A name is unique within a sprite's scope (the make/rename guards forbid
+## an in-scope collision), so this resolves to exactly the entry a palette row stands for.
+func _in_scope_entry(var_name: String) -> Dictionary:
+	var sprite_name := String(_scripts[_current]["name"])
+	for v in _variables:
+		var scope := String(v.get("scope", "global"))
+		if String(v["name"]) == var_name and (scope == "global" or scope == sprite_name):
+			return v
+	return {}
+
+
+## Whether `var_name` (a variable of scope `scope`) is the referent `sprite_name`'s script sees
+## under that name — the test the rename/delete cascade scopes on. A local is the referent only for
+## its own sprite; a global is the referent everywhere *except* a sprite that shadows it with its
+## own local of the same name (there, the name means the local, so the global's cascade skips it).
+func _is_referent_for(sprite_name: String, var_name: String, scope: String) -> bool:
+	if scope == "global":
+		return not _sprite_has_local(sprite_name, var_name)
+	return sprite_name == scope
+
+
+## Whether `sprite_name` declares a local variable named `var_name`.
+func _sprite_has_local(sprite_name: String, var_name: String) -> bool:
+	for v in _variables:
+		if String(v["name"]) == var_name and String(v.get("scope", "global")) == sprite_name:
+			return true
+	return false
 
 
 ## Serialize the canvas's current edits back into the selected sprite's entry, so they

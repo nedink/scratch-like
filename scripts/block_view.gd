@@ -290,6 +290,54 @@ static func make_block(opcode: String) -> Dictionary:
 	return {"opcode": opcode, "inputs": defaults.duplicate(true)}
 
 
+## The opcodes whose `{name}` input names a variable — the three the rename/delete cascade
+## (M21) walks for. Kept here beside the `data_enums` declarations that mark those same slots
+## (`set_var`/`change_var`/`variable` all map `name -> "variables"`).
+const _VARIABLE_OPCODES := ["variable", "set_var", "change_var"]
+
+
+## Count how many blocks in `blocks` reference the variable `name` (M21) — blocks whose opcode
+## is one of `_VARIABLE_OPCODES` and whose `inputs.name` equals it. Recurses into nested reporter
+## inputs and `body` substacks, the same tree the interpreter walks. The editor sums this across
+## the scripts where a variable is in scope to report a deletion's usage count.
+static func count_variable_refs(blocks: Array, name: String) -> int:
+	var count := 0
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _VARIABLE_OPCODES and String(inputs.get("name", "")) == name:
+			count += 1
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				count += count_variable_refs([value], name)
+			elif typeof(value) == TYPE_ARRAY:
+				count += count_variable_refs(value, name)
+	return count
+
+
+## Rewrite every reference to `old_name` in `blocks` to `new_name` (M21), in place — the cascade
+## a UI rename performs across a script. Same walk as count_variable_refs: a `_VARIABLE_OPCODES`
+## block's `inputs.name` is reassigned, and nested reporter inputs / `body` substacks recurse.
+## (`blocks` and the dicts within are references, so this mutates the live script the caller holds.)
+static func rewrite_variable_refs(blocks: Array, old_name: String, new_name: String) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _VARIABLE_OPCODES and String(inputs.get("name", "")) == old_name:
+			inputs["name"] = new_name
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				rewrite_variable_refs([value], old_name, new_name)
+			elif typeof(value) == TYPE_ARRAY:
+				rewrite_variable_refs(value, old_name, new_name)
+
+
 ## The opcodes the palette offers, grouped for display: an Array of
 ## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. As of M14 **every** kind is listed,
 ## reporters included — a reporter now has a drop target (a value/condition slot), so you can

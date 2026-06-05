@@ -40,6 +40,12 @@ var _canvas: BlockCanvas
 ## (an invalid Callable) by any non-editor caller, in which case no button is drawn.
 var _on_make_variable: Callable
 
+## Called with a variable name when its palette row's Rename / Delete menu item is chosen (M21).
+## Set by the editor (which owns the model and pops the rename/delete dialogs); left unset by a
+## non-editor caller, in which case the per-variable management rows are not drawn.
+var _on_rename_variable: Callable
+var _on_delete_variable: Callable
+
 var _state: int = _IDLE
 var _press_pos: Vector2
 var _pending_opcode: String = ""
@@ -75,6 +81,12 @@ func _build() -> void:
 			make_btn.text = "Make a Variable"
 			make_btn.pressed.connect(_on_make_variable)
 			add_child(make_btn)
+			# Beneath it, one management row per in-scope variable (M21): a button that pops a
+			# Rename / Delete menu, calling back to the editor. project_variables is already the
+			# editor's per-sprite scoped list (M19), so the rows re-scope on every rebuild().
+			if _on_rename_variable.is_valid() or _on_delete_variable.is_valid():
+				for var_name in BlockView.project_variables:
+					add_child(_make_variable_row(String(var_name)))
 		for opcode in group["opcodes"]:
 			var block := BlockView.make_block(opcode)
 			# A reporter chip is drawn as a pill (build_reporter) so it matches what lands in a
@@ -97,6 +109,32 @@ func _passthrough(node: Node) -> void:
 		(node as LineEdit).editable = false
 	for child in node.get_children():
 		_passthrough(child)
+
+
+## A management row for one in-scope variable (M21): a MenuButton labelled with the variable's
+## name whose popup offers Rename / Delete. A MenuButton (not a plain Button + hand-placed
+## PopupMenu) so the menu positions itself. Like the "Make a Variable" button it carries no
+## `palette_opcode` meta and is left mouse-interactive (not run through _passthrough), so our
+## _input drag hit-test (_chip_at) skips it and GUI handles the click. The menu routes back to the
+## editor's rename/delete callbacks, bound with this row's name.
+func _make_variable_row(var_name: String) -> MenuButton:
+	var row := MenuButton.new()
+	row.text = var_name
+	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var menu := row.get_popup()
+	menu.add_item("Rename", 0)
+	menu.add_item("Delete", 1)
+	menu.id_pressed.connect(_on_variable_menu.bind(var_name))
+	return row
+
+
+## Route a variable row's menu choice to the editor (M21): Rename (id 0) or Delete (id 1), each
+## with the row's variable name. The callbacks pop the editor's dialogs and mutate the model.
+func _on_variable_menu(id: int, var_name: String) -> void:
+	if id == 0 and _on_rename_variable.is_valid():
+		_on_rename_variable.call(var_name)
+	elif id == 1 and _on_delete_variable.is_valid():
+		_on_delete_variable.call(var_name)
 
 
 ## Rebuild the chip list from scratch. The editor calls this on a sprite switch (M19): the
