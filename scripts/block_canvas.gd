@@ -232,6 +232,13 @@ func _commit_literal(field: LineEdit) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
+			# A ScrollContainer only clips *rendering*: a block scrolled above the viewport keeps a
+			# global rect that overlaps the chrome above the canvas (the top bar's sprite selector).
+			# Ignore a press outside the visible canvas region so it falls through to that chrome
+			# rather than grabbing a scrolled-up block. (Guarded to the initial press only — a drag
+			# in progress legitimately travels off-canvas, e.g. onto the palette trash, M16.)
+			if not _in_view(event.position):
+				return
 			# A press on an editable literal field (M12) belongs to that field: let it
 			# fall through to GUI focus/editing rather than grabbing the block.
 			if _over_literal(event.position):
@@ -289,6 +296,14 @@ func _tagged_panels(node: Node, out: Array = []) -> Array:
 	for child in node.get_children():
 		_tagged_panels(child, out)
 	return out
+
+
+## True when a global point lands inside the canvas's visible region — its enclosing
+## ScrollContainer's rect. The press handler gates on this so a press on the chrome above
+## the canvas (the top bar) never grabs a block whose scrolled-up global rect overlaps it.
+func _in_view(global_point: Vector2) -> bool:
+	var view := get_parent() as Control
+	return view == null or view.get_global_rect().has_point(global_point)
 
 
 ## True when a global point lands on an editable input widget — a literal field (M12) or
