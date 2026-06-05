@@ -35,6 +35,14 @@ var _running: bool = true
 ## resource every sprite reaches, never reloaded per sprite.
 var _font: PixelFont
 
+## name (String) -> edited block script (Array), the M10 hand-off from the editor. The
+## editor sets this *static* (so it survives change_scene_to_file, which can't pass a
+## value) right before launching the game. _ready runs each sprite's edited script when
+## present and falls back to the hardcoded PongScripts otherwise — so launching this
+## scene directly (no editor) still plays stock Pong. Static, so it outlives any one
+## Stage instance and is shared by the class, exactly like the scripts it carries.
+static var project_scripts: Dictionary = {}
+
 
 func _ready() -> void:
 	_font = PixelFont.new()
@@ -94,12 +102,19 @@ func _ready() -> void:
 	# ready early on some launches but not others.)
 	await get_tree().process_frame
 
-	_run(left, PongScripts.left_paddle())
-	_run(right, PongScripts.right_paddle())
-	_run(ball, PongScripts.ball())
-	_run(p1_hud, PongScripts.p1_hud())
-	_run(p2_hud, PongScripts.p2_hud())
-	_run(announcer, PongScripts.announcer())
+	_run(left, _script_for("LeftPaddle", PongScripts.left_paddle()))
+	_run(right, _script_for("RightPaddle", PongScripts.right_paddle()))
+	_run(ball, _script_for("Ball", PongScripts.ball()))
+	_run(p1_hud, _script_for("P1Hud", PongScripts.p1_hud()))
+	_run(p2_hud, _script_for("P2Hud", PongScripts.p2_hud()))
+	_run(announcer, _script_for("Announcer", PongScripts.announcer()))
+
+
+## The script to run for a sprite: the editor's edited version if it handed one over
+## (M10), else the hardcoded default. Keyed by the same registry name the sprite is
+## built under, so edits land on the matching sprite.
+func _script_for(target_name: String, default_script: Array) -> Array:
+	return project_scripts.get(target_name, default_script)
 
 
 ## Look up another target by the name it was registered under. Returns null if

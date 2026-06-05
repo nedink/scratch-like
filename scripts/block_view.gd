@@ -1,8 +1,8 @@
 class_name BlockView
 extends RefCounted
 
-## The Milestone 8 block renderer — the editor's drawing counterpart to the
-## interpreter's execution.
+## The block renderer — the editor's drawing counterpart to the interpreter's
+## execution. (M8 made it read-only; M9 tags what it draws so the canvas can drag it.)
 ##
 ## `interpreter.gd` tree-walks the block data (an Array of {opcode, inputs}
 ## dictionaries, with substacks nested under "inputs") to *execute* it. This walks
@@ -18,12 +18,31 @@ extends RefCounted
 ## The recursion mirrors the interpreter's too:
 ##   * a stack (Array)            -> build_stack  (cf. _run_stack)
 ##   * a reporter input (a dict)  -> build_reporter / build_input  (cf. _evaluate)
-##   * a C-block body             -> an indented nested stack
+##   * a C-block / hat body       -> a nested stack (indented for C-blocks)
+##
+## M9 (drag/snap) needs to map a Control back to the data it draws, so build_stack /
+## build_block stamp two kinds of `meta` onto the tree (read by block_canvas.gd):
+##   * each statement panel  -> "blk_array" (the Array it lives in) + "blk_index";
+##   * each stack column      -> "body_array" (the Array it renders).
+## Because GDScript arrays are references, "blk_array" *is* the live data array — the
+## canvas splices a dragged block straight into it (`array.insert(index, block)`),
+## the drawing counterpart to the interpreter mutating the same arrays as it runs.
+## A block's on-screen *position* is deliberately NOT stored here: it is UI state the
+## canvas owns, keeping the block dictionaries free of editor assumptions.
 ##
 ## Text uses Godot's built-in UI font, NOT the PixelFont: block labels need
 ## lowercase + punctuation ("move_steps", "touching_edge?", ">"), which the font.png
 ## atlas deliberately lacks. The "defer new glyphs" rule governs *in-game* rendered
 ## text (sprite costumes via `say`); editor chrome is a separate layer.
+
+## Hats are stack *roots*, not C-blocks: their body flows directly beneath the header
+## at the same indent (Scratch hats have no "C" wrap). The canvas also uses this to
+## forbid snapping a hat into the middle of a stack — a hat-led drag only repositions.
+const HAT_OPCODES := ["when_flag_clicked", "when_i_start_as_a_clone"]
+
+## C-blocks wrap their body in an indented "C". (The interpreter treats both the same
+## way — a nested body Array — so this is purely a drawing distinction.)
+const C_OPCODES := ["forever", "if"]
 
 ## Scratch's category palette. Keyed by the "category" each opcode declares below.
 ## A static var (not const) because a Color built from a hex *string* is not a
@@ -39,84 +58,93 @@ static var _CATEGORY_COLORS := {
 	"unknown": Color("#7f7f7f"),
 }
 
-## opcode -> {category, template}. The editor's counterpart to the interpreter's
-## `_register_handlers`. `template` is a label string with `{input_name}`
+## opcode -> {category, template, kind, defaults}. The editor's counterpart to the
+## interpreter's `_register_handlers`. `template` is a label string with `{input_name}`
 ## placeholders; each placeholder is replaced by that input's rendered widget (a
 ## literal field or a nested reporter). A C-block's body is NOT a placeholder — it
 ## is rendered separately, indented (see build_block).
+##
+## M11 added two fields per entry (so adding a block to the *palette* is still one entry):
+##   * `kind` ∈ {"hat", "statement", "reporter"} — the palette lists only the stackable
+##     kinds (hat/statement); a reporter has no drop target yet (see CLAUDE.md), so it is
+##     excluded. (Rendering ignores `kind`; HAT_OPCODES/C_OPCODES still drive shape.)
+##   * `defaults` — the `inputs` dict a freshly-spawned block starts with, read by
+##     make_block(). C-blocks/hats default an empty `body` array.
 const _OPCODES := {
 	# events (hats)
-	"when_flag_clicked": {"category": "events", "template": "when flag clicked"},
-	"when_i_start_as_a_clone": {"category": "events", "template": "when I start as a clone"},
+	"when_flag_clicked": {"category": "events", "kind": "hat", "template": "when flag clicked", "defaults": {"body": []}},
+	"when_i_start_as_a_clone": {"category": "events", "kind": "hat", "template": "when I start as a clone", "defaults": {"body": []}},
 	# control
-	"forever": {"category": "control", "template": "forever"},
-	"if": {"category": "control", "template": "if {condition} then"},
-	"wait_seconds": {"category": "control", "template": "wait {seconds} seconds"},
-	"stop": {"category": "control", "template": "stop {mode}"},
-	"create_clone": {"category": "control", "template": "create clone of {target}"},
-	"delete_this_clone": {"category": "control", "template": "delete this clone"},
+	"forever": {"category": "control", "kind": "statement", "template": "forever", "defaults": {"body": []}},
+	"if": {"category": "control", "kind": "statement", "template": "if {condition} then", "defaults": {"condition": true, "body": []}},
+	"wait_seconds": {"category": "control", "kind": "statement", "template": "wait {seconds} seconds", "defaults": {"seconds": 1}},
+	"stop": {"category": "control", "kind": "statement", "template": "stop {mode}", "defaults": {"mode": "all"}},
+	"create_clone": {"category": "control", "kind": "statement", "template": "create clone of {target}", "defaults": {"target": "myself"}},
+	"delete_this_clone": {"category": "control", "kind": "statement", "template": "delete this clone", "defaults": {}},
 	# motion
-	"move_steps": {"category": "motion", "template": "move {steps} steps"},
-	"turn_degrees": {"category": "motion", "template": "turn {degrees} degrees"},
-	"point_in_direction": {"category": "motion", "template": "point in direction {direction}"},
-	"go_to": {"category": "motion", "template": "go to x: {x} y: {y}"},
+	"move_steps": {"category": "motion", "kind": "statement", "template": "move {steps} steps", "defaults": {"steps": 10}},
+	"turn_degrees": {"category": "motion", "kind": "statement", "template": "turn {degrees} degrees", "defaults": {"degrees": 15}},
+	"point_in_direction": {"category": "motion", "kind": "statement", "template": "point in direction {direction}", "defaults": {"direction": 90}},
+	"go_to": {"category": "motion", "kind": "statement", "template": "go to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
 	# looks
-	"say": {"category": "looks", "template": "say {text} in {size}"},
+	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}},
 	# sensing
-	"touching_edge?": {"category": "sensing", "template": "touching {side} edge?"},
-	"touching_sprite?": {"category": "sensing", "template": "touching {name}?"},
-	"key_pressed?": {"category": "sensing", "template": "key {key} pressed?"},
+	"touching_edge?": {"category": "sensing", "kind": "reporter", "template": "touching {side} edge?", "defaults": {"side": "any"}},
+	"touching_sprite?": {"category": "sensing", "kind": "reporter", "template": "touching {name}?", "defaults": {"name": ""}},
+	"key_pressed?": {"category": "sensing", "kind": "reporter", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
 	# variables
-	"set_var": {"category": "variables", "template": "set {name} to {value}"},
-	"change_var": {"category": "variables", "template": "change {name} by {by}"},
-	"variable": {"category": "variables", "template": "{name}"},
+	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "score", "value": 0}},
+	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "score", "by": 1}},
+	"variable": {"category": "variables", "kind": "reporter", "template": "{name}", "defaults": {"name": "score"}},
 	# operators
-	"add": {"category": "operators", "template": "{a} + {b}"},
-	"subtract": {"category": "operators", "template": "{a} - {b}"},
-	"multiply": {"category": "operators", "template": "{a} * {b}"},
-	"divide": {"category": "operators", "template": "{a} / {b}"},
-	"mod": {"category": "operators", "template": "{a} mod {b}"},
-	"equals": {"category": "operators", "template": "{a} = {b}"},
-	"greater_than": {"category": "operators", "template": "{a} > {b}"},
-	"less_than": {"category": "operators", "template": "{a} < {b}"},
-	"and": {"category": "operators", "template": "{a} and {b}"},
-	"or": {"category": "operators", "template": "{a} or {b}"},
-	"not": {"category": "operators", "template": "not {a}"},
-	"random": {"category": "operators", "template": "pick random {from} to {to}"},
+	"add": {"category": "operators", "kind": "reporter", "template": "{a} + {b}", "defaults": {"a": 0, "b": 0}},
+	"subtract": {"category": "operators", "kind": "reporter", "template": "{a} - {b}", "defaults": {"a": 0, "b": 0}},
+	"multiply": {"category": "operators", "kind": "reporter", "template": "{a} * {b}", "defaults": {"a": 0, "b": 0}},
+	"divide": {"category": "operators", "kind": "reporter", "template": "{a} / {b}", "defaults": {"a": 0, "b": 0}},
+	"mod": {"category": "operators", "kind": "reporter", "template": "{a} mod {b}", "defaults": {"a": 0, "b": 0}},
+	"equals": {"category": "operators", "kind": "reporter", "template": "{a} = {b}", "defaults": {"a": 0, "b": 0}},
+	"greater_than": {"category": "operators", "kind": "reporter", "template": "{a} > {b}", "defaults": {"a": 0, "b": 0}},
+	"less_than": {"category": "operators", "kind": "reporter", "template": "{a} < {b}", "defaults": {"a": 0, "b": 0}},
+	"and": {"category": "operators", "kind": "reporter", "template": "{a} and {b}", "defaults": {"a": false, "b": false}},
+	"or": {"category": "operators", "kind": "reporter", "template": "{a} or {b}", "defaults": {"a": false, "b": false}},
+	"not": {"category": "operators", "kind": "reporter", "template": "not {a}", "defaults": {"a": false}},
+	"random": {"category": "operators", "kind": "reporter", "template": "pick random {from} to {to}", "defaults": {"from": 1, "to": 10}},
 }
 
-
-## Render a whole sprite's script: a column of hat stacks. Each top-level block is a
-## hat (e.g. when_flag_clicked) whose `body` flows directly beneath it at the same
-## indent — Scratch hats are not C-blocks, so the body is not wrapped.
-static func build_script(script: Array) -> Control:
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 10)
-	for hat in script:
-		if typeof(hat) != TYPE_DICTIONARY:
-			continue
-		var stack := VBoxContainer.new()
-		stack.add_theme_constant_override("separation", 2)
-		stack.add_child(build_block(hat))  # the hat header itself
-		stack.add_child(build_stack(hat.get("inputs", {}).get("body", [])))
-		column.add_child(stack)
-	return column
+## Category display order for the palette (operators are all reporters, so that group is
+## empty after filtering and simply produces no chips).
+const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators"]
 
 
-## A vertical run of statement blocks (the body of a hat / forever / if). The
-## drawing counterpart to the interpreter's _run_stack.
+## A vertical run of blocks (a sprite's whole script, a hat's body, or a C-block's
+## body — all the same thing: an Array). The drawing counterpart to the interpreter's
+## _run_stack. The returned column is stamped with "body_array" = `blocks`, and each
+## block panel with "blk_array" = `blocks` + "blk_index" = its position, so the canvas
+## can splice a drag straight into this live array (see the class doc).
+##
+## An empty body still produces a small visible slot, so a C-block's empty interior is
+## a reachable drop zone (the column's own rect names the array, index 0).
 static func build_stack(blocks: Array) -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.add_theme_constant_override("separation", 2)
+	column.set_meta("body_array", blocks)
+	var index := 0
 	for block in blocks:
-		if typeof(block) == TYPE_DICTIONARY:
-			column.add_child(build_block(block))
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var panel := build_block(block)
+		panel.set_meta("blk_array", blocks)
+		panel.set_meta("blk_index", index)
+		column.add_child(panel)
+		index += 1
+	if column.get_child_count() == 0:
+		column.add_child(_empty_slot())
 	return column
 
 
-## One statement block: a category-colored panel whose header is built from the
-## opcode's template. forever/if are C-blocks — their `body` is rendered as an
-## indented nested stack inside the same panel, so the "C" wrap reads.
+## One block: a category-colored panel whose header is built from the opcode's
+## template. A hat's body flows directly beneath the header at the same indent (hats
+## are stack roots, not C-blocks); forever/if wrap their body in an indented "C".
 static func build_block(block: Dictionary) -> Control:
 	var opcode := String(block.get("opcode", ""))
 	var info: Dictionary = _OPCODES.get(opcode, {})
@@ -132,7 +160,9 @@ static func build_block(block: Dictionary) -> Control:
 	panel.add_child(column)
 	column.add_child(_header_from_template(template, block))
 
-	if opcode == "forever" or opcode == "if":
+	if opcode in HAT_OPCODES:
+		column.add_child(build_stack(block.get("inputs", {}).get("body", [])))
+	elif opcode in C_OPCODES:
 		var margin := MarginContainer.new()
 		margin.add_theme_constant_override("margin_left", 14)
 		margin.add_child(build_stack(block.get("inputs", {}).get("body", [])))
@@ -165,6 +195,40 @@ static func build_input(value: Variant) -> Control:
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
 		return build_reporter(value)
 	return _literal_field(_stringify(value))
+
+
+# --- Palette (M11) ---------------------------------------------------------
+
+## A fresh block dictionary for `opcode`, in exactly the runtime shape — the factory the
+## palette drags from. `defaults` is deep-duplicated so each spawned block owns its inputs
+## dict and `body` array (no shared references between spawns, and none with the table).
+static func make_block(opcode: String) -> Dictionary:
+	var info: Dictionary = _OPCODES.get(opcode, {})
+	var defaults: Dictionary = info.get("defaults", {})
+	return {"opcode": opcode, "inputs": defaults.duplicate(true)}
+
+
+## The opcodes the palette offers, grouped for display: an Array of
+## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. Only stackable kinds (hat /
+## statement) are listed — a reporter has no drop target yet (see CLAUDE.md), so the
+## operators group ends up empty and is dropped.
+static func palette_groups() -> Array:
+	var groups: Array = []
+	for category in PALETTE_CATEGORY_ORDER:
+		var opcodes: Array = []
+		for opcode in _OPCODES:
+			var info: Dictionary = _OPCODES[opcode]
+			if info.get("category") == category and info.get("kind") != "reporter":
+				opcodes.append(opcode)
+		if not opcodes.is_empty():
+			groups.append({"category": category, "opcodes": opcodes})
+	return groups
+
+
+## The display colour for a category (used by the palette for its group headers). Falls
+## back to the "unknown" grey for an unrecognized category.
+static func category_color(category: String) -> Color:
+	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
 
 
 # --- Header assembly -------------------------------------------------------
@@ -204,6 +268,19 @@ static func _push_label(row: HBoxContainer, text: String) -> void:
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	row.add_child(label)
+
+
+## The visible interior of an *empty* C-block body: a small faint slot, so a
+## forever/if with nothing inside still has area to drop the first block into. (The
+## column it lives in names the body array; the canvas treats this as the index-0 gap.)
+static func _empty_slot() -> Control:
+	var slot := PanelContainer.new()
+	slot.custom_minimum_size = Vector2(40, 14)
+	slot.add_theme_stylebox_override("panel", _box(Color(1, 1, 1, 0.12), 4))
+	slot.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var spacer := Control.new()
+	slot.add_child(spacer)
+	return slot
 
 
 ## A literal input value: dark text on a small white rounded field.

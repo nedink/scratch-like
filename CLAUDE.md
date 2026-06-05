@@ -5,38 +5,39 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 8 — the visual block renderer (the editor, read-only)
+## Current state: Milestone 11 — a palette to drag *new* blocks from
 
-**Goal of this milestone:** make the long-planned **pivot to the editor**. For seven
-milestones this was built *runtime-first* so the execution model would be solid
-before any UI; the runtime is now complete enough (control flow, expressions,
-variables, clones, bitmap text, a live HUD) that M8 lays the editor's first stone: a
-**read-only block renderer**. It draws an existing sprite's block script as a stack
-of visual Scratch-style blocks — category colors, nested C-blocks, inline reporters —
-with **no interaction yet** (no dragging, no palette, no building).
+**Goal of this milestone:** let you **add blocks, not just rearrange them**. Through M10
+the editor could only shuffle the blocks a sprite already had; M11 adds the missing
+source — a **palette** of every stackable block type down the left side. Drag one out and
+it rides the cursor and snaps into a stack exactly like an existing block, so a script
+can now be assembled from scratch and RUN.
 
-The headline idea is a **symmetry**: `interpreter.gd` tree-walks the block data to
-*execute* it; the renderer ([scripts/block_view.gd](scripts/block_view.gd)) walks the
-**exact same data** to *draw* it. Because blocks are already plain serializable
-dictionaries/arrays "exactly the shape a visual editor would emit", **the data model
-needs zero changes** — M8 is purely a new view over it, and adds **no new opcode**.
-The renderer is even **table-driven the same way the interpreter is**: the interpreter
-maps `opcode → handler Callable`; the renderer maps `opcode → {category, template}`.
-Adding a block to the editor is one entry in that table — the same one-line extension
-story. See [Block renderer (M8)](#block-renderer-m8).
+This is small because M9 already built the hard part. The palette **reuses M9's whole drag
+machinery**: the one new ingredient is a **factory for fresh block dictionaries**,
+[`BlockView.make_block(opcode)`](#block-palette-m11), which mints a block in exactly the
+runtime shape with default inputs. When a press on a palette chip turns into a drag, the
+palette hands that fresh block to [`BlockCanvas.begin_spawn_drag`](#block-palette-m11) and
+the canvas owns the rest — ghost, snap highlight, and splice into the live data are
+**unchanged** from M9. **No new opcode, no data-model change**, again.
 
-The editor also becomes the project's **front door**: F5 now launches the editor
-(`editor.tscn`), not the game. The game is unchanged and reached *through* the editor
-— a **RUN** button switches to `main.tscn` (the Stage) and plays the M7 Pong exactly
-as before.
+The palette lists only **stackable** blocks (hats + statements + C-blocks); a reporter
+pill has no valid drop target until dropping reporters into input *slots* exists (still
+deferred). Each `BlockView._OPCODES` entry grew two fields — `kind` (so the palette can
+filter) and `defaults` (a fresh block's starting inputs) — keeping the "add a block = one
+table entry" story.
 
-There is still deliberately **no drag-and-drop, palette, or script-building** — those
-are the next editor milestones (M9/M10). The rendered script is the hardcoded
-`PongScripts` data; RUN launches the existing game, not an edited script. Note that
-**editor chrome uses Godot's built-in UI font, not the bitmap `PixelFont`**: block
-labels need lowercase + punctuation (`move_steps`, `touching_edge?`, `>`), which the
-atlas deliberately lacks. The "defer new glyphs" rule governs *in-game* rendered text
-(sprite costumes via `say`), so editor tooling text is a separate layer that sits
+Edits still **persist for the session** (M10): switching sprites or RUN saves the canvas's
+work — now including newly-added blocks — back into the editor's living project. (There
+is no reset-to-pristine button yet, and editing a literal's *value* and dragging
+reporters into slots are still ahead — see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).)
+
+The editor remains the project's **front door**: F5 launches the editor (`editor.tscn`),
+not the game; **RUN** switches to `main.tscn` (the Stage). **Editor chrome uses Godot's
+built-in UI font, not the bitmap `PixelFont`**:
+block labels need lowercase + punctuation (`move_steps`, `touching_edge?`, `>`), which
+the atlas deliberately lacks. The "defer new glyphs" rule governs *in-game* rendered
+text (sprite costumes via `say`), so editor tooling text is a separate layer that sits
 outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 ## How to run
@@ -45,10 +46,21 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    renderer, so it runs on most hardware).
 2. `Import` / open this folder (it already contains `project.godot`).
 3. Press **F5** (Run Project). The main scene is now `editor.tscn`: the **block
-   editor** opens, showing a sprite selector and one sprite's script rendered as a
-   stack of visual blocks (pick another sprite from the dropdown to inspect it).
+   editor** opens, showing a **palette of new blocks** down the left, a sprite selector,
+   and one sprite's script rendered as a stack of visual blocks (pick another sprite
+   from the dropdown to load it).
+   **Drag a block from the palette** (M11) to add a fresh one; it rides the cursor and
+   snaps just like an existing block. **Drag a block already on the canvas** to pull it
+   (and the blocks below it) out of its stack. Either way a yellow bar marks where it
+   will snap, and dropping over that bar splices it into the stack (or into a C-block's
+   body). Drop on empty canvas to leave it as a free-floating stack. Grab a hat (or the
+   first block of a stack) to slide the whole stack around.
+   Edits **persist** as you switch sprites (the session's project accumulates them);
+   there's no reset-to-pristine yet, so relaunch the editor to start clean.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
-   `Stage`). From here the M7 Pong plays exactly as before:
+   `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
+   version, or the stock script if you didn't touch it. With no edits it plays the M7
+   Pong exactly as before:
    A yellow ball serves from the center at a **randomized angle** and bounces off
    the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
@@ -280,7 +292,8 @@ The recursion mirrors the interpreter's, too:
 - a stack (`Array`) → `build_stack` (cf. `_run_stack`) → a `VBoxContainer`;
 - a statement → `build_block` → a category-coloured `PanelContainer`; for the
   C-blocks `forever`/`if`, the `body` is rendered as an **indented nested stack**
-  inside the same panel so the "C" wrap reads;
+  inside the same panel so the "C" wrap reads, while a **hat's** body flows directly
+  beneath its header at the same indent (hats are stack roots, not C-blocks);
 - a reporter input (a dict with `"opcode"`) → `build_reporter` → an inline rounded
   pill that **recurses into its own inputs to any depth** (cf. `_evaluate`), so the
   ball's serve angle `90 + (pick random -45 to 45)` draws as nested pills;
@@ -297,15 +310,115 @@ door), parallel to `stage.gd`: it builds its UI **in code** (a bare root `Contro
 script, like `main.tscn` is a bare `Node2D` + `stage.gd`). It holds a name→script
 list (a small duplicate of the wiring in `stage.gd._ready`; a later milestone where
 the editor *owns* the project model would unify them), a sprite-selector
-`OptionButton` that rebuilds the canvas through `BlockView.build_script`, and a
-**RUN** button that hands off to the game via
-`get_tree().change_scene_to_file("res://main.tscn")`. A small theme `default_font_size`
-keeps the chunky blocks legible inside the integer-stretched 480×360 viewport.
+`OptionButton` that loads the chosen script into the canvas, and a **RUN** button that
+hands off to the game via `get_tree().change_scene_to_file("res://main.tscn")`. A small
+theme `default_font_size` keeps the chunky blocks legible inside the integer-stretched
+480×360 viewport. As of M9 the canvas itself is a [`BlockCanvas`](#block-canvas-m9)
+(inside a `ScrollContainer` so a tall script is reachable), not a one-shot
+`BlockView` render.
+
+### Block canvas (M9)
+
+[scripts/block_canvas.gd](scripts/block_canvas.gd) is the **interactive drawing
+surface** — the editor going from read-only to hands-on. It owns the dragging; M8's
+`BlockView` stays the pure renderer it feeds.
+
+**Data is still the source of truth.** A drag never reparents `Control` nodes; it
+**mutates the block data and re-renders**, the editor-side echo of the interpreter
+mutating the same arrays as it runs. This works because `BlockView` now stamps `meta`
+on what it draws (the M9 addition): each statement panel carries `blk_array` (the live
+`Array` it lives in) + `blk_index`, and each stack column carries `body_array`. Since
+GDScript arrays are references, that meta **is** the data:
+
+- **Pick up** (`_begin_drag`): the deepest block under the cursor is `slice`d — *with
+  its successors*, Scratch's "the rest of the stack comes with you" rule — out of its
+  `blk_array`. The detached blocks ride the cursor as a translucent **ghost**.
+- **Snap** (`_nearest_gap`): every `body_array` column yields insertion gaps (before
+  each block, after the last, and the interior of an empty C-block body — which
+  `BlockView` now draws as a small slot so it has area). The nearest gap within
+  `SNAP_DISTANCE` is marked with a yellow bar.
+- **Drop** (`_drop`): over a gap, the ghost's blocks `insert` into that gap's live
+  array; on empty canvas, they become a new free-floating top-level stack. Then
+  `_render()` rebuilds from the (now-mutated) data.
+
+A block's **position** is the editor's own UI state — a `Vector2` per top-level stack,
+held in `BlockCanvas`, kept *out* of the block dictionaries so the data stays exactly
+the runtime's shape. `load_script` deep-duplicates the chosen script, so the canvas
+edits its own working copy; the editor persists that copy back per sprite (M10, below).
+
+Two input subtleties: dragging is driven from `_input` (which runs before GUI input)
+with manual global-coordinate hit-testing, and rendered blocks are set to
+`MOUSE_FILTER_IGNORE`, so nested panels never intercept the press and the mouse wheel
+still reaches the `ScrollContainer`. A 4px threshold distinguishes a drag from a click.
+Only statement blocks snap; a **hat-led** grab (or grabbing a stack's first block)
+carries the whole stack and only repositions — a hat can't sit mid-stack.
+
+### Running the edited script (M10)
+
+The editor's first six milestones drew/edited blocks but RUN always launched the
+hardcoded game. M10 makes RUN play the **edited** project, and it is small precisely
+because M9 kept the data canonical:
+
+- [`BlockCanvas.export_script()`](scripts/block_canvas.gd) flattens the working stacks
+  back into a flat `Array` of top-level block dictionaries — the same shape
+  `interpreter.run` consumes — dropping the editor-only `(x, y)` position. (A hat-led
+  stack contributes its hat, whose body already nests the run; a loose stack
+  contributes its blocks as top-level siblings.)
+- [scripts/editor.gd](scripts/editor.gd) treats its `_scripts` list as the **living
+  project**: `_persist_current()` exports the canvas back into the selected entry
+  before each sprite switch and before RUN, so edits accumulate for the session.
+- RUN deep-duplicates the project into **`Stage.project_scripts`**, a `static var`
+  (a plain value can't cross `change_scene_to_file`), then switches scenes.
+- [scripts/stage.gd](scripts/stage.gd)'s `_script_for(name, default)` reads that dict
+  per sprite, **falling back to `PongScripts`** when the editor supplied nothing — so
+  running `main.tscn` directly (no editor) still plays stock Pong, and a sprite you
+  never opened runs its original script. The static outlives any one Stage instance,
+  exactly like the scripts it carries.
+
+The Stage still builds the same sprites (names, positions, seeded variables) — only the
+*scripts* swap — so edited blocks resolve the same sprite names and variables they did
+in the editor.
+
+### Block palette (M11)
+
+The last piece of the editor's core loop: a **source of new blocks**. M9 made existing
+blocks draggable and M10 ran the result, but you could still only rearrange what a sprite
+already had. M11 adds a palette down the left side and is small because it **reuses M9's
+drag machinery whole** — it is a chooser + a hand-off, not a second drag implementation.
+
+- **The factory.** [`BlockView.make_block(opcode)`](scripts/block_view.gd) returns a fresh
+  `{opcode, inputs}` dict in exactly the runtime shape, its `inputs` deep-copied from the
+  opcode's `defaults` (so every spawn owns its own inputs dict / `body` array — no shared
+  references). This is the one genuinely new thing M11 needed.
+- **Two new `_OPCODES` fields.** Each entry grew `kind` (`"hat"`/`"statement"`/
+  `"reporter"`) and `defaults` (the starting inputs). `kind` lets the palette list only
+  **stackable** blocks — `palette_groups()` filters out reporters, since a reporter pill
+  has no drop target until slot-dropping exists (deferred). Rendering still ignores `kind`
+  (HAT_OPCODES/C_OPCODES drive shape); it exists for the palette. Adding a block is still
+  one table entry — now carrying its palette metadata too.
+- **The hand-off.** [block_palette.gd](scripts/block_palette.gd) (`BlockPalette`, parallel
+  to `BlockCanvas`) renders one chip per stackable opcode via the normal `build_block`, so
+  a chip looks exactly like what lands on the canvas. It drives from `_input` with the same
+  PENDING→threshold state machine and global hit-testing as the canvas; when a press on a
+  chip becomes a drag it mints a fresh block and calls
+  [`BlockCanvas.begin_spawn_drag(blocks, pos)`](scripts/block_canvas.gd). From there the
+  **canvas owns the drag** — ghost, snap highlight (`_nearest_gap`), and the splice in
+  `_drop` are unchanged from M9. A spawned hat becomes a free-floating stack; a spawned
+  statement/C-block snaps. The palette consumes events only during its own PENDING window,
+  so after the hand-off it never competes with the canvas for the drag's motion/release
+  (correct whatever the sibling tree order).
+
+[editor.gd](scripts/editor.gd) lays the workspace out as `palette | canvas`, each in its
+own `ScrollContainer`, and wires `palette._canvas = canvas`. Persistence (M10) is
+untouched: added blocks already live in the canvas data, so they ride `export_script()` →
+`Stage.project_scripts` into RUN with no extra plumbing.
 
 ## Opcodes implemented
 
-**M8 added no opcodes** — the block renderer is a pure *view* over the existing
-language. Every opcode below also has a `BlockView._OPCODES` entry so it draws.
+**M11 added no opcodes** (nor did M8/M9/M10) — the editor is a pure *view + interaction*
+over the existing language. Every opcode below has a `BlockView._OPCODES` entry so it
+draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
+palette (stackable kinds only); and M10 runs whatever you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -352,9 +465,11 @@ main.tscn                  The *game* scene: a single Node2D "Stage" running sta
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): builds the editor UI in code; sprite selector + RUN; renders via BlockView
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template} table
-  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts
+  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, persists edits + hands them to the Stage on RUN (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); export_script() serializes edits back (M10)
+  block_palette.gd         Block palette (M11): lists stackable opcodes as chips; on drag, mints a fresh block and hands it to the canvas
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults} table; make_block() factory (M11); tags it for M9 dragging
+  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
@@ -367,9 +482,12 @@ CLAUDE.md                  This file
 - New block? Add a handler method and one entry in `_register_handlers()` in
   [scripts/interpreter.gd](scripts/interpreter.gd). Statements go in
   `_statement_handlers`; reporters/conditions go in `_reporter_handlers`. **Also add
-  one `_OPCODES` entry** (`category` + label `template`) in
-  [scripts/block_view.gd](scripts/block_view.gd) so the editor can draw it — the
-  symmetric one-line step. An opcode with no entry still renders, as a grey box.
+  one `_OPCODES` entry** in [scripts/block_view.gd](scripts/block_view.gd) so the editor
+  can draw it — the symmetric one-line step. That entry carries `category` + label
+  `template` (drawing) plus `kind` and `defaults` (M11): set `kind` to `"hat"`/
+  `"statement"` and give sensible `defaults` for it to appear in the palette as a fresh
+  draggable block; a `"reporter"` is drawn but stays out of the palette (no slot-drop
+  yet). An opcode with no entry still renders, as a grey box.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -383,17 +501,24 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Editor interaction: drag / snap / detach (M9)** — M8's renderer is **read-only**.
-  Dragging a block around a canvas and snapping it into/out of a stack needs
-  hit-testing, a ghost-drop preview, insertion points, and a detach/reparent model on
-  top of the renderer. The `Control` tree `BlockView` emits is the foundation.
-- **Editor: palette + build-and-run (M10)** — a palette of all opcodes to drag from,
-  assembling a script from scratch, then serializing it back to the block-dictionary
-  data and **running the edited script** in the Stage (today RUN launches the
-  hardcoded `PongScripts` game unchanged; editing literals isn't wired either).
-- **True Scratch block geometry** — M8 approximates block/reporter/boolean shapes with
-  `StyleBoxFlat` corner radii; real connector notches and hexagonal booleans are
-  cosmetic and wait until the drag/snap model (M9) needs precise connection points.
+- **Editing a literal's *value* (the natural M12)** — typing into a white input field
+  (`move {5}` → `move {8}`) isn't wired; the runtime runs the blocks as-drawn, so values
+  are whatever the loaded script or a palette block's `defaults` provided. Needs an
+  in-place text field on the literal widget. This is the obvious next step now that M11
+  lets you add a block but only with its default inputs.
+- **Reset edits to pristine** — edits persist for the session and there's no per-sprite
+  "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
+- **Dragging reporters / blocks into input slots** — M9 snaps *statement* blocks into
+  stacks only. Dropping a reporter pill into a value/condition slot (e.g. changing
+  `move {speed}` to `move {speed + 1}`) needs slot hit-testing and the hexagon/round
+  shape geometry below. Reporter pills are drawn but not yet grabbable.
+- **Canvas panning / auto-scroll while dragging** — the canvas sits in a
+  `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
+  panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.
+- **True Scratch block geometry** — the editor approximates block/reporter/boolean
+  shapes with `StyleBoxFlat` corner radii; real connector notches and hexagonal
+  booleans are cosmetic. M9's snapping uses gap *proximity* (a yellow bar), not precise
+  notch connection points, so this can keep waiting.
 - **Deleting *another* sprite's clones / `create_clone` of a named sprite** —
   `create_clone` and `delete_this_clone` only act on `"myself"` / the running
   clone. Spawning or culling another target's clones needs the registry to track
