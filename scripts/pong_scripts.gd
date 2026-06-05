@@ -33,6 +33,30 @@ const ROUNDS_TO_WIN := 2
 const SERVE_SPREAD := 45.0
 
 
+## The project's variable model (Milestone 18): the single declaration of every variable's
+## name, initial value, and scope — the one source both the runtime and the editor read.
+##
+## It replaces a duplication that had quietly drifted: through M17 the editor hardcoded a flat
+## *name list* (editor._PROJECT_VARIABLES) while stage._ready hardcoded the *seeds*, and the two
+## disagreed in shape — `round` started at 1 in the Stage but the editor's list carried no value,
+## and `speed` was a flat name in the editor but a Ball-*local* in the Stage. One declaration ends
+## that: Stage._ready seeds from it (a "global" entry on the Stage, a sprite-named scope on that
+## target's locals), and the editor derives its `{name}` dropdown options from the names here.
+##
+## `scope` is "global" or a sprite name (a per-sprite local). Carrying scope in the data is what a
+## later "make a variable" / local-vs-global scoping milestone builds on (see CLAUDE.md). This
+## still stands in for a real editor's "make a variable" step — you add an entry here, not in the UI.
+static func variables() -> Array:
+	return [
+		{"name": "p1_score", "value": 0, "scope": "global"},
+		{"name": "p2_score", "value": 0, "scope": "global"},
+		{"name": "p1_rounds", "value": 0, "scope": "global"},
+		{"name": "p2_rounds", "value": 0, "scope": "global"},
+		{"name": "round", "value": 1, "scope": "global"},
+		{"name": "speed", "value": BALL_SPEED, "scope": "Ball"},
+	]
+
+
 ## A keyboard-driven paddle: move on its vertical rail while a key is held, and
 ## clamp back onto the playfield at the top and bottom. `rail_x` is the fixed x,
 ## so the clamp targets are literals.

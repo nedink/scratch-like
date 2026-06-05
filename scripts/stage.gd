@@ -54,20 +54,22 @@ func _ready() -> void:
 	var right := _add_sprite("RightPaddle", Vector2(456, 180), 16, 96, paddle)
 	var ball := _add_sprite("Ball", Vector2(240, 180), 16, 16, ball_color)
 
-	# Milestone 3 state, seeded up front (this code stands in for a future
-	# editor's "make a variable" step). Scores are global; the ball's speed is a
-	# per-sprite local, which both lets move_steps read it as a variable and
-	# proves the local store works alongside the globals.
-	set_var("p1_score", 0)
-	set_var("p2_score", 0)
-	# Milestone 5 best-of-N state: per-round scores (above) reset each round, while
-	# rounds-won persist for the match, and a monotonic `round` counter signals the
-	# pip clones to clear (each clone deletes itself once `round` passes its birth
-	# round). All global so the ball can drive them and the pip sprites can watch.
-	set_var("p1_rounds", 0)
-	set_var("p2_rounds", 0)
-	set_var("round", 1)
-	ball.variables["speed"] = PongScripts.BALL_SPEED
+	# Seed every variable from the one project model (Milestone 18) — the same declaration
+	# the editor reads its `{name}` dropdown options from, so the two can no longer drift.
+	# A "global" entry lands on the Stage's store; a sprite-scoped one lands on that target's
+	# locals — e.g. the ball's `speed`, which move_steps reads as a variable, proving the
+	# local store works alongside the globals. (This still stands in for a future editor's
+	# "make a variable" step — see PongScripts.variables.) The scores are global so the ball
+	# can drive them and the HUDs can watch; `round` starts at 1 (M5's best-of-N counter).
+	for v in PongScripts.variables():
+		if v["scope"] == "global":
+			set_var(v["name"], v["value"])
+		else:
+			var host := find_target(v["scope"])
+			if host:
+				host.variables[v["name"]] = v["value"]
+			else:
+				push_warning("Stage: variable '%s' scoped to unknown sprite '%s'" % [v["name"], v["scope"]])
 
 	# Milestone 7: a live numeric score readout that replaces M4/M5's clone-built
 	# pip grids. Each HUD sprite sits where its player's pips used to (top-left for
