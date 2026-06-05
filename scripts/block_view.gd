@@ -200,7 +200,7 @@ static func build_reporter(block: Dictionary) -> Control:
 ## (_enum_field); any other literal -> a small white **editable** field (M12), shaped
 ## by its value type (oval for a number, rectangular for text — M13).
 ##
-## Two kinds of meta are stamped here:
+## Three kinds of meta are stamped here:
 ##   * `lit_inputs`/`lit_key` — only on an *editable* widget (literal field, dropdown), so
 ##     whoever wires editing (the canvas) can write the chosen value straight back into the
 ##     data. `inputs` is a reference, so that write *is* the edit. (The palette renders the
@@ -209,7 +209,10 @@ static func build_reporter(block: Dictionary) -> Control:
 ##     the slot as a drop target so the canvas (M14) can drop a dragged reporter into it,
 ##     overwriting `inputs[key]` with the reporter dict. A reporter pill is a slot (you can
 ##     drop *onto* it to replace it) but not an editable literal, hence the two metas split.
-static func build_input(inputs: Dictionary, key: String, options: Array = []) -> Control:
+##   * `slot_default` — the opcode's default literal for this key. M15 restores it when a
+##     reporter is *grabbed out* of the slot: pulling the reporter leaves the slot's default
+##     literal (we never kept the literal a reporter displaced, so the default stands in).
+static func build_input(inputs: Dictionary, key: String, options: Array = [], default: Variant = null) -> Control:
 	var value: Variant = inputs.get(key)
 	var widget: Control
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
@@ -223,6 +226,7 @@ static func build_input(inputs: Dictionary, key: String, options: Array = []) ->
 		widget.set_meta("lit_key", key)
 	widget.set_meta("slot_inputs", inputs)
 	widget.set_meta("slot_key", key)
+	widget.set_meta("slot_default", default)
 	return widget
 
 
@@ -306,7 +310,7 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			literal = ""
 			var close := template.find("}", i)
 			var key := template.substr(i + 1, close - i - 1)
-			row.add_child(build_input(inputs, key, enums.get(key, [])))
+			row.add_child(build_input(inputs, key, enums.get(key, []), info.get("defaults", {}).get(key)))
 			i = close + 1
 		else:
 			literal += template[i]

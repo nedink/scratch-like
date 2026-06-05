@@ -5,51 +5,48 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 14 — drag a reporter into a slot
+## Current state: Milestone 15 — grab a reporter back out of a slot
 
-**Goal of this milestone:** let a value/condition slot hold a *dropped reporter*, not just a
-typed/chosen literal. Through M13 you could *add* and *arrange* statement blocks (M9/M11) and
-*edit* a slot's literal in place (M12/M13), but you could not put an **expression** in a slot
-— `move {10}` could only ever be a number, never `move {speed}` or `move {speed + 1}`. M14
-adds the editor's second drop kind: drag a fresh reporter from the palette (which now offers
-reporters too) and drop it into a slot; it overwrites that slot's value with the reporter.
+**Goal of this milestone:** the reverse of M14. M14 let you *drop* a fresh reporter from the
+palette into a value/condition slot; M15 lets you **grab a reporter pill that is already in a
+slot** and pull it out — to move it to another slot, or to discard it. This closes the
+reporter authoring loop (add → now relocate/remove), the same way M9 made *existing* statement
+blocks draggable after M8 first drew them.
 
-This is small for the usual reason: M9 made the data canonical, M11 built the palette → spawn
-→ canvas-owns-the-drag pipeline, and M12/M13 already stamp each input slot with its live
-`inputs` dict + key. M14 reuses all of it — it adds a *second drop-target finder* (a slot,
-not a stack gap — [`BlockCanvas._nearest_slot`](scripts/block_canvas.gd)) and writes a
-reporter dict into `inputs[key]` instead of splicing into an array. The interpreter already
-evaluates nested reporter dicts to any depth, so there is **no new opcode and no data-model
-change** — a dropped reporter rides `export_script()` → RUN like any other edit.
+This is small for the usual reason: M14 already built the whole `_dragging_reporter` flow
+(ghost a pill, highlight the nearest slot, write `inputs[key]` on drop, discard off-slot). M15
+only adds the *pickup*: a press over a pill detaches the reporter dict out of its slot and
+hands it to that exact flow. There is **no new opcode and no data-model change** — pulling a
+reporter just mutates the same `inputs` dict the runtime reads, and the edit rides
+`export_script()` → RUN like any other.
 
 The pieces, all in the editor layer:
 
-- **Every input widget is now a slot.** [`BlockView.build_input`](scripts/block_view.gd)
-  stamps `slot_inputs`/`slot_key` (the live `inputs` dict + key) on *every* widget it
-  returns — literal field, dropdown, **and reporter pill** — so any of them is an
-  identifiable drop target. (The editable `lit_*` meta stays only on the literal field /
-  dropdown, since a reporter pill is a slot you can drop onto but not a literal you type
-  into.) Drop hit-testing is **proximity to the slot's rect** ([`_dist_to_rect`](scripts/block_canvas.gd)),
-  the same approximate approach M9 took for stack gaps — true hexagon/round connector
-  geometry stays deferred.
-- **Reporters in the palette.** [`BlockView.palette_groups`](scripts/block_view.gd) no longer
-  filters out `kind == "reporter"` (it did through M13, since a reporter had nowhere to land),
-  so `+`, `score`, `touching … edge?`, etc. now appear as chips, drawn as pills via
-  `build_reporter`. [`BlockView.is_reporter`](scripts/block_view.gd) is the one-liner the
-  palette and canvas read to ghost a reporter as a pill and target slots.
-- **The drop, and the discard.** [`BlockCanvas`](scripts/block_canvas.gd) tracks a
-  `_dragging_reporter` flag (set in `begin_spawn_drag` when the spawned block is a reporter);
-  while it is set, `_update_drag` highlights the nearest *slot* and `_drop` writes
-  `inputs[key] = reporter`. A reporter released **off every slot is discarded** — it can't
-  become a top-level orphan the interpreter couldn't run (unlike a statement stack, which
-  drops onto empty canvas as a free-floating stack).
+- **Finding the pill under the cursor.** [`BlockCanvas._reporter_at`](scripts/block_canvas.gd)
+  is the pickup counterpart to [`_block_at`](scripts/block_canvas.gd): it scans the `slot_*`-
+  tagged widgets (M14) and keeps only those whose `inputs[key]` is *currently a reporter dict*
+  (a literal field / dropdown holds a plain value and is skipped), then returns the
+  **smallest-area** one — so pressing the inner `score` in `add {score} {1}` grabs `score`,
+  not the whole `add` (cf. `_block_at`'s deepest-block rule). The press handler checks it
+  **before** `_block_at`, so a pill wins over the statement it sits in.
+- **The pickup, and what it leaves behind.**
+  [`BlockCanvas._begin_reporter_drag`](scripts/block_canvas.gd) detaches the reporter dict and
+  writes the slot's **default literal** back into `inputs[key]` — we never kept the literal the
+  reporter displaced in M14, so the opcode default stands in (e.g. pulling a reporter out of
+  `move {score}` leaves `move {10}`). That default is the new third slot meta, `slot_default`,
+  stamped by [`BlockView.build_input`](scripts/block_view.gd) from the opcode's `defaults`.
+  From there it is an ordinary `_dragging_reporter` drag: re-drop into another slot, or release
+  off every slot to **discard** it (the editor's reporter "trash") — both reuse M14's `_drop` /
+  `_cancel_drag` unchanged.
 
-Deliberately **not** in M14 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-grabbing a reporter pill *already on the canvas* to pull it back out (M14 only spawns fresh
-reporters from the palette — the pills in existing scripts are still inert, and grabbing the
-statement they sit in drags the statement, as before); **ejecting/wrapping** the reporter a
-drop displaces (it is discarded); and **boolean-vs-value slot typing** (any reporter may drop
-into any slot, since shape geometry is deferred).
+Deliberately **not** in M15 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
+a pill whose interior is *entirely* a literal field — a bare `variable`/`score` — is grabbable
+only by its thin coloured border (the wider operator / sensing pills grab by their body),
+because M12's "press the field → edit it" split takes the field's clicks; a full-body grab of
+a `variable` waits for its free-text name to become a **data-scoped menu** (deferred).
+**Ejecting/wrapping** still doesn't exist (dropping a reporter onto a slot that already holds
+one discards the old), and **boolean-vs-value slot typing** is still deferred (any reporter may
+drop into any slot).
 
 ---
 
@@ -113,8 +110,13 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    palette now lists reporters (`+`, `score`, `touching … edge?`, …) as pills; drag one over
    a value/condition slot (a highlight marks the slot it will land in) and release to make,
    e.g., `move {10}` into `move {score}`. The slot's old value is replaced; a reporter
-   dropped anywhere but a slot is discarded. (Reporters already in a script aren't grabbable
-   yet — grab the block they sit in and you drag that block, as before.)
+   dropped anywhere but a slot is discarded.
+   **Grab a reporter that's already in a slot** (M15) to pull it back out — press the
+   coloured body of a pill and drag; the slot reverts to its default value (`move {score}`
+   back to `move {10}`), and you can drop the pill into another slot or release it over empty
+   canvas to throw it away. (A bare `score`/`variable` pill is almost all input field, so grab
+   it by its thin coloured border; wider pills like `+` grab anywhere on the body. Pressing a
+   pill's white field still edits that field.)
    Edits **persist** as you switch sprites (the session's project accumulates them);
    there's no reset-to-pristine yet, so relaunch the editor to start clean.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
@@ -585,25 +587,63 @@ fresh block → `begin_spawn_drag` → the canvas owns ghost/highlight/drop) wit
 
 Whatever the dropped reporter displaces is **discarded** (no eject/wrap), and any reporter
 may drop into any slot (no boolean-vs-value typing — shape geometry is deferred). Grabbing a
-reporter pill *already on the canvas* is still ahead: in M14 the pills in existing scripts
-stay inert, so a press over one falls through to [`_block_at`](scripts/block_canvas.gd) and
-grabs the **statement** it sits in, exactly as before M14. See
-[Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+reporter pill *already on the canvas* was deferred at M14 (the pills in existing scripts were
+inert, so a press over one fell through to [`_block_at`](scripts/block_canvas.gd) and grabbed
+the **statement** it sat in) — **M15 below pays that off**.
 
 Also still deferred: **dropdowns scoped to live data** (the `{name}` slots of
 `variable`/`set`/`change` and `touching {name}?` are still free text — a real menu there
 would enumerate the project's actual variables/sprites, which needs the editor to own that
 model).
 
+### Reporter out of slot (M15)
+
+The mirror of M14, and the close of the reporter authoring loop: M14 *dropped* a fresh
+reporter into a slot; M15 lets you **grab a reporter pill that's already in a slot** and pull
+it out, to relocate or discard it. It is near-free because the entire `_dragging_reporter`
+drag (ghost pill → highlight nearest slot → write/discard on drop) already exists from M14 —
+M15 only adds the *pickup* that feeds it, the same way M9 added "pick up an existing statement"
+on top of M8's renderer. **No new opcode, no data-model change.**
+
+- **Pickup hit-test.** [`BlockCanvas._reporter_at`](scripts/block_canvas.gd) is the
+  reporter-pill counterpart to [`_block_at`](scripts/block_canvas.gd): it walks the
+  `slot_*`-tagged widgets (M14) and keeps only the slots whose `inputs[key]` is **currently a
+  reporter dict** (literal fields / dropdowns hold plain values and are skipped), returning the
+  **smallest-area** one. The press handler runs it **before** `_block_at`, so a pill is grabbed
+  in preference to the statement it sits in, and a nested pill (`score` inside `add {score} {1}`)
+  in preference to its wrapper. A press on a pill's *inner literal field* is still claimed by
+  [`_over_literal`](scripts/block_canvas.gd) first (M12's edit-vs-drag split), so the field
+  edits; only the pill's own body/border reaches `_reporter_at`.
+- **Detach + restore.** A press that crosses the drag threshold with `_pending_reporter` set
+  routes [`_begin_drag`](scripts/block_canvas.gd) into
+  [`_begin_reporter_drag`](scripts/block_canvas.gd): it lifts the reporter dict out of the slot
+  and writes the slot's **default literal** back into `inputs[key]`, then re-renders and falls
+  into the shared drag. The default is a new third slot meta — `slot_default`, stamped by
+  [`BlockView.build_input`](scripts/block_view.gd) from each opcode's `defaults` — so pulling a
+  reporter out of `move {score}` leaves `move {10}`. (We never kept the literal the reporter
+  *displaced* on the way in — M14 discarded it — so the opcode default is the principled stand-in.)
+- **Drop / discard, reused whole.** From there nothing is new: [`_update_drag`](scripts/block_canvas.gd)
+  and [`_drop`](scripts/block_canvas.gd) treat a grabbed-from-canvas reporter exactly like a
+  palette spawn — re-drop into any slot (overwriting it, M14's rule), or release off every slot
+  and it is **discarded** (a useful "drag to trash"; `_drop`'s off-slot branch is a no-op and
+  the detached dict is simply not re-homed, the same as [`_cancel_drag`](scripts/block_canvas.gd)).
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): a
+pill that is *all input field* — a bare `variable`/`score` — can only be grabbed by its thin
+coloured border, since M12 gives the field's clicks to editing; a clean full-body grab waits
+for the variable name to become a **data-scoped menu** (which removes the competing field).
+**Ejecting/wrapping** the displaced reporter, and **boolean-vs-value slot typing**, remain
+deferred as in M14.
+
 ## Opcodes implemented
 
-**M14 added no opcodes** (nor did M8/M9/M10/M11/M12/M13) — the editor is a pure *view +
+**M15 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14) — the editor is a pure *view +
 interaction* over the existing language. Every opcode below has a `BlockView._OPCODES` entry
 so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
 value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns); M14
-lets you **drop a reporter into any value/condition slot**; and M10 runs whatever you
-assemble from them.
+lets you **drop a reporter into any value/condition slot** and M15 lets you **grab one back
+out**; and M10 runs whatever you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -651,9 +691,9 @@ icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, persists edits + hands them to the Stage on RUN (M10)
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot); export_script() serializes edits back (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); stamps every input widget as a slot drop target (M14); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -696,11 +736,14 @@ CLAUDE.md                  This file
   mistyped name just creates a new global / fails to resolve at runtime, as before.
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
-- **Grabbing an on-canvas reporter pill** — M14 lets you drop a *fresh* reporter from the
-  palette into a slot, but a reporter pill *already in a script* is still inert: you can't
-  press it to pull it back out, relocate it, or reuse it (pressing it grabs the statement it
-  sits in, as before). The symmetric "rearrange existing reporters" half — and **ejecting /
-  wrapping** the reporter a drop displaces (M14 discards it) — wait for a later milestone.
+- **Full-body grab of an all-field pill, and ejecting/wrapping** — M15 made on-canvas
+  reporter pills grabbable, but a pill whose interior is *entirely* a literal field — a bare
+  `variable`/`score`, whose only content is its name field — can be grabbed only by its thin
+  coloured border, since M12 gives a field's clicks to editing. A clean full-body grab waits
+  for the variable name to become a **data-scoped menu** (the deferred item above), which
+  removes the competing field. Still unsupported either way: **ejecting / wrapping** the
+  reporter a drop displaces — dropping a reporter onto a slot that already holds one discards
+  the old (M14), rather than ejecting it to the cursor or wrapping it as an input of the new.
 - **Boolean-vs-value slot typing** — M14 lets any reporter drop into any slot (a number
   reporter into an `if` condition, a boolean into `move`'s `steps`). Scratch distinguishes
   hexagonal boolean slots from round value slots and refuses mismatches; that needs the true

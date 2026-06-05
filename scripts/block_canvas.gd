@@ -29,8 +29,17 @@ extends Control
 ## stamps on every input widget) instead of a stack gap, and the drop *writes* the reporter
 ## into the slot's live `inputs[key]` (overwriting whatever was there) instead of splicing
 ## into an array. A reporter released off any slot is **discarded** — it can't become a
-## top-level orphan the interpreter couldn't run. Grabbing a reporter pill already on the
-## canvas is still ahead — see CLAUDE.md.
+## top-level orphan the interpreter couldn't run.
+##
+## M15 adds the reverse: **grab a reporter pill already in a slot** to pull it back out.
+## A press over a pill (checked before the statement it sits in, _reporter_at) detaches the
+## reporter dict, leaves the slot's default literal behind (slot_default — we never kept the
+## literal the reporter displaced), and rides the very same _dragging_reporter flow as a
+## palette spawn: re-drop it into another slot, or release off every slot to discard it
+## (the editor's reporter "trash"). A pill whose interior is entirely a literal field — a
+## bare `variable`/`score` — is grabbed by its thin coloured border; the wider operator /
+## sensing pills are grabbed by their body. (Full-body grab of a `variable` waits for its
+## free-text name to become a data-scoped menu — see CLAUDE.md.)
 ##
 ## Position is the editor's own UI state (a Vector2 per top-level stack), kept here and
 ## out of the block dictionaries, so the data stays exactly the runtime's shape.
@@ -69,6 +78,7 @@ var _grab_offset: Vector2        # ghost top-left relative to the cursor, held c
 var _grabbed: Array = []         # the detached blocks riding the cursor
 var _snap: Dictionary = {}       # current snap target (a stack gap or a value slot) or empty
 var _dragging_reporter := false  # the drag is a single reporter pill -> targets slots, not gaps
+var _pending_reporter := false   # the pending press was on an on-canvas reporter pill (M15)
 
 
 func _ready() -> void:
@@ -215,11 +225,16 @@ func _input(event: InputEvent) -> void:
 				return
 			# Grabbing anything else commits whatever field was being edited.
 			get_viewport().gui_release_focus()
-			var hit := _block_at(event.position)
+			# A press on a reporter pill grabs *that reporter* out of its slot (M15), checked
+			# before _block_at so the pill wins over the statement it sits in; otherwise grab
+			# the statement block under the cursor (M9).
+			var rep := _reporter_at(event.position)
+			var hit: Dictionary = rep if not rep.is_empty() else _block_at(event.position)
 			if not hit.is_empty():
 				_state = _PENDING
 				_press_pos = event.position
 				_pending = hit
+				_pending_reporter = not rep.is_empty()
 				get_viewport().set_input_as_handled()
 		elif not event.pressed:
 			if _state == _DRAGGING:
@@ -282,6 +297,34 @@ func _literal_fields(node: Node, out: Array = []) -> Array:
 	return out
 
 
+## The deepest reporter pill under a global point — the pickup counterpart to _block_at
+## (M15). A slot widget holds a reporter only when its `inputs[key]` is a dict (a literal
+## field / dropdown holds a plain value and is skipped), so this finds just the pills; among
+## nested pills the smallest-area one wins, so pressing an inner `score` in `add {score} {1}`
+## grabs `score`, not the whole `add`. Returns {inputs, key, default, origin} — enough for
+## _begin_reporter_drag to detach the dict, restore the slot's default, and anchor the ghost
+## — or {} if no pill is under the point. (A press on a pill's inner literal field is taken by
+## _over_literal first, so the field still edits; only the pill's own body/border lands here.)
+func _reporter_at(global_point: Vector2) -> Dictionary:
+	var best: Control = null
+	var best_area := INF
+	for slot in _slots(_layer):
+		var inputs: Dictionary = slot.get_meta("slot_inputs")
+		var key := String(slot.get_meta("slot_key"))
+		if typeof(inputs.get(key)) != TYPE_DICTIONARY:
+			continue  # a literal/enum slot, not a reporter pill
+		var rect: Rect2 = (slot as Control).get_global_rect()
+		if rect.has_point(global_point):
+			var area := rect.size.x * rect.size.y
+			if area < best_area:
+				best_area = area
+				best = slot
+	if best == null:
+		return {}
+	return {"inputs": best.get_meta("slot_inputs"), "key": String(best.get_meta("slot_key")),
+		"default": best.get_meta("slot_default"), "origin": best.get_global_rect().position}
+
+
 # --- Drag lifecycle --------------------------------------------------------
 
 ## Begin dragging freshly-spawned blocks (the M11 palette hand-off). Unlike _begin_drag
@@ -305,8 +348,12 @@ func begin_spawn_drag(blocks: Array, global_point: Vector2) -> void:
 
 
 ## Detach the pressed block and its successors from their array (Scratch's "the rest of
-## the stack comes with you") and start them floating as a ghost.
+## the stack comes with you") and start them floating as a ghost. A reporter pickup (M15)
+## takes a different path — it detaches a single reporter dict out of one slot.
 func _begin_drag() -> void:
+	if _pending_reporter:
+		_begin_reporter_drag()
+		return
 	var arr: Array = _pending["array"]
 	var index: int = _pending["index"]
 
@@ -325,6 +372,32 @@ func _begin_drag() -> void:
 	_render()
 
 	_ghost = BlockView.build_stack(_grabbed)
+	_passthrough(_ghost)
+	_ghost.modulate.a = 0.75
+	add_child(_ghost)
+	_ghost.size = _ghost.get_combined_minimum_size()
+
+	_state = _DRAGGING
+
+
+## Pull an on-canvas reporter out of its slot (M15) and start it floating. The slot reverts
+## to its opcode default literal (slot_default), since we never kept the literal the reporter
+## displaced. From here it is an ordinary _dragging_reporter drag — drop it into another slot
+## or release off every slot to discard it (cf. begin_spawn_drag, which spawns a fresh one).
+func _begin_reporter_drag() -> void:
+	var inputs: Dictionary = _pending["inputs"]
+	var key: String = _pending["key"]
+	var reporter: Variant = inputs.get(key)
+
+	# Anchor the ghost so the grabbed pill sits exactly where it was on press.
+	_grab_offset = _press_pos - _pending["origin"]
+	inputs[key] = _pending["default"]  # slot reverts to its default literal
+	_grabbed = [reporter]
+	_dragging_reporter = true
+
+	_render()
+
+	_ghost = BlockView.build_reporter(reporter)
 	_passthrough(_ghost)
 	_ghost.modulate.a = 0.75
 	add_child(_ghost)
@@ -385,6 +458,7 @@ func _clear_drag_overlays() -> void:
 	_grabbed = []
 	_snap = {}
 	_dragging_reporter = false
+	_pending_reporter = false
 	_state = _IDLE
 	_pending = {}
 
