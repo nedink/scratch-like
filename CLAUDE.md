@@ -5,48 +5,46 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 15 — grab a reporter back out of a slot
+## Current state: Milestone 16 — delete a block by dragging it onto the palette
 
-**Goal of this milestone:** the reverse of M14. M14 let you *drop* a fresh reporter from the
-palette into a value/condition slot; M15 lets you **grab a reporter pill that is already in a
-slot** and pull it out — to move it to another slot, or to discard it. This closes the
-reporter authoring loop (add → now relocate/remove), the same way M9 made *existing* statement
-blocks draggable after M8 first drew them.
+**Goal of this milestone:** the last asymmetry in the core editing loop. You can *add* blocks
+(M11 from the palette, M14 reporters into slots) and rearrange them (M9), but a statement block
+or stack had **no way to be deleted** — drag it off and it just becomes a free-floating stack.
+A reporter, by contrast, has had a "trash" since M14 (release it off every slot and it is
+discarded). M16 gives statements the same: **drag a block back over the palette and release to
+delete it** — Scratch's own gesture — and makes that gesture uniform for reporter pills too.
 
-This is small for the usual reason: M14 already built the whole `_dragging_reporter` flow
-(ghost a pill, highlight the nearest slot, write `inputs[key]` on drop, discard off-slot). M15
-only adds the *pickup*: a press over a pill detaches the reporter dict out of its slot and
-hands it to that exact flow. There is **no new opcode and no data-model change** — pulling a
-reporter just mutates the same `inputs` dict the runtime reads, and the edit rides
-`export_script()` → RUN like any other.
+This is small for the now-familiar reason: pickup ([`_begin_drag`](scripts/block_canvas.gd) /
+[`_begin_reporter_drag`](scripts/block_canvas.gd)) **already detaches** the grabbed blocks from
+the data and re-renders. So deleting is just [`_drop`](scripts/block_canvas.gd) choosing **not
+to re-home** them — the exact shape of M14/M15's off-slot reporter discard, now extended to
+statements. **No new opcode, no data-model change**: a deleted block is simply one that
+`export_script()` no longer contains, so it rides persistence/RUN like any other edit.
 
 The pieces, all in the editor layer:
 
-- **Finding the pill under the cursor.** [`BlockCanvas._reporter_at`](scripts/block_canvas.gd)
-  is the pickup counterpart to [`_block_at`](scripts/block_canvas.gd): it scans the `slot_*`-
-  tagged widgets (M14) and keeps only those whose `inputs[key]` is *currently a reporter dict*
-  (a literal field / dropdown holds a plain value and is skipped), then returns the
-  **smallest-area** one — so pressing the inner `score` in `add {score} {1}` grabs `score`,
-  not the whole `add` (cf. `_block_at`'s deepest-block rule). The press handler checks it
-  **before** `_block_at`, so a pill wins over the statement it sits in.
-- **The pickup, and what it leaves behind.**
-  [`BlockCanvas._begin_reporter_drag`](scripts/block_canvas.gd) detaches the reporter dict and
-  writes the slot's **default literal** back into `inputs[key]` — we never kept the literal the
-  reporter displaced in M14, so the opcode default stands in (e.g. pulling a reporter out of
-  `move {score}` leaves `move {10}`). That default is the new third slot meta, `slot_default`,
-  stamped by [`BlockView.build_input`](scripts/block_view.gd) from the opcode's `defaults`.
-  From there it is an ordinary `_dragging_reporter` drag: re-drop into another slot, or release
-  off every slot to **discard** it (the editor's reporter "trash") — both reuse M14's `_drop` /
-  `_cancel_drag` unchanged.
+- **The palette is the trash.** [editor.gd](scripts/editor.gd) wires the canvas's new `_trash`
+  field to the palette's `ScrollContainer` (alongside the existing `_palette._canvas` hand-off),
+  so the same region you drag *new* blocks **from** (M11) is the region you drag unwanted blocks
+  **onto** to delete them. No new chrome — the palette is right there, which is what makes the
+  gesture discoverable, the way it is in Scratch.
+- **Hit-test + cue.** [`BlockCanvas._over_trash`](scripts/block_canvas.gd) is true when the
+  cursor is inside the palette's global rect (comparable to the event positions used throughout,
+  cf. `_block_at` / `_over_literal`). [`_update_drag`](scripts/block_canvas.gd) sets `_trashing`
+  from it each frame: over the palette it **suppresses any snap** (no gap bar / no slot
+  highlight) and tints the ghost **red**, signalling that releasing will delete rather than
+  place.
+- **The delete itself.** [`_drop`](scripts/block_canvas.gd) gains a leading `if _trashing: pass`
+  branch — the grabbed blocks are already off the data, so doing nothing *is* the delete; the
+  re-render then reflects their absence. This covers both kinds: a statement stack (the new
+  capability) and a reporter pill (which was already discarded off-slot — the palette is just
+  off-slot, now with the red cue and an explicit landing zone).
 
-Deliberately **not** in M15 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-a pill whose interior is *entirely* a literal field — a bare `variable`/`score` — is grabbable
-only by its thin coloured border (the wider operator / sensing pills grab by their body),
-because M12's "press the field → edit it" split takes the field's clicks; a full-body grab of
-a `variable` waits for its free-text name to become a **data-scoped menu** (deferred).
-**Ejecting/wrapping** still doesn't exist (dropping a reporter onto a slot that already holds
-one discards the old), and **boolean-vs-value slot typing** is still deferred (any reporter may
-drop into any slot).
+Deliberately **not** in M16 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
+there is still **no undo** (a deleted stack is gone; relaunch to reload the stock script, as
+with any session edit — M10), and **no separate trash affordance** (the palette doubles as it).
+A `_cancel_drag` mid-drag (only on a sprite switch, M9) still re-homes a statement stack rather
+than deleting it — abandoning a drag is not the same as choosing to trash.
 
 ---
 
@@ -117,6 +115,12 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    canvas to throw it away. (A bare `score`/`variable` pill is almost all input field, so grab
    it by its thin coloured border; wider pills like `+` grab anywhere on the body. Pressing a
    pill's white field still edits that field.)
+   **Delete a block** (M16) by dragging it **back onto the palette** and releasing — the same
+   region you drag new blocks *from* doubles as the trash. Grab a statement block (it carries
+   the blocks below it) or a reporter pill, drag it left over the palette — the ghost turns
+   **red** to show it will be deleted (no snap bar / slot highlight) — and let go. Drop anywhere
+   *off* the palette instead to place it as usual. (There's no undo; relaunch to reload a
+   sprite's stock script.)
    Edits **persist** as you switch sprites (the session's project accumulates them);
    there's no reset-to-pristine yet, so relaunch the editor to start clean.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
@@ -635,15 +639,49 @@ for the variable name to become a **data-scoped menu** (which removes the compet
 **Ejecting/wrapping** the displaced reporter, and **boolean-vs-value slot typing**, remain
 deferred as in M14.
 
+### Delete a block (M16)
+
+The last asymmetry in the core editing loop. Through M15 you could add blocks (palette → M11,
+reporter into slot → M14), rearrange them (M9), and edit/compose them (M12–M15) — but a
+statement block, once on the canvas, could never **leave** it; dragging it off only re-homed it
+as a free-floating stack. A reporter, by contrast, had a trash from M14 (released off every slot
+→ discarded). M16 gives statements the same and unifies the gesture: **drag a block back over
+the palette and release to delete it** — exactly how Scratch deletes. **No new opcode, no
+data-model change** — pickup already detached the blocks from the data, so a delete is `_drop`
+*not re-homing* them, and the deletion rides `export_script()` → persistence/RUN like any edit.
+
+- **The palette doubles as the trash.** [editor.gd](scripts/editor.gd) sets the canvas's new
+  `_trash` field to the palette's `ScrollContainer` (beside the existing `_palette._canvas`
+  hand-off). The region you drag *new* blocks **from** is the region you drag unwanted ones
+  **onto** — no new chrome, and discoverable because the palette is always present, as in Scratch.
+- **Hit-test + cue.** [`BlockCanvas._over_trash`](scripts/block_canvas.gd) is true when the
+  cursor is inside `_trash`'s global rect (the same global space as the event positions used
+  throughout — cf. [`_block_at`](scripts/block_canvas.gd) / [`_over_literal`](scripts/block_canvas.gd)).
+  [`_update_drag`](scripts/block_canvas.gd) recomputes `_trashing` each frame: over the palette it
+  **suppresses the snap** (so no gap bar / slot highlight competes) and tints the ghost **red** to
+  signal a delete-on-release rather than a placement.
+- **The delete.** [`_drop`](scripts/block_canvas.gd) gains a leading `if _trashing: pass` branch:
+  the grabbed blocks are already off the data, so doing nothing *is* the delete, and the re-render
+  reflects their absence. One branch covers both kinds — a statement stack (the new capability)
+  and a reporter pill (already discarded off-slot; the palette is just off-slot, now with the red
+  cue and an explicit landing zone). [`_cancel_drag`](scripts/block_canvas.gd) is untouched — an
+  *abandoned* drag (only on a sprite switch, M9) still re-homes its stack, since abandoning isn't
+  choosing to trash.
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **undo**
+(a deleted stack is gone until relaunch, as with any session edit — M10) and a **dedicated trash
+affordance** (the palette serves as one).
+
 ## Opcodes implemented
 
-**M15 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14) — the editor is a pure *view +
+**M16 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15) — the editor is a pure *view +
 interaction* over the existing language. Every opcode below has a `BlockView._OPCODES` entry
 so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
 value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns); M14
 lets you **drop a reporter into any value/condition slot** and M15 lets you **grab one back
-out**; and M10 runs whatever you assemble from them.
+out**; M16 lets you **delete a block by dragging it onto the palette**; and M10 runs whatever
+you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -690,8 +728,8 @@ main.tscn                  The *game* scene: a single Node2D "Stage" running sta
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, persists edits + hands them to the Stage on RUN (M10)
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); export_script() serializes edits back (M10)
+  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16), persists edits + hands them to the Stage on RUN (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)

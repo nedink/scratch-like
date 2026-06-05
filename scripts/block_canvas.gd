@@ -41,6 +41,14 @@ extends Control
 ## sensing pills are grabbed by their body. (Full-body grab of a `variable` waits for its
 ## free-text name to become a data-scoped menu — see CLAUDE.md.)
 ##
+## M16 makes the palette double as a **trash**: drag a block (a statement stack or a reporter
+## pill) back over the palette region and release to delete it. Pickup already detaches the
+## grabbed blocks from the data, so deleting is just _drop **not re-homing** them — the
+## statement counterpart to M14/M15's "a reporter released off any slot is discarded". While
+## the ghost is over the palette the snap is suppressed and the ghost tints red (_over_trash /
+## _trashing). No new opcode, no data-model change — a deleted block is one the export simply
+## no longer contains.
+##
 ## Position is the editor's own UI state (a Vector2 per top-level stack), kept here and
 ## out of the block dictionaries, so the data stays exactly the runtime's shape.
 
@@ -79,6 +87,11 @@ var _grabbed: Array = []         # the detached blocks riding the cursor
 var _snap: Dictionary = {}       # current snap target (a stack gap or a value slot) or empty
 var _dragging_reporter := false  # the drag is a single reporter pill -> targets slots, not gaps
 var _pending_reporter := false   # the pending press was on an on-canvas reporter pill (M15)
+var _trashing := false           # the ghost is currently over the palette -> a drop deletes it (M16)
+
+## The palette region, set by the editor (editor.gd) — dragging a block back over it and
+## releasing **deletes** it (Scratch's own gesture, M16). Left null when unset (no trash).
+var _trash: Control
 
 
 func _ready() -> void:
@@ -406,10 +419,13 @@ func _begin_reporter_drag() -> void:
 	_state = _DRAGGING
 
 
-## Move the ghost to follow the cursor and refresh the snap highlight.
+## Move the ghost to follow the cursor and refresh the snap highlight. Over the palette
+## (the trash, M16) we suppress any snap and tint the ghost red, signalling that releasing
+## will delete it rather than place it.
 func _update_drag(global_point: Vector2) -> void:
 	_ghost.position = (global_point - _grab_offset) - global_position
-	_snap = _nearest_slot() if _dragging_reporter else _nearest_gap()
+	_trashing = _over_trash(global_point)
+	_snap = {} if _trashing else (_nearest_slot() if _dragging_reporter else _nearest_gap())
 	if _snap.is_empty():
 		_highlight.visible = false
 	else:
@@ -417,13 +433,26 @@ func _update_drag(global_point: Vector2) -> void:
 		_highlight.position = _snap["marker"] - global_position
 		# A slot target highlights its whole rect; a stack gap is a thin bar.
 		_highlight.size = _snap["size"] if _snap.has("size") else Vector2(maxf(_snap["width"], 24.0), 4)
+	_ghost.modulate = Color(1, 0.5, 0.5, 0.55) if _trashing else Color(1, 1, 1, 0.75)
 
 
-## Place the dragged blocks. A reporter drops into the targeted slot (overwriting its live
-## `inputs[key]`) or, off any slot, is discarded. A statement stack splices into the snap
-## gap if one is active, else lands as a new free-floating stack. Then re-render from the data.
+## True when a global point lands on the palette region (the trash, M16). Comparable to the
+## event positions used throughout this file (cf. _over_literal / _block_at), since both are
+## in the same global space. Null `_trash` (unset) means there is no trash, so nothing deletes.
+func _over_trash(global_point: Vector2) -> bool:
+	return _trash != null and _trash.get_global_rect().has_point(global_point)
+
+
+## Place the dragged blocks. Over the palette (the trash, M16) the grabbed blocks are simply
+## **not re-homed** — they were already detached from the data on pickup, so dropping them
+## here deletes them (the statement counterpart to a reporter's off-slot discard). Otherwise:
+## a reporter drops into the targeted slot (overwriting its live `inputs[key]`) or, off any
+## slot, is discarded; a statement stack splices into the snap gap if one is active, else lands
+## as a new free-floating stack. Then re-render from the data.
 func _drop() -> void:
-	if _dragging_reporter:
+	if _trashing:
+		pass  # over the palette: delete the grabbed blocks (don't re-home them)
+	elif _dragging_reporter:
 		if not _snap.is_empty():
 			var inputs: Dictionary = _snap["inputs"]
 			inputs[String(_snap["key"])] = _grabbed[0]
@@ -459,6 +488,7 @@ func _clear_drag_overlays() -> void:
 	_snap = {}
 	_dragging_reporter = false
 	_pending_reporter = false
+	_trashing = false
 	_state = _IDLE
 	_pending = {}
 

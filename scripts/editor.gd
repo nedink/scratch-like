@@ -126,8 +126,10 @@ func _ready() -> void:
 	_canvas.custom_minimum_size = Vector2(1200, 1200)
 	scroll.add_child(_canvas)
 
-	# The palette feeds fresh blocks to the canvas (M11).
+	# The palette feeds fresh blocks to the canvas (M11) and doubles as the canvas's trash:
+	# dragging a block back over the palette region deletes it (M16, Scratch's own gesture).
 	_palette._canvas = _canvas
+	_canvas._trash = palette_scroll
 
 	_show(0)
 
