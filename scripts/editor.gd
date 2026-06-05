@@ -22,6 +22,14 @@ extends Control
 ## just no longer the project's main_scene (the editor is); it is the *game* now.
 const _GAME_SCENE := "res://main.tscn"
 
+## The project's variable names (M17), the variables half of the project model the editor owns.
+## The `{name}` slots of variable/set_var/change_var render as a dropdown of these (data-scoped,
+## see BlockView.project_variables) instead of free text. This mirrors the names seeded in
+## stage.gd._ready — the same small duplication as _scripts itself — so a freshly-edited block
+## refers to a real variable; a later milestone where one model feeds both editor and runtime
+## would unify them. (The sprites half is derived from _scripts; see _ready.)
+const _PROJECT_VARIABLES := ["p1_score", "p2_score", "p1_rounds", "p2_rounds", "round", "speed"]
+
 ## Display name -> the sprite's block script, for the selector. This mirrors the
 ## name->script wiring inline in stage.gd._ready; the small duplication is fine for now.
 ## A later milestone where the editor *owns* the project model would unify the two.
@@ -50,6 +58,13 @@ func _ready() -> void:
 		{"name": "P2Hud", "script": PongScripts.p2_hud()},
 		{"name": "Announcer", "script": PongScripts.announcer()},
 	]
+
+	# Hand the project model to the renderer (M17) *before* the palette builds and the canvas
+	# renders, so the `{name}` slots of variable/set/change and touching {name}? draw as
+	# data-scoped dropdowns. Sprite names come straight from the script list above; variable
+	# names from the const. (Static on BlockView, like Stage.project_scripts.)
+	BlockView.project_sprites = _sprite_names()
+	BlockView.project_variables = _PROJECT_VARIABLES.duplicate()
 
 	# A small default font size so the chunky blocks fit the 480x360 viewport (which
 	# the project integer-stretches to fullscreen). One Theme on the root cascades to
@@ -145,6 +160,16 @@ func _show(index: int) -> void:
 
 func _on_select(index: int) -> void:
 	_show(index)
+
+
+## The project's sprite names (M17), the sprites half of the project model — the targets a
+## `touching {name}?` slot offers. Derived straight from the script list, the editor's existing
+## name registry, so it stays in step with whatever sprites the project has.
+func _sprite_names() -> Array:
+	var names: Array = []
+	for entry in _scripts:
+		names.append(entry["name"])
+	return names
 
 
 ## Serialize the canvas's current edits back into the selected sprite's entry, so they

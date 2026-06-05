@@ -5,46 +5,54 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 16 — delete a block by dragging it onto the palette
+## Current state: Milestone 17 — data-scoped dropdowns (the editor owns the project model)
 
-**Goal of this milestone:** the last asymmetry in the core editing loop. You can *add* blocks
-(M11 from the palette, M14 reporters into slots) and rearrange them (M9), but a statement block
-or stack had **no way to be deleted** — drag it off and it just becomes a free-floating stack.
-A reporter, by contrast, has had a "trash" since M14 (release it off every slot and it is
-discarded). M16 gives statements the same: **drag a block back over the palette and release to
-delete it** — Scratch's own gesture — and makes that gesture uniform for reporter pills too.
+**Goal of this milestone:** the first deferral the doc kept pointing back to. M13 gave the
+*fixed-choice* slots dropdowns (`stop {mode}`, `say … in {size}`, …) from a static `enums` list,
+but the `{name}` slots of `variable`/`set_var`/`change_var` and `touching {name}?` stayed **free
+text** — you could mistype a variable or sprite name and only find out at RUN. The blocker was
+always the same: a real menu there must enumerate the project's **actual** variables / sprite
+names, and those lived only in the Stage. M17 gives the **editor its own project model** — the
+variable names + the sprite names — and renders those `{name}` slots as **data-scoped dropdowns**
+sourced from it. **No new opcode, no data-model change**: the dropdown stores the same plain
+string the text field did, so persistence (M10) and RUN carry it untouched.
 
-This is small for the now-familiar reason: pickup ([`_begin_drag`](scripts/block_canvas.gd) /
-[`_begin_reporter_drag`](scripts/block_canvas.gd)) **already detaches** the grabbed blocks from
-the data and re-renders. So deleting is just [`_drop`](scripts/block_canvas.gd) choosing **not
-to re-home** them — the exact shape of M14/M15's off-slot reporter discard, now extended to
-statements. **No new opcode, no data-model change**: a deleted block is simply one that
-`export_script()` no longer contains, so it rides persistence/RUN like any other edit.
+It is small because it is the **data-scoped sibling of M13's enum machinery** — same
+`_enum_field` dropdown, same `lit_*` write-back wiring, only the *options* now come from the
+project model at render time instead of a literal list:
 
-The pieces, all in the editor layer:
+- **The editor owns the model.** [editor.gd](scripts/editor.gd) declares the project's variable
+  names (`_PROJECT_VARIABLES`, mirroring the seeds in `stage.gd._ready` — the same small
+  duplication as its `_scripts` list) and derives the sprite names from `_scripts` itself
+  (`_sprite_names`). In `_ready`, **before** the palette builds or the canvas first renders, it
+  hands both to the renderer via the new static vars
+  [`BlockView.project_variables`](scripts/block_view.gd) / `project_sprites` (static like
+  `Stage.project_scripts`, so the static render path reaches them from one place).
+- **One new `_OPCODES` field: `data_enums`.** `input_key -> source` where source ∈
+  {`"variables"`, `"sprites"`} — the data-scoped twin of M13's literal `enums`.
+  `variable`/`set_var`/`change_var`'s `{name}` map to `"variables"`; `touching_sprite?`'s `{name}`
+  to `"sprites"`. [`BlockView._options_for`](scripts/block_view.gd) resolves a slot's options:
+  a fixed `enums` list wins, else a `data_enums` source resolves to the matching project list,
+  else `[]`. [`_header_from_template`](scripts/block_view.gd) passes that into
+  [`build_input`](scripts/block_view.gd), which builds the **same `_enum_field` dropdown** it
+  already did for M13 — so the canvas's [`_on_enum_selected`](scripts/block_canvas.gd) write-back
+  needs **no change**. The matching `defaults` were repointed at real names (`"p1_score"`;
+  `touching` → `"Ball"`) so a freshly-spawned block lands on a valid menu item rather than a
+  phantom appended value.
+- **Graceful fallback.** When the model is empty — the palette built before the editor sets it,
+  or any non-editor caller — `_options_for` yields `[]` and the slot falls back to the M12 text
+  field, exactly as before M17. A current value **not** among the options (a hand-written name)
+  is still appended + selected by `_enum_field` (M13's rule), so nothing snaps away silently.
 
-- **The palette is the trash.** [editor.gd](scripts/editor.gd) wires the canvas's new `_trash`
-  field to the palette's `ScrollContainer` (alongside the existing `_palette._canvas` hand-off),
-  so the same region you drag *new* blocks **from** (M11) is the region you drag unwanted blocks
-  **onto** to delete them. No new chrome — the palette is right there, which is what makes the
-  gesture discoverable, the way it is in Scratch.
-- **Hit-test + cue.** [`BlockCanvas._over_trash`](scripts/block_canvas.gd) is true when the
-  cursor is inside the palette's global rect (comparable to the event positions used throughout,
-  cf. `_block_at` / `_over_literal`). [`_update_drag`](scripts/block_canvas.gd) sets `_trashing`
-  from it each frame: over the palette it **suppresses any snap** (no gap bar / no slot
-  highlight) and tints the ghost **red**, signalling that releasing will delete rather than
-  place.
-- **The delete itself.** [`_drop`](scripts/block_canvas.gd) gains a leading `if _trashing: pass`
-  branch — the grabbed blocks are already off the data, so doing nothing *is* the delete; the
-  re-render then reflects their absence. This covers both kinds: a statement stack (the new
-  capability) and a reporter pill (which was already discarded off-slot — the palette is just
-  off-slot, now with the red cue and an explicit landing zone).
-
-Deliberately **not** in M16 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-there is still **no undo** (a deleted stack is gone; relaunch to reload the stock script, as
-with any session edit — M10), and **no separate trash affordance** (the palette doubles as it).
-A `_cancel_drag` mid-drag (only on a sprite switch, M9) still re-homes a statement stack rather
-than deleting it — abandoning a drag is not the same as choosing to trash.
+Deliberately **not** in M17 (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
+the model is **flat** — every variable name shows for every sprite, with no global-vs-local
+scoping (Scratch hides a sprite's locals from others), and there is **no "make a variable"** entry
+(you choose from existing names, you can't mint new ones from the dropdown). The model is also
+still **duplicated** — the editor declares variable names that the Stage separately seeds; a later
+milestone where one model feeds both unifies them. And note the data-scoped menu did **not** free
+the full-body grab of a bare `variable` pill: an `OptionButton` captures clicks just as the
+`LineEdit` did, so that pill is still grabbed by its thin coloured border (M15) — that grab waits
+on something other than this.
 
 ---
 
@@ -103,7 +111,10 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    **Numeric slots are oval, text slots rectangular** (M13), so a number field and a word
    field read apart at a glance. A slot that is really a **fixed choice** (`stop {mode}`,
    `say … in {size}`, `create clone of {target}`, `touching {side} edge?`) is a **dropdown**
-   (M13) — click it and pick a value instead of typing one.
+   (M13) — click it and pick a value instead of typing one. The **`{name}` slots** of
+   `set`/`change`/`variable` and `touching {name}?` are dropdowns too (M17), but listing the
+   project's **actual** variables / sprites — so you pick a real `p1_score` or `Ball` rather than
+   risk a typo that only fails at RUN.
    **Drag a reporter from the palette into a slot** (M14) to drop an *expression* in — the
    palette now lists reporters (`+`, `score`, `touching … edge?`, …) as pills; drag one over
    a value/condition slot (a highlight marks the slot it will land in) and release to make,
@@ -595,10 +606,10 @@ reporter pill *already on the canvas* was deferred at M14 (the pills in existing
 inert, so a press over one fell through to [`_block_at`](scripts/block_canvas.gd) and grabbed
 the **statement** it sat in) — **M15 below pays that off**.
 
-Also still deferred: **dropdowns scoped to live data** (the `{name}` slots of
-`variable`/`set`/`change` and `touching {name}?` are still free text — a real menu there
-would enumerate the project's actual variables/sprites, which needs the editor to own that
-model).
+Deferred at M14 but **paid off in M17**: **dropdowns scoped to live data** — the `{name}` slots of
+`variable`/`set`/`change` and `touching {name}?`, free text through M16, became dropdowns of the
+project's actual variables/sprites once the editor took ownership of that model (see
+[Data-scoped dropdowns (M17)](#data-scoped-dropdowns--the-editor-owns-the-project-model-m17)).
 
 ### Reporter out of slot (M15)
 
@@ -633,9 +644,10 @@ on top of M8's renderer. **No new opcode, no data-model change.**
   the detached dict is simply not re-homed, the same as [`_cancel_drag`](scripts/block_canvas.gd)).
 
 Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): a
-pill that is *all input field* — a bare `variable`/`score` — can only be grabbed by its thin
-coloured border, since M12 gives the field's clicks to editing; a clean full-body grab waits
-for the variable name to become a **data-scoped menu** (which removes the competing field).
+pill that is *all input field* — a bare `variable` — can only be grabbed by its thin coloured
+border, since the slot widget takes the clicks over its area. (M17 turned that slot into a
+data-scoped `OptionButton`, but it captures clicks just as the M12 `LineEdit` did, so the
+full-body grab is **not** freed by that change after all — see the deferred list.)
 **Ejecting/wrapping** the displaced reporter, and **boolean-vs-value slot typing**, remain
 deferred as in M14.
 
@@ -672,16 +684,59 @@ Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-mi
 (a deleted stack is gone until relaunch, as with any session edit — M10) and a **dedicated trash
 affordance** (the palette serves as one).
 
+### Data-scoped dropdowns — the editor owns the project model (M17)
+
+M13 gave the *fixed-choice* slots dropdowns from a static `enums` list, but left the `{name}`
+slots of `variable`/`set_var`/`change_var` and `touching {name}?` as **free text** — the doc's
+most-referenced deferral, because a real menu there must list the project's *actual* variables /
+sprites, and those lived only in the Stage. M17 gives the **editor its own project model** and
+renders those slots as **data-scoped dropdowns** sourced from it. It is the *data-scoped sibling*
+of M13: same [`_enum_field`](#enum-dropdowns-and-typed-slot-shapes-m13) widget, same `lit_*`
+write-back — only the *options* now come from project data. **No new opcode, no data-model
+change**: the dropdown stores the same plain string the field did, so persistence (M10) and RUN
+carry it untouched.
+
+- **The model, editor-owned.** [editor.gd](scripts/editor.gd) declares the project's variable
+  names (`_PROJECT_VARIABLES`, mirroring the seeds in [`stage.gd`](scripts/stage.gd)`._ready` —
+  the same small duplication as its `_scripts` list) and derives the sprite names from `_scripts`
+  (`_sprite_names`). In `_ready`, **before** the palette builds or the canvas first renders, it
+  sets the new static vars [`BlockView.project_variables`](scripts/block_view.gd) /
+  `project_sprites` — static (like `Stage.project_scripts`) so the *static* render path reaches
+  the value from one place.
+- **One new `_OPCODES` field: `data_enums`.** `input_key -> source`, source ∈
+  {`"variables"`, `"sprites"`} — the data-scoped twin of M13's literal `enums`.
+  [`BlockView._options_for`](scripts/block_view.gd) resolves a slot's options (fixed `enums` wins;
+  else a `data_enums` source → the matching project list; else `[]`) and
+  [`_header_from_template`](scripts/block_view.gd) feeds it into
+  [`build_input`](scripts/block_view.gd), which builds the **same dropdown** M13 already did — so
+  the canvas's [`_on_enum_selected`](scripts/block_canvas.gd) write-back is **unchanged**. The
+  matching `defaults` were repointed at real names (`"p1_score"`; `touching` → `"Ball"`) so a
+  freshly-spawned block lands on a valid menu item, not a phantom appended value.
+- **Graceful fallback, by construction.** An empty model (the palette built before the editor
+  sets it, or any non-editor caller) makes `_options_for` yield `[]`, and the slot falls back to
+  the M12 text field exactly as before M17. A current value **not** among the options (a
+  hand-written name) is still appended + selected by `_enum_field` (M13's rule), so a stock script
+  referencing only real names (`p1_score`, `round`, …) renders clean dropdowns while an odd name
+  stays visible rather than snapping away.
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): the
+model is **flat** (no global-vs-local scoping — every variable shows for every sprite) and
+**read-only** (no "make a variable" entry — you pick existing names, you can't mint new ones); it
+is also still **duplicated** between editor and Stage (one unified model is future work). And the
+data-scoped menu did **not** free the full-body grab of a bare `variable` pill — an `OptionButton`
+captures clicks just as the `LineEdit` did, so that pill is still grabbed by its thin coloured
+border (M15).
+
 ## Opcodes implemented
 
-**M16 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15) — the editor is a pure *view +
+**M17 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16) — the editor is a pure *view +
 interaction* over the existing language. Every opcode below has a `BlockView._OPCODES` entry
 so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
-value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns); M14
-lets you **drop a reporter into any value/condition slot** and M15 lets you **grab one back
-out**; M16 lets you **delete a block by dragging it onto the palette**; and M10 runs whatever
-you assemble from them.
+value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns, M17 the
+`{name}` slots into dropdowns of the project's real variables/sprites); M14 lets you **drop a
+reporter into any value/condition slot** and M15 lets you **grab one back out**; M16 lets you
+**delete a block by dragging it onto the palette**; and M10 runs whatever you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -728,10 +783,10 @@ main.tscn                  The *game* scene: a single Node2D "Stage" running sta
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16), persists edits + hands them to the Stage on RUN (M10)
+  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); owns the project model (variable + sprite names) and hands it to BlockView for data-scoped dropdowns (M17); persists edits + hands them to the Stage on RUN (M10)
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for); stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -752,7 +807,10 @@ CLAUDE.md                  This file
   draggable block; a `"reporter"` (M14) appears in the palette as a pill that drags into a
   value/condition slot. If an input is a fixed choice, also give the entry an `enums` field (M13) —
   `input_key -> [allowed values]` — and that slot renders as a dropdown instead of a
-  free-text field. An opcode with no entry still renders, as a grey box.
+  free-text field. If instead the choice is **project data** — a variable or sprite name — give the
+  entry a `data_enums` field (M17), `input_key -> "variables"`/`"sprites"`, and the slot becomes a
+  dropdown of the editor's live `project_variables`/`project_sprites`. An opcode with no entry still
+  renders, as a grey box.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -766,22 +824,26 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Data-scoped dropdowns** — M13 added dropdowns for the *fixed-choice* enum slots (keyed
-  off each opcode's `enums` list), but the `{name}` slots of `variable`/`set_var`/`change_var`
-  and `touching {name}?` are still free text. A real menu there would enumerate the project's
-  actual variables / sprite names, which needs the editor to **own the project model** (the
-  seeded variables and the target registry currently live only in the Stage). Until then a
-  mistyped name just creates a new global / fails to resolve at runtime, as before.
+- **A richer project model** — M17 gave the editor a project model (variable + sprite names) and
+  turned the `{name}` slots into **data-scoped dropdowns**, but the model is deliberately thin.
+  It is **flat**: every variable shows for every sprite, with no global-vs-local scoping (Scratch
+  hides a sprite's locals from other sprites). It is **read-only**: you pick from existing names,
+  with no "make a variable" entry to mint a new one (so creating a variable still means hand-editing
+  a script / seeding it in the Stage). And it is **duplicated** — the editor declares variable names
+  that the Stage separately seeds; a later milestone where one model feeds both the editor's
+  dropdowns and the runtime's seeding would unify them and unlock the two above.
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
 - **Full-body grab of an all-field pill, and ejecting/wrapping** — M15 made on-canvas
-  reporter pills grabbable, but a pill whose interior is *entirely* a literal field — a bare
-  `variable`/`score`, whose only content is its name field — can be grabbed only by its thin
-  coloured border, since M12 gives a field's clicks to editing. A clean full-body grab waits
-  for the variable name to become a **data-scoped menu** (the deferred item above), which
-  removes the competing field. Still unsupported either way: **ejecting / wrapping** the
-  reporter a drop displaces — dropping a reporter onto a slot that already holds one discards
-  the old (M14), rather than ejecting it to the cursor or wrapping it as an input of the new.
+  reporter pills grabbable, but a pill whose interior is *entirely* one widget — a bare
+  `variable`, whose only content is its name slot — can be grabbed only by its thin coloured
+  border, since the slot widget takes the clicks over its area. M17 turned that slot from a
+  `LineEdit` into a data-scoped `OptionButton`, but an `OptionButton` captures clicks just the
+  same (to open its menu), so this did **not** free the full-body grab as an earlier note
+  predicted — it still waits on something else (e.g. a modifier-key or click-vs-drag disambiguation
+  on the widget itself). Still unsupported either way: **ejecting / wrapping** the reporter a drop
+  displaces — dropping a reporter onto a slot that already holds one discards the old (M14), rather
+  than ejecting it to the cursor or wrapping it as an input of the new.
 - **Boolean-vs-value slot typing** — M14 lets any reporter drop into any slot (a number
   reporter into an `if` condition, a boolean into `move`'s `steps`). Scratch distinguishes
   hexagonal boolean slots from round value slots and refuses mismatches; that needs the true

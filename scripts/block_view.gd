@@ -58,6 +58,18 @@ static var _CATEGORY_COLORS := {
 	"unknown": Color("#7f7f7f"),
 }
 
+## The project model (M17): the variable names and sprite names the current project defines.
+## The editor (editor.gd) owns these — it sets them before anything renders — and the `{name}`
+## slots of variable/set_var/change_var (variables) and touching_sprite? (sprites) read them to
+## render as **data-scoped dropdowns**: a fixed-choice menu of the project's *real* names rather
+## than M12 free text. Static (like Stage.project_scripts) so the value reaches the static render
+## path from one place. Empty by default — the palette built before the editor sets them, or any
+## non-editor caller — in which case those slots fall back to a plain text field, exactly as
+## before M17. (The seeded variables and the sprite registry still also live in the Stage; a
+## later milestone where one model feeds both the editor and the runtime would unify them.)
+static var project_variables: Array = []
+static var project_sprites: Array = []
+
 ## opcode -> {category, template, kind, defaults}. The editor's counterpart to the
 ## interpreter's `_register_handlers`. `template` is a label string with `{input_name}`
 ## placeholders; each placeholder is replaced by that input's rendered widget (a
@@ -76,6 +88,16 @@ static var _CATEGORY_COLORS := {
 ##     (`stop {mode}`, `say … in {size}`, `create clone of {target}`, `touching {side} edge?`).
 ##     Such a slot renders as a dropdown (build_input -> _enum_field) instead of a free-text
 ##     field; an opcode with no `enums` (or a key not listed) keeps the M12 text field.
+##
+## M17 added one more, the *data-scoped* sibling of `enums`:
+##   * `data_enums` — `input_key -> source` where source ∈ {"variables", "sprites"}. The slot's
+##     options aren't a fixed literal list; they are pulled at render time from the project model
+##     (project_variables / project_sprites, owned by the editor). So `variable`/`set_var`/
+##     `change_var`'s `{name}` lists the project's real variables and `touching_sprite?`'s
+##     `{name}` lists its real sprites — a menu of actual names rather than free text. It renders
+##     through the same _enum_field path; when the model is empty (non-editor caller) it falls
+##     back to a text field. The matching `defaults` point at a real name so a freshly-spawned
+##     block lands on a valid menu item (not a phantom appended value).
 const _OPCODES := {
 	# events (hats)
 	"when_flag_clicked": {"category": "events", "kind": "hat", "template": "when flag clicked", "defaults": {"body": []}},
@@ -96,12 +118,12 @@ const _OPCODES := {
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	# sensing
 	"touching_edge?": {"category": "sensing", "kind": "reporter", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
-	"touching_sprite?": {"category": "sensing", "kind": "reporter", "template": "touching {name}?", "defaults": {"name": ""}},
+	"touching_sprite?": {"category": "sensing", "kind": "reporter", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
 	"key_pressed?": {"category": "sensing", "kind": "reporter", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
 	# variables
-	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "score", "value": 0}},
-	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "score", "by": 1}},
-	"variable": {"category": "variables", "kind": "reporter", "template": "{name}", "defaults": {"name": "score"}},
+	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "p1_score", "value": 0}, "data_enums": {"name": "variables"}},
+	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "p1_score", "by": 1}, "data_enums": {"name": "variables"}},
+	"variable": {"category": "variables", "kind": "reporter", "template": "{name}", "defaults": {"name": "p1_score"}, "data_enums": {"name": "variables"}},
 	# operators
 	"add": {"category": "operators", "kind": "reporter", "template": "{a} + {b}", "defaults": {"a": 0, "b": 0}},
 	"subtract": {"category": "operators", "kind": "reporter", "template": "{a} - {b}", "defaults": {"a": 0, "b": 0}},
@@ -293,6 +315,20 @@ static func category_color(category: String) -> Color:
 
 # --- Header assembly -------------------------------------------------------
 
+## The dropdown options for an opcode's input slot, or [] for a free-text slot. A fixed-choice
+## `enums` list (M13) wins; otherwise a `data_enums` source (M17) resolves to the project model
+## the editor owns — so the slot becomes a menu of the project's real variables / sprites. An
+## empty model (no editor) yields [], so the slot falls back to a text field, exactly as before.
+static func _options_for(info: Dictionary, key: String) -> Array:
+	var enums: Dictionary = info.get("enums", {})
+	if enums.has(key):
+		return enums[key]
+	match String(info.get("data_enums", {}).get(key, "")):
+		"variables": return project_variables
+		"sprites": return project_sprites
+		_: return []
+
+
 ## Split a template on `{name}` placeholders, emitting a Label for each literal span
 ## and the rendered input widget for each placeholder, packed left-to-right.
 static func _header_from_template(template: String, block: Dictionary) -> HBoxContainer:
@@ -300,7 +336,6 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 	row.add_theme_constant_override("separation", 4)
 	var inputs: Dictionary = block.get("inputs", {})
 	var info: Dictionary = _OPCODES.get(String(block.get("opcode", "")), {})
-	var enums: Dictionary = info.get("enums", {})
 
 	var literal := ""
 	var i := 0
@@ -310,7 +345,7 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			literal = ""
 			var close := template.find("}", i)
 			var key := template.substr(i + 1, close - i - 1)
-			row.add_child(build_input(inputs, key, enums.get(key, []), info.get("defaults", {}).get(key)))
+			row.add_child(build_input(inputs, key, _options_for(info, key), info.get("defaults", {}).get(key)))
 			i = close + 1
 		else:
 			literal += template[i]
