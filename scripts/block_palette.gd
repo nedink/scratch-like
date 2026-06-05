@@ -68,10 +68,14 @@ func _build() -> void:
 
 
 ## Make a rendered chip transparent to mouse picking (cf. BlockCanvas._passthrough): our
-## _input still sees presses over it, and the wheel still scrolls the palette.
+## _input still sees presses over it, and the wheel still scrolls the palette. A chip's
+## literal fields (editable on the canvas — M12) are made non-editable here, since a chip
+## is a throwaway template; the real editing happens once it lands on the canvas.
 func _passthrough(node: Node) -> void:
 	if node is Control:
 		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if node is LineEdit:
+		(node as LineEdit).editable = false
 	for child in node.get_children():
 		_passthrough(child)
 

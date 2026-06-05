@@ -53,7 +53,7 @@ static var _CATEGORY_COLORS := {
 	"motion": Color("#4c97ff"),
 	"looks": Color("#9966ff"),
 	"sensing": Color("#5cb1d6"),
-	"variables": Color("#ff8c1a"),
+	"variables": Color("ff731aff"),
 	"operators": Color("#59c059"),
 	"unknown": Color("#7f7f7f"),
 }
@@ -189,12 +189,41 @@ static func build_reporter(block: Dictionary) -> Control:
 	return panel
 
 
-## Render one input value: a nested reporter dictionary -> a pill (build_reporter);
-## any literal (number / string / bool) -> a small white field.
-static func build_input(value: Variant) -> Control:
+## Render one input value, read from `inputs[key]`: a nested reporter dictionary ->
+## a pill (build_reporter); any literal (number / string / bool) -> a small white
+## **editable** field (M12). The literal field is stamped with the live `inputs` dict
+## + `key` so whoever wires editing (the canvas) can write the typed value straight
+## back into the data — `inputs` is a reference, so that write *is* the edit. (The
+## palette renders the same field but leaves it inert; only the canvas wires it.)
+static func build_input(inputs: Dictionary, key: String) -> Control:
+	var value: Variant = inputs.get(key)
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
 		return build_reporter(value)
-	return _literal_field(_stringify(value))
+	var field := _literal_field(_stringify(value))
+	field.set_meta("lit_inputs", inputs)
+	field.set_meta("lit_key", key)
+	return field
+
+
+## Coerce a field's typed text back to a stored value, directed by the slot's previous
+## type so the interpreter sees what it expects (it `float()`s numeric inputs and
+## `String()`s text ones). A numeric slot keeps a number (int when whole); a bool slot
+## maps true/false; anything else stays a String — including non-numeric text typed into
+## a numeric slot, which keeps sentinels like point_in_direction's "bounce" expressible.
+static func coerce_literal(text: String, prev: Variant) -> Variant:
+	var t := text.strip_edges()
+	match typeof(prev):
+		TYPE_INT, TYPE_FLOAT:
+			if t.is_valid_float():
+				var f := t.to_float()
+				if is_finite(f) and f == floor(f):
+					return int(f)
+				return f
+			return t
+		TYPE_BOOL:
+			return t.to_lower() == "true"
+		_:
+			return t
 
 
 # --- Palette (M11) ---------------------------------------------------------
@@ -248,7 +277,7 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			literal = ""
 			var close := template.find("}", i)
 			var key := template.substr(i + 1, close - i - 1)
-			row.add_child(build_input(inputs.get(key)))
+			row.add_child(build_input(inputs, key))
 			i = close + 1
 		else:
 			literal += template[i]
@@ -283,16 +312,25 @@ static func _empty_slot() -> Control:
 	return slot
 
 
-## A literal input value: dark text on a small white rounded field.
-static func _literal_field(text: String) -> Control:
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(Color.WHITE, 8))
-	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var label := Label.new()
-	label.text = text
-	label.add_theme_color_override("font_color", Color("#303030"))
-	panel.add_child(label)
-	return panel
+## A literal input value: dark text on a small white rounded field. As of M12 this is
+## an editable LineEdit (it was a static Label through M11) — the canvas wires its
+## text_submitted/focus_exited to write the typed value back into the block data; the
+## palette leaves it inert (mouse-ignored). It grows to fit its text and keeps a small
+## minimum width so an empty field is still clickable.
+static func _literal_field(text: String) -> LineEdit:
+	var field := LineEdit.new()
+	field.text = text
+	field.expand_to_text_length = true
+	field.alignment = HORIZONTAL_ALIGNMENT_CENTER
+	field.custom_minimum_size = Vector2(16, 0)
+	field.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	field.context_menu_enabled = false
+	field.add_theme_stylebox_override("normal", _box(Color.WHITE, 8))
+	field.add_theme_stylebox_override("focus", _box(Color("#fff4c2"), 8))
+	field.add_theme_color_override("font_color", Color("#303030"))
+	field.add_theme_color_override("font_uneditable_color", Color("#303030"))
+	field.add_theme_color_override("caret_color", Color("#303030"))
+	return field
 
 
 # --- Helpers ---------------------------------------------------------------

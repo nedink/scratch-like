@@ -122,7 +122,8 @@ func _render() -> void:
 		child.queue_free()
 	for stack in _stacks:
 		var ctrl := BlockView.build_stack(stack["blocks"])
-		_passthrough(ctrl)
+		_passthrough(ctrl, true)
+		_wire_literals(ctrl)
 		_layer.add_child(ctrl)
 		ctrl.position = stack["pos"]
 		ctrl.size = ctrl.get_combined_minimum_size()
@@ -130,11 +131,48 @@ func _render() -> void:
 
 ## Make a rendered subtree transparent to mouse picking, so this canvas's _input sees
 ## presses over blocks (and the wheel still reaches the surrounding ScrollContainer).
-func _passthrough(node: Node) -> void:
+## When `keep_literals` is set (the on-canvas render), an editable literal field (M12) is
+## left interactive (MOUSE_FILTER_STOP) so it can take focus and clicks; everything else,
+## and the whole ghost subtree, is ignored.
+func _passthrough(node: Node, keep_literals := false) -> void:
 	if node is Control:
+		if keep_literals and node.has_meta("lit_key"):
+			(node as Control).mouse_filter = Control.MOUSE_FILTER_STOP
+			return  # a leaf field; leave it (and stop) interactive
 		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for child in node.get_children():
-		_passthrough(child)
+		_passthrough(child, keep_literals)
+
+
+## Wire each editable literal field (M12) in a freshly-rendered subtree to commit its
+## typed value back into the block data on Enter or focus loss. The fields carry the live
+## `inputs` dict + key as meta (stamped by BlockView), so committing is a direct write
+## into the same array the runtime reads — the editor-side echo of M9's splice-into-data.
+func _wire_literals(node: Node) -> void:
+	if node is LineEdit and node.has_meta("lit_key"):
+		var field := node as LineEdit
+		field.text_submitted.connect(_on_literal_submitted.bind(field))
+		field.focus_exited.connect(_commit_literal.bind(field))
+		return
+	for child in node.get_children():
+		_wire_literals(child)
+
+
+func _on_literal_submitted(_text: String, field: LineEdit) -> void:
+	_commit_literal(field)
+	field.release_focus()
+
+
+## Coerce the field's text to the slot's type and write it into the live block data, then
+## normalize the field to the stored value's display (so "8.0"/" 8 " settle to "8").
+func _commit_literal(field: LineEdit) -> void:
+	var inputs: Dictionary = field.get_meta("lit_inputs")
+	var key := String(field.get_meta("lit_key"))
+	var coerced: Variant = BlockView.coerce_literal(field.text, inputs.get(key))
+	inputs[key] = coerced
+	var normalized := BlockView._stringify(coerced)
+	if field.text != normalized:
+		field.text = normalized
 
 
 # --- Input -----------------------------------------------------------------
@@ -146,6 +184,12 @@ func _passthrough(node: Node) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
+			# A press on an editable literal field (M12) belongs to that field: let it
+			# fall through to GUI focus/editing rather than grabbing the block.
+			if _over_literal(event.position):
+				return
+			# Grabbing anything else commits whatever field was being edited.
+			get_viewport().gui_release_focus()
 			var hit := _block_at(event.position)
 			if not hit.is_empty():
 				_state = _PENDING
@@ -191,6 +235,24 @@ func _tagged_panels(node: Node, out: Array = []) -> Array:
 		out.append(node)
 	for child in node.get_children():
 		_tagged_panels(child, out)
+	return out
+
+
+## True when a global point lands on an editable literal field (M12). The press handler
+## uses this to defer to the field instead of starting a block drag — a field is always
+## smaller than the block it sits in, so checking it first lets the inner widget win.
+func _over_literal(global_point: Vector2) -> bool:
+	for field in _literal_fields(_layer):
+		if (field as Control).get_global_rect().has_point(global_point):
+			return true
+	return false
+
+
+func _literal_fields(node: Node, out: Array = []) -> Array:
+	if node is LineEdit and node.has_meta("lit_key"):
+		out.append(node)
+	for child in node.get_children():
+		_literal_fields(child, out)
 	return out
 
 

@@ -5,32 +5,38 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 11 — a palette to drag *new* blocks from
+## Current state: Milestone 12 — editing a literal's value
 
-**Goal of this milestone:** let you **add blocks, not just rearrange them**. Through M10
-the editor could only shuffle the blocks a sprite already had; M11 adds the missing
-source — a **palette** of every stackable block type down the left side. Drag one out and
-it rides the cursor and snaps into a stack exactly like an existing block, so a script
-can now be assembled from scratch and RUN.
+**Goal of this milestone:** let you **change a block's inputs**, not just which blocks are
+present. Through M11 you could add and rearrange blocks, but every input was frozen at the
+value the loaded script or a palette block's `defaults` provided — `move {10}` was stuck at
+10. M12 makes each white literal field an **editable text box**: click it, type, and the
+typed value is written straight back into the block data, so `move {10}` becomes
+`move {8}` and RUN plays the new value.
 
-This is small because M9 already built the hard part. The palette **reuses M9's whole drag
-machinery**: the one new ingredient is a **factory for fresh block dictionaries**,
-[`BlockView.make_block(opcode)`](#block-palette-m11), which mints a block in exactly the
-runtime shape with default inputs. When a press on a palette chip turns into a drag, the
-palette hands that fresh block to [`BlockCanvas.begin_spawn_drag`](#block-palette-m11) and
-the canvas owns the rest — ghost, snap highlight, and splice into the live data are
-**unchanged** from M9. **No new opcode, no data-model change**, again.
+This is small because M9 made the data canonical and M8 already drew the field. The literal
+field — formerly a static `Label` — becomes a `LineEdit`
+([`BlockView._literal_field`](#editing-literal-values-m12)) stamped with the **live `inputs`
+dict + key** it renders; the canvas wires its `text_submitted`/`focus_exited` to a commit
+that writes the (type-coerced) text into that dict. Because the dict is the same reference
+the interpreter reads, committing *is* the edit — the editor-side echo of M9 splicing a
+dragged block into a live array. **No new opcode, no data-model change**, again; persistence
+(M10) and RUN carry the edited inputs with no extra plumbing.
 
-The palette lists only **stackable** blocks (hats + statements + C-blocks); a reporter
-pill has no valid drop target until dropping reporters into input *slots* exists (still
-deferred). Each `BlockView._OPCODES` entry grew two fields — `kind` (so the palette can
-filter) and `defaults` (a fresh block's starting inputs) — keeping the "add a block = one
-table entry" story.
+A press on a field focuses it for typing; a press on the block's coloured body still grabs
+it to drag (the canvas defers to the field only when the press lands on one, and commits any
+active edit when you grab elsewhere) — exactly Scratch, where the input slot captures clicks
+and you drag by the block body. Coercion is **type-directed** to match the interpreter
+([`BlockView.coerce_literal`](#editing-literal-values-m12)): a numeric slot keeps a number,
+a bool slot maps `true`/`false`, anything else stays a string (so a sentinel like
+`point_in_direction`'s `"bounce"` typed into a numeric slot survives).
 
-Edits still **persist for the session** (M10): switching sprites or RUN saves the canvas's
-work — now including newly-added blocks — back into the editor's living project. (There
-is no reset-to-pristine button yet, and editing a literal's *value* and dragging
-reporters into slots are still ahead — see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).)
+Enum-ish slots (`stop {mode}`, `say … in {size}`, `create clone of {target}`) are edited as
+**free text**, not dropdowns — a wrong value just warns at runtime; real dropdowns are
+deferred. Dragging *reporters* into slots is still deferred too (the field edits a literal in
+place; it doesn't accept a dropped pill). Edits still **persist for the session** (M10), now
+including changed input values. See
+[Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
 
 The editor remains the project's **front door**: F5 launches the editor (`editor.tscn`),
 not the game; **RUN** switches to `main.tscn` (the Stage). **Editor chrome uses Godot's
@@ -55,6 +61,9 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    will snap, and dropping over that bar splices it into the stack (or into a C-block's
    body). Drop on empty canvas to leave it as a free-floating stack. Grab a hat (or the
    first block of a stack) to slide the whole stack around.
+   **Click a white input field** (M12) to edit its value — type a new number/word and
+   press Enter (or click away) to commit it into the block; e.g. change `move {10}` to
+   `move {8}`. (Clicking the field edits it; grab the coloured part of a block to drag it.)
    Edits **persist** as you switch sprites (the session's project accumulates them);
    there's no reset-to-pristine yet, so relaunch the editor to start clean.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
@@ -413,12 +422,49 @@ own `ScrollContainer`, and wires `palette._canvas = canvas`. Persistence (M10) i
 untouched: added blocks already live in the canvas data, so they ride `export_script()` →
 `Stage.project_scripts` into RUN with no extra plumbing.
 
+### Editing literal values (M12)
+
+The core authoring loop's last gap: M11 let you *add* a block but only with its `defaults`
+inputs. M12 makes those inputs editable, and is small because M9 already made the block data
+canonical — editing a value is just another mutation of the same arrays the runtime reads.
+
+- **The field becomes editable.** [`BlockView._literal_field`](scripts/block_view.gd) — a
+  static `Label` through M11 — is now a `LineEdit` (white, grows to its text, small minimum
+  width). `build_input(inputs, key)` (its signature widened from a bare value) stamps the
+  field with the **live `inputs` dict + `key`** as meta, so whoever wires it can write the
+  typed value straight back into that dict. Reporter inputs still render as pills, so nested
+  literals (e.g. the ball's `pick random {-45} to {45}`) are editable too.
+- **The canvas owns the mutation** (mirroring M9's "the canvas splices into the data"). After
+  each `_render`, [`BlockCanvas._wire_literals`](scripts/block_canvas.gd) connects every
+  field's `text_submitted`/`focus_exited` to `_commit_literal`, which coerces the text and
+  assigns `inputs[key]`. Since `inputs` is the same reference held in the canvas's working
+  stacks, the edit rides `export_script()` → persistence/RUN for free. The **palette leaves
+  its chip fields inert** (`editable = false`, mouse-ignored) — a chip is a throwaway
+  template; editing happens only once a block lands on the canvas.
+- **Coercion matches the interpreter.** [`BlockView.coerce_literal(text, prev)`](scripts/block_view.gd)
+  is directed by the slot's previous type: a numeric slot keeps a number (int when whole —
+  the interpreter `float()`s it regardless), a bool slot maps `true`/`false`, and anything
+  else stays a `String`. Non-numeric text in a numeric slot also stays a string, which keeps
+  the `point_in_direction` `"bounce"` sentinel expressible. After commit the field is
+  re-`_stringify`'d so `"8.0"`/`" 8 "` settle to `"8"`.
+- **Edit vs. drag.** Rendered blocks are mouse-ignored so `_input` can hit-test presses, but
+  the literal field is left `MOUSE_FILTER_STOP` (via a `keep_literals` flag on
+  `_passthrough`) so it can take focus and clicks. On press, the canvas checks `_over_literal`
+  first: a hit there falls through to the field (GUI focus + typing); a press anywhere else on
+  the block grabs it to drag and first calls `gui_release_focus()` to commit any active edit.
+  This is Scratch's own split — the input slot captures clicks, the body is the drag handle.
+
+Enum-ish slots (`stop {mode}`, `say … in {size}`) are plain text fields, not dropdowns
+(deferred), and the field edits a literal in place — it doesn't yet accept a *dropped*
+reporter pill (also deferred). See [Deliberately deferred](#deliberately-deferred-to-a-later-milestone).
+
 ## Opcodes implemented
 
-**M11 added no opcodes** (nor did M8/M9/M10) — the editor is a pure *view + interaction*
+**M12 added no opcodes** (nor did M8/M9/M10/M11) — the editor is a pure *view + interaction*
 over the existing language. Every opcode below has a `BlockView._OPCODES` entry so it
 draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
-palette (stackable kinds only); and M10 runs whatever you assemble from them.
+palette (stackable kinds only); M12 lets you edit any literal input's value; and M10 runs
+whatever you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -466,9 +512,9 @@ icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, persists edits + hands them to the Stage on RUN (M10)
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); export_script() serializes edits back (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields back to the data (M12); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists stackable opcodes as chips; on drag, mints a fresh block and hands it to the canvas
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults} table; make_block() factory (M11); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -501,17 +547,19 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Editing a literal's *value* (the natural M12)** — typing into a white input field
-  (`move {5}` → `move {8}`) isn't wired; the runtime runs the blocks as-drawn, so values
-  are whatever the loaded script or a palette block's `defaults` provided. Needs an
-  in-place text field on the literal widget. This is the obvious next step now that M11
-  lets you add a block but only with its default inputs.
+- **Dropdowns for enum slots** — M12 edits *every* literal as free text, including slots
+  that are really a fixed choice (`stop {mode}` ∈ {all, this script}, `say … in {size}` ∈
+  {small, large}, `create clone of {target}` = myself). A wrong value just warns at runtime;
+  a real `OptionButton`-style menu per enum slot (keyed off the opcode) is deferred. This is
+  the natural M13 alongside making numeric vs. string slots visually distinct.
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
 - **Dragging reporters / blocks into input slots** — M9 snaps *statement* blocks into
-  stacks only. Dropping a reporter pill into a value/condition slot (e.g. changing
+  stacks only, and M12's editable field replaces a literal *in place* — it doesn't accept a
+  *dropped* reporter pill. Dropping a reporter into a value/condition slot (e.g. changing
   `move {speed}` to `move {speed + 1}`) needs slot hit-testing and the hexagon/round
-  shape geometry below. Reporter pills are drawn but not yet grabbable.
+  shape geometry below. Reporter pills are drawn (and their own literal inputs are now
+  editable), but the pills themselves are not yet grabbable.
 - **Canvas panning / auto-scroll while dragging** — the canvas sits in a
   `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
   panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.
