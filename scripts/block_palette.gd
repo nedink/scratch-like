@@ -126,7 +126,16 @@ func _reset() -> void:
 ## The opcode of the chip under a global point (the deepest tagged node containing it), or
 ## "" if the point misses every chip. Smallest-area wins, mirroring BlockCanvas._block_at,
 ## though chips don't nest so it rarely matters.
+##
+## A ScrollContainer only *clips rendering*; a chip scrolled above the viewport keeps a global
+## rect that overlaps the chrome above the palette (the top bar's sprite selector). So we first
+## reject any point outside the visible palette region (our parent ScrollContainer's rect) — else
+## a press on the selector would hit a scrolled-up chip here, go PENDING, and get swallowed by
+## set_input_as_handled() instead of opening the dropdown.
 func _chip_at(global_point: Vector2) -> String:
+	var view := get_parent() as Control
+	if view != null and not view.get_global_rect().has_point(global_point):
+		return ""
 	var best := ""
 	var best_area := INF
 	for chip in _chips(self):
