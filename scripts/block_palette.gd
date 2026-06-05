@@ -85,6 +85,18 @@ func _passthrough(node: Node) -> void:
 		_passthrough(child)
 
 
+## Rebuild the chip list from scratch. The editor calls this on a sprite switch (M19): the
+## variable chips (`variable`/`set`/`change`) draw the project's `{name}` dropdown, which is now
+## **scoped to the selected sprite**, so the palette must re-render to show that sprite's variables
+## (globals + its own locals). Children are removed synchronously before rebuilding so a stale chip
+## never lingers in the tree for _chip_at to hit.
+func rebuild() -> void:
+	for child in get_children():
+		remove_child(child)
+		child.queue_free()
+	_build()
+
+
 func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:

@@ -56,8 +56,13 @@ func _ready() -> void:
 	# data-scoped dropdowns. Sprite names come straight from the script list above; variable
 	# names from the one project model the runtime seeds from too (M18 — PongScripts.variables(),
 	# no longer a separate hardcoded list here). (Static on BlockView, like Stage.project_scripts.)
+	#
+	# The variable list is **scoped to the sprite being edited** (M19): globals plus that
+	# sprite's own locals, hiding other sprites' locals — so editing the LeftPaddle never
+	# offers the Ball's `speed`. Seed it for the first sprite the selector will show (index 0);
+	# _show re-scopes it on every switch. Sprites aren't scoped (all are valid `touching` targets).
 	BlockView.project_sprites = _sprite_names()
-	BlockView.project_variables = _variable_names()
+	BlockView.project_variables = _variables_in_scope(_scripts[0]["name"])
 
 	# A small default font size so the chunky blocks fit the 480x360 viewport (which
 	# the project integer-stretches to fullscreen). One Theme on the root cascades to
@@ -148,6 +153,12 @@ func _ready() -> void:
 func _show(index: int) -> void:
 	_persist_current()
 	_current = index
+	# Re-scope the variable dropdowns to the sprite we're loading (M19): globals plus *this*
+	# sprite's locals. Both the canvas (rendered next) and the palette's chips read
+	# project_variables, so update it and rebuild the palette before the canvas renders — that
+	# way editing the Ball shows `speed` in every menu and editing a paddle hides it.
+	BlockView.project_variables = _variables_in_scope(_scripts[index]["name"])
+	_palette.rebuild()
 	_canvas.load_script(_scripts[index]["script"])
 
 
@@ -165,14 +176,22 @@ func _sprite_names() -> Array:
 	return names
 
 
-## The project's variable names (M17), the variables half of the project model — the options a
-## `{name}` slot of variable/set_var/change_var offers. As of M18 these are derived from the one
-## project model the runtime also seeds from (PongScripts.variables()), rather than a list this
-## file hardcoded separately — so the editor's dropdowns and the Stage's seeding can't drift apart.
-func _variable_names() -> Array:
+## The variable names in scope for `sprite_name` (M19) — the options its `{name}` slots offer.
+## A variable is in scope when it is a **global** or a **local of this very sprite**; another
+## sprite's locals are hidden, mirroring Scratch (a sprite can't see a sibling's local). Derived
+## from the one project model the runtime also seeds from (PongScripts.variables(), M18) — each
+## entry carries the `scope` this reads ("global" or a sprite name) — so the editor's dropdowns
+## and the Stage's seeding can't drift apart. Re-evaluated per sprite by _show.
+##
+## (Before M19 this took no argument and listed *every* variable for every sprite — flat, the
+## deferral M18's scope-in-the-data was the prerequisite for. The Ball's `speed` now shows only
+## while editing the Ball.)
+func _variables_in_scope(sprite_name: String) -> Array:
 	var names: Array = []
 	for v in PongScripts.variables():
-		names.append(v["name"])
+		var scope := String(v.get("scope", "global"))
+		if scope == "global" or scope == sprite_name:
+			names.append(v["name"])
 	return names
 
 

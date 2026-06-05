@@ -65,8 +65,14 @@ static var _CATEGORY_COLORS := {
 ## than M12 free text. Static (like Stage.project_scripts) so the value reaches the static render
 ## path from one place. Empty by default — the palette built before the editor sets them, or any
 ## non-editor caller — in which case those slots fall back to a plain text field, exactly as
-## before M17. (The seeded variables and the sprite registry still also live in the Stage; a
-## later milestone where one model feeds both the editor and the runtime would unify them.)
+## before M17.
+##
+## `project_variables` is **scoped to the sprite being edited** (M19): the editor re-points it on
+## every sprite switch to globals + that sprite's own locals, hiding other sprites' locals (Scratch
+## semantics). This renderer is unchanged by that — it just lists whatever names it's handed; the
+## scoping is the editor choosing *which* names. `project_sprites` is not scoped (every sprite is a
+## valid `touching` target). The runtime model (PongScripts.variables(), M18) feeds both this and
+## the Stage's seeding; the editor maps it to names, filtering by scope.
 static var project_variables: Array = []
 static var project_sprites: Array = []
 

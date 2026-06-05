@@ -5,52 +5,51 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 18 — one project model feeds both the editor and the runtime
+## Current state: Milestone 19 — variable dropdowns scoped to the selected sprite
 
-**Goal of this milestone:** pay off the deferral M17 leaned on hardest — the project's variable
-model was **duplicated** between editor and runtime, and the two copies had quietly **drifted in
-shape**. Through M17 the editor hardcoded a flat *name list* (`editor._PROJECT_VARIABLES`) to fill
-its `{name}` dropdowns, while `stage.gd._ready` separately hardcoded the *seeds*. Those weren't
-just two copies of the same list — they disagreed: `round` was seeded at `1` in the Stage but the
-editor's list carried no value at all, and `speed` was a flat name in the editor but a **Ball
-local** (not a global) in the Stage. M18 collapses both into **one declaration** — name + initial
-value + scope — that the Stage seeds from and the editor derives its dropdown names from, so they
-can no longer drift. **No new opcode, no data-model change, no UI change**: the dropdowns offer the
-same names and the runtime seeds the same variables; only the *source* is unified.
+**Goal of this milestone:** cash in the thing M18 was the prerequisite for — **local-vs-global
+scoping in the UI**. M17 gave the `{name}` slots dropdowns of the project's *real* variables, but
+the list was **flat**: every variable showed for every sprite, so editing the LeftPaddle still
+offered the Ball's `speed` (a Ball-*local*), which Scratch would never do — a sprite can't see a
+sibling's local. M18 put `scope` in the data (`{name, value, scope}` per variable) precisely so a
+later milestone could read it; M19 reads it. Now the variable dropdowns are **scoped to the sprite
+being edited**: globals plus *that* sprite's own locals, with other sprites' locals hidden. **No
+new opcode, no data-model change, no runtime change** — the runtime already stores locals
+per-target (so they were never visible there); this is the *editor* choosing which names to offer.
 
-It is small because the project already had the right home — `PongScripts` is the project-data file
-both ends read (both call `PongScripts.left_paddle()` etc.), so the variables belong there beside
-the scripts:
+It is small because M18 left the model carrying exactly the field this needs, and M17 left the
+renderer listing whatever names it's handed — so M19 only changes *which* names the editor hands it,
+per sprite:
 
-- **One model declaration.** [`PongScripts.variables()`](scripts/pong_scripts.gd) returns an
-  `Array` of `{name, value, scope}` dicts — `scope` is `"global"` or a **sprite name** (a
-  per-sprite local). This is the single source of truth, replacing the two that disagreed. Adding
-  a variable is one entry here — it still stands in for a real editor's "make a variable" step,
-  but now there is exactly one place to add it.
-- **The runtime seeds from it.** [stage.gd](scripts/stage.gd)`._ready` loops the model: a
-  `"global"` entry lands on the Stage's store (`set_var`), a sprite-scoped one on that target's
-  locals (`find_target(scope).variables[name] = value`) — e.g. the ball's `speed`, which
-  `move_steps` reads as a variable, proving the local store works alongside the globals. An entry
-  scoped to an unknown sprite warns rather than crashing.
-- **The editor derives names from it.** [editor.gd](scripts/editor.gd)'s
-  [`_variable_names`](scripts/editor.gd) maps the model to its names and hands them to
-  [`BlockView.project_variables`](scripts/block_view.gd) (the `_PROJECT_VARIABLES` const is gone).
-  The data-scoped dropdown machinery (M17 — `data_enums`, [`_options_for`](scripts/block_view.gd),
-  `_enum_field`) is **untouched**; it just reads a list sourced from the unified model now.
+- **The editor scopes the list per sprite.** [editor.gd](scripts/editor.gd)'s
+  [`_variables_in_scope(sprite_name)`](scripts/editor.gd) (was `_variable_names`, argument-free and
+  flat) keeps a variable when its `scope` is `"global"` **or** equals `sprite_name`, dropping other
+  sprites' locals. [`_show`](scripts/editor.gd) re-points [`BlockView.project_variables`](scripts/block_view.gd)
+  to this scoped list on **every** sprite switch, *before* the canvas renders — so the menus always
+  match the sprite on screen (`speed` appears only while editing the Ball).
+- **The palette re-scopes too.** The palette's `variable`/`set`/`change` chips draw the same
+  `{name}` dropdown, so [`BlockPalette.rebuild()`](scripts/block_palette.gd) (new) re-renders the
+  chip list whenever the editor re-scopes, keeping the palette honest about the current sprite's
+  variables — not just the canvas. (Spawned blocks default to a global, `p1_score`, so a freshly
+  dragged block always lands on an in-scope name whatever the sprite.)
+- **The renderer is untouched.** [`BlockView`](scripts/block_view.gd) still just lists whatever
+  `project_variables` holds — the M17 `data_enums`/[`_options_for`](scripts/block_view.gd)/`_enum_field`
+  machinery is unchanged. Scoping is a property of the *list the editor builds*, not of how a slot
+  renders it. `project_sprites` is **not** scoped (every sprite is a valid `touching` target).
 
-What this unblocks (still deferred — see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-carrying **scope in the data** is the thing a later **"make a variable"** entry (mint a name the
-runtime will actually seed) and **local-vs-global scoping** (Scratch hides a sprite's locals from
-other sprites) both build on — M18 is their prerequisite, not their delivery. The model is still
-**read-only** (you pick existing names; no dropdown entry mints a new one) and the dropdown options
-are still **flat** (every variable shows for every sprite, scope notwithstanding). And note: the
-**scripts** themselves are still duplicated in spirit (both editor and Stage call the `PongScripts`
-builders); M18 unified the *variables*, not that.
+What this still leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
+the model is still **read-only** — you pick from the (now-scoped) existing names, with no "make a
+variable" entry to mint a new local or global from the UI. M18 was the prerequisite for *both* that
+and scoping; M19 delivered the scoping half. (An odd hand-written name out of scope still renders
+visibly — M13's append-the-unknown-value rule survives — so scoping hides, it never silently drops.)
 
 ---
 
-For context, the M17 mechanics this builds on — the data-scoped dropdowns it now feeds:
+For context, the M18 + M17 mechanics this builds on:
 
+- **One project model (M18).** [`PongScripts.variables()`](scripts/pong_scripts.gd) returns an
+  `Array` of `{name, value, scope}` dicts (`scope` ∈ {`"global"`, a sprite name}) — the single
+  source both the Stage seeds from and the editor lists. M19 reads the `scope` field M18 added.
 - **Data-scoped dropdowns (M17).** An optional **`data_enums` field** on an `_OPCODES` entry maps
   `input_key -> source` (source ∈ {`"variables"`, `"sprites"`}); the `{name}` slots of
   `variable`/`set_var`/`change_var` map to `"variables"`, `touching_sprite?`'s to `"sprites"`.
@@ -58,8 +57,8 @@ For context, the M17 mechanics this builds on — the data-scoped dropdowns it n
   wins, else a `data_enums` source → the matching project list, else `[]`) and feeds them to
   [`build_input`](scripts/block_view.gd), which builds the **same `_enum_field` dropdown** M13's
   fixed-choice slots use. The static [`BlockView.project_variables`](scripts/block_view.gd) /
-  `project_sprites` hold the lists; M18 changed *where the variables list comes from*
-  (`PongScripts.variables()` instead of a hardcoded editor const), not how the slot renders it.
+  `project_sprites` hold the lists; M19 changed *which variables that list holds* (scoped to the
+  sprite, not all of them), not how the slot renders it.
 - **Graceful fallback.** When the model is empty (the palette built before the editor sets it, or
   any non-editor caller), `_options_for` yields `[]` and the slot falls back to the M12 text field.
   A current value not among the options is appended + selected, so nothing snaps away silently.
@@ -124,7 +123,10 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    (M13) — click it and pick a value instead of typing one. The **`{name}` slots** of
    `set`/`change`/`variable` and `touching {name}?` are dropdowns too (M17), but listing the
    project's **actual** variables / sprites — so you pick a real `p1_score` or `Ball` rather than
-   risk a typo that only fails at RUN.
+   risk a typo that only fails at RUN. The variable menus are **scoped to the sprite you're
+   editing** (M19): globals plus that sprite's own locals, so the Ball's `speed` shows only while
+   editing the Ball and is hidden from the paddles — switch sprites and the menus (and the palette's
+   variable chips) re-scope to match.
    **Drag a reporter from the palette into a slot** (M14) to drop an *expression* in — the
    palette now lists reporters (`+`, `score`, `touching … edge?`, …) as pills; drag one over
    a value/condition slot (a highlight marks the slot it will land in) and release to make,
@@ -757,30 +759,65 @@ seeds the same variables; only the *source* is unified.
   `find_target(scope).variables[name] = value` (e.g. the ball's `speed`). An entry scoped to an
   unknown sprite `push_warning`s rather than crashing. The explicit `set_var(...)` /
   `ball.variables["speed"] = …` lines M3–M7 hardcoded here are gone.
-- **The editor derives names from it.** [editor.gd](scripts/editor.gd)'s
-  [`_variable_names`](scripts/editor.gd) maps the model to its names for
-  [`BlockView.project_variables`](scripts/block_view.gd); the `_PROJECT_VARIABLES` const is gone.
+- **The editor derives names from it.** [editor.gd](scripts/editor.gd) maps the model to its names
+  for [`BlockView.project_variables`](scripts/block_view.gd); the `_PROJECT_VARIABLES` const is gone.
   The M17 dropdown machinery (`data_enums`, `_options_for`, `_enum_field`) is **untouched** — it
-  just reads a list sourced from the unified model now.
+  just reads a list sourced from the unified model now. (As of M19 that mapping is
+  [`_variables_in_scope(sprite_name)`](scripts/editor.gd), filtering by `scope`; through M18 it was
+  the argument-free, flat `_variable_names`.)
 
-What M18 unblocks but does **not** deliver (see
-[Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): carrying **scope in the
-data** is the prerequisite for a later **"make a variable"** entry (mint a name the runtime will
-seed) and **local-vs-global scoping** (hide a sprite's locals from other sprites) — both still
-deferred. The model stays **read-only** and the dropdown options stay **flat**. Note the
-**scripts** are still duplicated in spirit (both editor and Stage call the `PongScripts` builders);
-M18 unified the *variables*, not that.
+What M18 unblocks but does **not** deliver: carrying **scope in the data** is the prerequisite for a
+later **"make a variable"** entry (mint a name the runtime will seed) and **local-vs-global scoping**
+(hide a sprite's locals from other sprites). **M19 (below) delivered the scoping half**; "make a
+variable" stays deferred, as does the **scripts** still being duplicated in spirit (both editor and
+Stage call the `PongScripts` builders) — M18 unified the *variables*, not that.
+
+### Variable dropdowns scoped to the selected sprite (M19)
+
+M18 put `scope` in the variable model (`{name, value, scope}`) explicitly as the prerequisite for
+two unlocks; M19 cashes in the **scoping** one. Through M18 the `{name}` dropdowns were **flat** —
+every variable for every sprite — so editing the LeftPaddle offered the Ball's `speed` (a Ball
+*local*), which Scratch never does: a sprite can't see a sibling's local. M19 scopes the dropdowns
+to the sprite being edited. It is small because M18 left the model carrying the `scope` field and
+M17 left the renderer listing whatever names it's handed — so M19 only changes *which* names the
+editor hands it, per sprite. **No new opcode, no data-model change, no runtime change** (the runtime
+already stores locals per-target, so they were never visible there — this is the *editor* choosing
+which names to offer).
+
+- **The editor scopes the list per sprite.** [editor.gd](scripts/editor.gd)'s
+  [`_variables_in_scope(sprite_name)`](scripts/editor.gd) (was the flat, argument-free
+  `_variable_names`) keeps a variable when its `scope` is `"global"` **or** equals `sprite_name`,
+  dropping other sprites' locals. [`_show`](scripts/editor.gd) re-points
+  [`BlockView.project_variables`](scripts/block_view.gd) to this scoped list on **every** sprite
+  switch, *before* the canvas renders, so the menus always match the sprite on screen. `_ready`
+  seeds it for the first sprite (index 0) so the palette's first build is already scoped.
+- **The palette re-scopes too.** The palette's `variable`/`set_var`/`change_var` chips draw the same
+  `{name}` dropdown, so [`BlockPalette.rebuild()`](scripts/block_palette.gd) (new — frees the chip
+  children synchronously and re-runs `_build`) re-renders the chip list whenever the editor
+  re-scopes. So the *whole* UI, palette included, hides a sprite's siblings' locals — not just the
+  canvas. Spawned blocks default to a global (`p1_score`), so a freshly dragged block always lands
+  on an in-scope name whatever the sprite.
+- **The renderer is untouched.** [`BlockView`](scripts/block_view.gd) still just lists whatever
+  `project_variables` holds; scoping is a property of the *list the editor builds*, not of how a
+  slot renders it. `project_sprites` is **not** scoped — every sprite is a valid `touching` target.
+  An out-of-scope name in a hand-written script still renders visibly (M13's append-the-unknown
+  rule survives), so scoping *hides* options, it never silently drops a value already in use.
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): the model
+stays **read-only** — you pick from the now-scoped existing names, with no "make a variable" entry to
+mint a new local or global from the UI. That was M18's *other* unlock, and it waits.
 
 ## Opcodes implemented
 
-**M18 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17) — the editor is a pure
+**M19 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18) — the editor is a pure
 *view + interaction* over the existing language. Every opcode below has a `BlockView._OPCODES` entry
 so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
 value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns, M17 the
-`{name}` slots into dropdowns of the project's real variables/sprites); M14 lets you **drop a
-reporter into any value/condition slot** and M15 lets you **grab one back out**; M16 lets you
-**delete a block by dragging it onto the palette**; and M10 runs whatever you assemble from them.
+`{name}` slots into dropdowns of the project's real variables/sprites, M19 **scoping** those
+variable menus to the selected sprite); M14 lets you **drop a reporter into any value/condition
+slot** and M15 lets you **grab one back out**; M16 lets you **delete a block by dragging it onto
+the palette**; and M10 runs whatever you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -827,10 +864,10 @@ main.tscn                  The *game* scene: a single Node2D "Stage" running sta
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); hands the project model (sprite names + variable names from the unified PongScripts.variables(), M18) to BlockView for data-scoped dropdowns (M17); persists edits + hands them to the Stage on RUN (M10)
+  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); hands the project model (sprite names + variable names from the unified PongScripts.variables(), M18) to BlockView for data-scoped dropdowns (M17), scoping the variable list to the selected sprite — globals + that sprite's locals — and rebuilding the palette on each switch (M19); persists edits + hands them to the Stage on RUN (M10)
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); export_script() serializes edits back (M10)
-  block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for); stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19)
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the unified PongScripts.variables() model (M18), runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -873,15 +910,15 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **A richer project model** — M17 gave the editor data-scoped `{name}` dropdowns and **M18
+- **A "make a variable" UI** — M17 gave the editor data-scoped `{name}` dropdowns, **M18
   unified** their source with the runtime's seeds (one `PongScripts.variables()` declaration of
-  name/value/scope feeds both — the duplication is gone). But the model is still deliberately thin.
-  It is **read-only**: you pick from existing names, with no "make a variable" entry to mint a new
-  one (creating a variable still means adding an entry to `variables()`, not doing it from the UI).
-  Its dropdown options are still **flat**: every variable shows for every sprite, with no
-  global-vs-local scoping in the UI (Scratch hides a sprite's locals from other sprites) — even
-  though the model now *carries* `scope`, which is what a scoping milestone builds on. Both unlocks
-  ride on M18's scope-in-the-data; M18 was their prerequisite, not their delivery.
+  name/value/scope feeds both — the duplication is gone), and **M19 scoped** the dropdowns to the
+  selected sprite (globals + that sprite's locals; a sprite's locals are hidden from its siblings).
+  Both M19's scoping and this remaining gap rode on M18's scope-in-the-data — M18 was their
+  prerequisite, and M19 spent the scoping half. What stays deferred is the model being
+  **read-only**: you pick from existing names, with no "make a variable" entry to mint a new local
+  or global from the UI (creating a variable still means adding an entry to `variables()`, not
+  doing it from the editor). That is the last of M18's two unlocks still outstanding.
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts.
 - **Full-body grab of an all-field pill, and ejecting/wrapping** — M15 made on-canvas
