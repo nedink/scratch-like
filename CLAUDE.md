@@ -426,8 +426,14 @@ approximated with `StyleBoxFlat` corner radii (pill = reporter, light corners =
 statement); true Scratch notch/hexagon geometry is cosmetic and deferred.
 
 [scripts/editor.gd](scripts/editor.gd) is the scene root (the `editor.tscn` front
-door), parallel to `stage.gd`: it builds its UI **in code** (a bare root `Control` +
-script, like `main.tscn` is a bare `Node2D` + `stage.gd`). It holds a name→script
+door), parallel to `stage.gd`. Its **fixed-shape chrome** — the backdrop, the top bar, the
+`palette | canvas` workspace, and the three variable dialogs (Make / Rename / Delete) — is
+**declared in `editor.tscn`** (it was built in code through an earlier pass; nothing about that
+layout is data-driven, so it moved to the scene editor). The script reaches those nodes by
+unique name (`%Canvas`, `%VarDialog`, …) and supplies only the dynamic parts: the selector's
+items (from the script list), the signal wiring, and the dialog logic. The *contents* of the
+palette and canvas — generated from block data — stay in code, as does `stage.gd`'s sprite set
+(that set is headed for the data-owned project model, not the scene editor). It holds a name→script
 list (a small duplicate of the wiring in `stage.gd._ready`; a later milestone where
 the editor *owns* the project model would unify them), a sprite-selector
 `OptionButton` that loads the chosen script into the canvas, and a **RUN** button that
@@ -1002,12 +1008,12 @@ assemble from them.
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); 480x360 window
-editor.tscn                Main scene (M8): a bare root Control running editor.gd — the editor front door
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + RUN), the palette | canvas workspace (each in a ScrollContainer), and the Make/Rename/Delete variable dialogs — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20)
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20)
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging

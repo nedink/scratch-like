@@ -1,6 +1,11 @@
-[gd_scene format=3 uid="uid://c8m3rqv2x7n4d"]
+[gd_scene load_steps=5 format=3 uid="uid://c8m3rqv2x7n4d"]
 
 [ext_resource type="Script" path="res://scripts/editor.gd" id="1_editor"]
+[ext_resource type="Script" path="res://scripts/block_palette.gd" id="2_palette"]
+[ext_resource type="Script" path="res://scripts/block_canvas.gd" id="3_canvas"]
+
+[sub_resource type="Theme" id="Theme_ui"]
+default_font_size = 11
 
 [node name="Editor" type="Control"]
 layout_mode = 3
@@ -9,4 +14,142 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = SubResource("Theme_ui")
 script = ExtResource("1_editor")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.117647, 0.117647, 0.133333, 1)
+
+[node name="Page" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 4
+
+[node name="Bar" type="HBoxContainer" parent="Page"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="Page/Bar"]
+layout_mode = 2
+text = "scratch-like"
+
+[node name="SpriteSelector" type="OptionButton" parent="Page/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Page/Bar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RunButton" type="Button" parent="Page/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "RUN"
+
+[node name="Workspace" type="HBoxContainer" parent="Page"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="PaletteScroll" type="ScrollContainer" parent="Page/Workspace"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(150, 0)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Palette" type="VBoxContainer" parent="Page/Workspace/PaletteScroll"]
+unique_name_in_owner = true
+layout_mode = 2
+script = ExtResource("2_palette")
+
+[node name="CanvasScroll" type="ScrollContainer" parent="Page/Workspace"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="Canvas" type="Control" parent="Page/Workspace/CanvasScroll"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(1200, 1200)
+layout_mode = 2
+script = ExtResource("3_canvas")
+
+[node name="VarDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "New Variable"
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="VarDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="VarDialog/VBox"]
+layout_mode = 2
+text = "Variable name:"
+
+[node name="VarNameEdit" type="LineEdit" parent="VarDialog/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
+[node name="VarScope" type="OptionButton" parent="VarDialog/VBox"]
+unique_name_in_owner = true
+layout_mode = 2
+item_count = 2
+popup/item_0/text = "For all sprites"
+popup/item_0/id = 0
+popup/item_1/text = "For this sprite only"
+popup/item_1/id = 1
+selected = 0
+
+[node name="RenameDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Rename Variable"
+visible = false
+
+[node name="VBox" type="VBoxContainer" parent="RenameDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="RenameDialog/VBox"]
+layout_mode = 2
+text = "New name:"
+
+[node name="RenameEdit" type="LineEdit" parent="RenameDialog/VBox"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
+[node name="DeleteDialog" type="ConfirmationDialog" parent="."]
+unique_name_in_owner = true
+title = "Delete Variable"
+visible = false
+
+[node name="DeleteLabel" type="Label" parent="DeleteDialog"]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

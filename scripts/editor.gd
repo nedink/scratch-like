@@ -14,9 +14,13 @@ extends Control
 ## F5 launches *this* instead of the game; the game is reached through the RUN button,
 ## which switches to main.tscn (the Stage) and hands it the *edited* scripts (M10).
 ##
-## Like stage.gd, the UI is built entirely in code; editor.tscn is a bare root
-## Control + this script, matching the project's "generate the scene tree in code"
-## idiom (main.tscn is likewise a bare Node2D + stage.gd).
+## The chrome — the fixed-shape layout (backdrop, top bar, palette | canvas workspace) and
+## the three variable dialogs (Make / Rename / Delete) — is **declared in editor.tscn**, since
+## none of it is data-driven; this script reaches those nodes by unique name (`%`) and supplies
+## only the dynamic parts (the selector's items, the signal wiring, the dialog logic). The
+## *contents* of the palette and canvas, which are generated from block data, stay in code
+## (block_palette.gd / block_canvas.gd). (stage.gd still builds its sprites in code — that set
+## is headed for the data-owned project model, not the scene editor.)
 
 ## The game scene the RUN button launches. main.tscn is unchanged from M7 — it is
 ## just no longer the project's main_scene (the editor is); it is the *game* now.
@@ -35,10 +39,19 @@ var _scripts: Array = []
 var _current: int = -1
 
 ## The interactive block canvas (M9): drag/snap lives here. Reloaded on selection.
-var _canvas: BlockCanvas
+## A scene node (editor.tscn), grabbed by unique name.
+@onready var _canvas: BlockCanvas = %Canvas
 
 ## The block palette (M11): the source of *new* blocks. Hands fresh blocks to the canvas.
-var _palette: BlockPalette
+@onready var _palette: BlockPalette = %Palette
+
+## The palette's ScrollContainer — also the canvas's trash region (M16): a block dragged
+## back over it is deleted. (The palette VBox lives inside it.)
+@onready var _palette_scroll: ScrollContainer = %PaletteScroll
+
+## The top-bar widgets we wire in _ready: the sprite selector (populated from _scripts) and RUN.
+@onready var _selector: OptionButton = %SpriteSelector
+@onready var _run_button: Button = %RunButton
 
 ## The project's variable model (M20) — the editor-owned, **mutable** counterpart of _scripts.
 ## Seeded from PongScripts.variables() (the single declaration the runtime also reads), then
@@ -51,20 +64,20 @@ var _variables: Array = []
 
 ## The "Make a Variable" dialog (M20) and its inputs: a name field and a scope selector
 ## ("For all sprites" → a global / "For this sprite only" → a local of the edited sprite).
-## Built once in _ready and reused; the palette button pops it via _make_variable.
-var _var_dialog: ConfirmationDialog
-var _var_name_edit: LineEdit
-var _var_scope: OptionButton
+## Declared in editor.tscn and reused; the palette button pops it via _make_variable.
+@onready var _var_dialog: ConfirmationDialog = %VarDialog
+@onready var _var_name_edit: LineEdit = %VarNameEdit
+@onready var _var_scope: OptionButton = %VarScope
 
-## The rename / delete dialogs (M21), built once in _ready and reused. A palette variable row's
+## The rename / delete dialogs (M21), declared in editor.tscn and reused. A palette variable row's
 ## menu pops one of these via _rename_variable / _delete_variable; _renaming / _deleting hold the
 ## name the open dialog is acting on (the dialogs' confirmed signals carry no payload). The delete
 ## label is rewritten per-invocation to report the usage count.
-var _rename_dialog: ConfirmationDialog
-var _rename_edit: LineEdit
+@onready var _rename_dialog: ConfirmationDialog = %RenameDialog
+@onready var _rename_edit: LineEdit = %RenameEdit
 var _renaming: String = ""
-var _delete_dialog: ConfirmationDialog
-var _delete_label: Label
+@onready var _delete_dialog: ConfirmationDialog = %DeleteDialog
+@onready var _delete_label: Label = %DeleteLabel
 var _deleting: String = ""
 
 
@@ -96,80 +109,13 @@ func _ready() -> void:
 	BlockView.project_sprites = _sprite_names()
 	BlockView.project_variables = _variables_in_scope(_scripts[0]["name"])
 
-	# A small default font size so the chunky blocks fit the 480x360 viewport (which
-	# the project integer-stretches to fullscreen). One Theme on the root cascades to
-	# every label and button below.
-	var ui_theme := Theme.new()
-	ui_theme.default_font_size = 11
-	theme = ui_theme
-	set_anchors_preset(Control.PRESET_FULL_RECT)
-
-	# Dark backdrop behind everything (added first so it sits at the back).
-	var backdrop := ColorRect.new()
-	backdrop.color = Color("#1e1e22")
-	backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(backdrop)
-
-	var page := VBoxContainer.new()
-	page.set_anchors_preset(Control.PRESET_FULL_RECT)
-	page.add_theme_constant_override("separation", 4)
-	add_child(page)
-
-	# Top bar: title + sprite selector + RUN.
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 8)
-	page.add_child(bar)
-
-	var title := Label.new()
-	title.text = "scratch-like"
-	bar.add_child(title)
-
-	var selector := OptionButton.new()
+	# The layout (backdrop, top bar, palette | canvas workspace) and the three variable dialogs
+	# are declared in editor.tscn; the @onready vars above already point at them. We supply only
+	# the dynamic parts: fill the sprite selector and wire the signals.
 	for entry in _scripts:
-		selector.add_item(entry["name"])
-	selector.item_selected.connect(_on_select)
-	bar.add_child(selector)
-
-	# Push RUN to the right edge.
-	var spacer := Control.new()
-	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.add_child(spacer)
-
-	var run := Button.new()
-	run.text = "RUN"
-	run.pressed.connect(_on_run)
-	bar.add_child(run)
-
-	# The workspace: a fixed-width palette of new blocks (M11) on the left, the editable
-	# canvas filling the rest. Each sits in its own ScrollContainer (the palette's list
-	# and a tall script both overflow). Hit-testing uses global coordinates throughout,
-	# so both stay correct whatever their scroll offsets.
-	var workspace := HBoxContainer.new()
-	workspace.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	workspace.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.add_theme_constant_override("separation", 4)
-	page.add_child(workspace)
-
-	# Fixed-width viewport; the palette scrolls vertically through the block list and, if
-	# a long block label overflows the width, horizontally too (rather than clipping it).
-	var palette_scroll := ScrollContainer.new()
-	palette_scroll.custom_minimum_size = Vector2(150, 0)
-	palette_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.add_child(palette_scroll)
-
-	_palette = BlockPalette.new()
-	palette_scroll.add_child(_palette)
-
-	# The canvas gets a generous minimum size so there's room to drag stacks around and
-	# scrollbars appear when content overflows.
-	var scroll := ScrollContainer.new()
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	workspace.add_child(scroll)
-
-	_canvas = BlockCanvas.new()
-	_canvas.custom_minimum_size = Vector2(1200, 1200)
-	scroll.add_child(_canvas)
+		_selector.add_item(entry["name"])
+	_selector.item_selected.connect(_on_select)
+	_run_button.pressed.connect(_on_run)
 
 	# The palette feeds fresh blocks to the canvas (M11) and doubles as the canvas's trash:
 	# dragging a block back over the palette region deletes it (M16, Scratch's own gesture).
@@ -179,11 +125,17 @@ func _ready() -> void:
 	# Each in-scope variable's palette row (M21) calls back here to rename or delete it.
 	_palette._on_rename_variable = _rename_variable
 	_palette._on_delete_variable = _delete_variable
-	_canvas._trash = palette_scroll
+	_canvas._trash = _palette_scroll
 
-	_build_variable_dialog()
-	_build_rename_dialog()
-	_build_delete_dialog()
+	# Wire the scene's dialogs: their confirmed signal to the handler, and Enter in the text
+	# field to confirm (register_text_enter, matching Scratch's quick flow). The delete dialog
+	# has no text field — its body label is rewritten per-invocation in _delete_variable.
+	_var_dialog.confirmed.connect(_on_new_variable_confirmed)
+	_var_dialog.register_text_enter(_var_name_edit)
+	_rename_dialog.confirmed.connect(_on_rename_confirmed)
+	_rename_dialog.register_text_enter(_rename_edit)
+	_delete_dialog.confirmed.connect(_on_delete_confirmed)
+
 	_show(0)
 
 
@@ -237,36 +189,9 @@ func _variables_in_scope(sprite_name: String) -> Array:
 
 # --- Make a Variable (M20) -------------------------------------------------
 
-## Build the "Make a Variable" dialog once: a name field and a global/local scope selector.
-## Reused on every press of the palette button (popped by _make_variable). Enter in the name
-## field confirms (register_text_enter), matching Scratch's quick flow.
-func _build_variable_dialog() -> void:
-	_var_dialog = ConfirmationDialog.new()
-	_var_dialog.title = "New Variable"
-	_var_dialog.confirmed.connect(_on_new_variable_confirmed)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-
-	var name_label := Label.new()
-	name_label.text = "Variable name:"
-	box.add_child(name_label)
-
-	_var_name_edit = LineEdit.new()
-	_var_name_edit.custom_minimum_size = Vector2(220, 0)
-	box.add_child(_var_name_edit)
-
-	_var_scope = OptionButton.new()
-	_var_scope.add_item("For all sprites")        # index 0 -> "global"
-	_var_scope.add_item("For this sprite only")   # index 1 -> the edited sprite's name
-	box.add_child(_var_scope)
-
-	_var_dialog.add_child(box)
-	add_child(_var_dialog)
-	_var_dialog.register_text_enter(_var_name_edit)
-
-
 ## Pop the dialog with a blank, all-sprites default — the palette button's callback.
+## The dialog (name field + global/local scope selector) is declared in editor.tscn; its
+## scope items are fixed text, so they live in the scene, and Enter-to-confirm is wired in _ready.
 func _make_variable() -> void:
 	_var_name_edit.text = ""
 	_var_scope.select(0)
@@ -299,38 +224,6 @@ func _on_new_variable_confirmed() -> void:
 
 
 # --- Rename / delete a variable (M21) --------------------------------------
-
-## Build the rename dialog once: a single name field, prefilled with the current name when popped.
-## Enter confirms (register_text_enter), like the make dialog.
-func _build_rename_dialog() -> void:
-	_rename_dialog = ConfirmationDialog.new()
-	_rename_dialog.title = "Rename Variable"
-	_rename_dialog.confirmed.connect(_on_rename_confirmed)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 6)
-	var label := Label.new()
-	label.text = "New name:"
-	box.add_child(label)
-	_rename_edit = LineEdit.new()
-	_rename_edit.custom_minimum_size = Vector2(220, 0)
-	box.add_child(_rename_edit)
-
-	_rename_dialog.add_child(box)
-	add_child(_rename_dialog)
-	_rename_dialog.register_text_enter(_rename_edit)
-
-
-## Build the delete-confirmation dialog once. Its label is rewritten each time it pops to name the
-## variable and report how many blocks use it (and that they survive the delete).
-func _build_delete_dialog() -> void:
-	_delete_dialog = ConfirmationDialog.new()
-	_delete_dialog.title = "Delete Variable"
-	_delete_dialog.confirmed.connect(_on_delete_confirmed)
-	_delete_label = Label.new()
-	_delete_dialog.add_child(_delete_label)
-	add_child(_delete_dialog)
-
 
 ## Pop the rename dialog for `name` (a palette row's menu callback). The name is selected so the
 ## user can type a replacement immediately.
