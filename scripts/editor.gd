@@ -376,9 +376,9 @@ func _on_rename_confirmed() -> void:
 	_canvas.refresh()  # after re-pointing project_variables, so the new name is an in-scope option
 
 
-## Pop the delete-confirmation dialog for `name`, reporting how many blocks reference it. We persist
-## the canvas first so the current sprite's count reads from up-to-date data. Deletion keeps those
-## blocks (they dangle and re-bind if the variable is re-made), so the dialog says as much.
+## Pop the delete-confirmation dialog for `var_name`, reporting how many references it has (counted
+## over the in-scope scripts). We persist the canvas first so the current sprite's count reads from
+## up-to-date data. Confirming strips those references (see _on_delete_confirmed), so the dialog warns.
 func _delete_variable(var_name: String) -> void:
 	_persist_current()
 	_deleting = var_name
@@ -390,21 +390,38 @@ func _delete_variable(var_name: String) -> void:
 	for i in _scripts.size():
 		if _is_referent_for(String(_scripts[i]["name"]), var_name, scope):
 			uses += BlockView.count_variable_refs(_scripts[i]["script"], var_name)
-	_delete_label.text = "Delete \"%s\"?  Used by %d block(s).\nThey keep the name and re-bind if you make it again." % [var_name, uses]
+	_delete_label.text = "Delete \"%s\"?\n%d reference(s) in the scripts will be removed too." % [var_name, uses]
 	_delete_dialog.popup_centered(Vector2i(380, 140))
 
 
-## Commit a delete: remove only the in-scope model entry; referencing blocks are left untouched
-## (dangling — the renderer still shows the name via M13's append-the-unknown rule, and re-creating
-## the variable re-binds them at the dropdown and at RUN). Re-scope/rebuild/refresh as ever.
+## Commit a delete: strip every reference, then remove the model entry. References are removed where
+## this variable is the in-scope referent (same scoping as rename, _is_referent_for): the current
+## sprite in place via BlockCanvas.delete_variable_refs (positions preserved), the rest via
+## BlockView.strip_variable_refs on _scripts[i]. set_var/change_var statements are dropped and
+## `variable` reporters revert their slot to a default — no dangling name survives (Scratch's
+## behavior). Delete is destructive; there is no undo (relaunch reloads the stock set).
 func _on_delete_confirmed() -> void:
+	var entry := _in_scope_entry(_deleting)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
 	var sprite_name := String(_scripts[_current]["name"])
+
+	for i in _scripts.size():
+		if not _is_referent_for(String(_scripts[i]["name"]), _deleting, scope):
+			continue
+		if i == _current:
+			_canvas.delete_variable_refs(_deleting)  # in place — preserves canvas positions
+		else:
+			BlockView.strip_variable_refs(_scripts[i]["script"], _deleting)
+
 	for i in _variables.size():
 		var v: Dictionary = _variables[i]
-		var scope := String(v.get("scope", "global"))
-		if String(v["name"]) == _deleting and (scope == "global" or scope == sprite_name):
+		var s := String(v.get("scope", "global"))
+		if String(v["name"]) == _deleting and (s == "global" or s == sprite_name):
 			_variables.remove_at(i)
 			break
+
 	BlockView.project_variables = _variables_in_scope(sprite_name)
 	_palette.rebuild()
 	_canvas.refresh()

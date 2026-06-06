@@ -15,9 +15,9 @@ a manageable row whose menu offers **Rename** and **Delete**.
 
 Like M19 — and unlike M20 — **M21 does not touch the runtime.** Rename rewrites the model entry *and*
 the blocks that reference the old name, and the Stage then seeds the new name while the blocks carry
-it; delete removes only the model entry and leaves referencing blocks **dangling** (they re-bind if
-the variable is re-made). Both reuse machinery already in place (M20's mutable `_variables`, the
-rebuild/refresh trio, M13's append-the-unknown rendering).
+it; delete removes the model entry *and* **strips the references** (Scratch's behavior — no dangling
+name survives). Both reuse machinery already in place (M20's mutable `_variables`, the rebuild/refresh
+trio, the shared block-tree walkers).
 
 - **The palette rows + menu.** [`BlockPalette._build`](scripts/block_palette.gd) draws, beneath the
   M20 "Make a Variable" button, one [`_make_variable_row`](scripts/block_palette.gd) per name in
@@ -40,12 +40,16 @@ rebuild/refresh trio, M13's append-the-unknown rendering).
   Scoping ([`_is_referent_for`](scripts/editor.gd)): a **local** renames only its own sprite; a
   **global** renames everywhere *except* a sprite that shadows the name with its own local. A blank,
   unchanged, or already-in-scope new name is rejected silently (the make-variable guard).
-- **Delete, confirm-and-keep-dangling.** [`editor._delete_variable`](scripts/editor.gd) pops a
-  `ConfirmationDialog` reporting the usage count (summed via `count_variable_refs` over the same
-  scoped scripts); on confirm [`_on_delete_confirmed`](scripts/editor.gd) removes **only** the
-  in-scope `_variables` entry. Referencing blocks keep their name string — the renderer still shows
-  it (M13's append-the-unknown rule), and re-creating the variable re-binds them in the dropdowns and
-  at RUN. So delete is **reversible** by re-creation — the only undo this project has.
+- **Delete, confirm-and-strip-references.** [`editor._delete_variable`](scripts/editor.gd) pops a
+  `ConfirmationDialog` reporting how many references will be removed (summed via `count_variable_refs`
+  over the same scoped scripts); on confirm [`_on_delete_confirmed`](scripts/editor.gd) removes the
+  in-scope `_variables` entry **and** strips every reference — `set_var`/`change_var` statements are
+  dropped, and a `variable` reporter is plucked from its slot, which reverts to the host opcode's
+  default literal (M15's slot_default rule), so `move (speed)` becomes `move 10`. Host blocks
+  (`move`, `if`, operators) survive; only the reference goes. The current sprite is stripped in place
+  via [`BlockCanvas.delete_variable_refs`](scripts/block_canvas.gd) (positions preserved), the rest
+  via [`BlockView.strip_variable_refs`](scripts/block_view.gd). Delete is destructive — there is no
+  undo (relaunch reloads the stock set), so the dialog states the count first.
 
 What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
 **editing a stock variable's initial value** (still [`PongScripts.variables()`](scripts/pong_scripts.gd)),
@@ -149,9 +153,11 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    **Rename or delete a variable** (M21) from its row in that same VARIABLES group: beneath the button
    each in-scope variable is listed as a button — click it and pick **Rename** (type a new name; it
    updates everywhere it's used, your canvas layout unchanged) or **Delete** (a dialog reports how
-   many blocks use it; confirming removes only the variable — those blocks keep the name and **re-bind
-   if you make it again**, the one undo there is). The rows re-scope per sprite like the dropdowns.
-   (You still can't change a stock variable's *initial value* from the UI; relaunch resets to stock.)
+   many references it has; confirming removes the variable *and* its references — `set`/`change` blocks
+   go, and a `(variable)` reporter reverts its slot to a default, so `move (speed)` becomes `move 10`).
+   Delete is permanent — there's no undo (relaunch reloads the stock set). The rows re-scope per sprite
+   like the dropdowns. (A variable's *initial value* is always 0 — Scratch's model; a non-zero start is
+   a `set` block in the script, which you can edit on the canvas.)
    **Drag a reporter from the palette into a slot** (M14) to drop an *expression* in — the
    palette now lists reporters (`+`, `score`, `touching … edge?`, …) as pills; drag one over
    a value/condition slot (a highlight marks the slot it will land in) and release to make,
@@ -887,10 +893,10 @@ M20 made the variable model **mint-only**: you could append a name but never **r
 without editing [`PongScripts.variables()`](scripts/pong_scripts.gd) by hand. M21 makes it fully
 editable — the palette's VARIABLES group lists each **in-scope** variable as a manageable row offering
 **Rename** / **Delete**. It is small because it reuses M20's mutable `_variables`, the M19 scoped
-list, the rebuild/refresh trio, and M13's append-the-unknown rendering. Like M19, and unlike M20, it
-**does not touch the runtime**: rename feeds the seed model *and* the blocks new names; delete leaves
-dangling references that behave exactly as a hand-written reference to an unseeded variable already
-does. **No new opcode, no block-data-shape change.**
+list, and the rebuild/refresh trio. Like M19, and unlike M20, it **does not touch the runtime**:
+rename feeds the seed model *and* the blocks new names; delete drops the seed entry *and* strips the
+blocks' references (Scratch's behavior — no dangling name is left). **No new opcode, no
+block-data-shape change.**
 
 - **The palette rows + menu.** Beneath the M20 "Make a Variable" button,
   [`BlockPalette._build`](scripts/block_palette.gd) adds one
@@ -906,8 +912,9 @@ does. **No new opcode, no block-data-shape change.**
 - **One block-tree walk, factored onto `BlockView`.** The cascade is a single recursion over the
   `{opcode, inputs}` tree (a block dict; its `inputs` values may be nested reporter dicts; `body` is a
   nested array — the same shape `build_stack`/`build_block`/`build_input` already walk).
-  [`BlockView.count_variable_refs`](scripts/block_view.gd) tallies and
-  [`BlockView.rewrite_variable_refs`](scripts/block_view.gd) renames every
+  [`BlockView.count_variable_refs`](scripts/block_view.gd) tallies,
+  [`BlockView.rewrite_variable_refs`](scripts/block_view.gd) renames, and
+  [`BlockView.strip_variable_refs`](scripts/block_view.gd) removes every
   `variable`/`set_var`/`change_var` (the `_VARIABLE_OPCODES`) whose `inputs.name` matches. Both
   callers — the canvas and the editor — share these.
 - **Rename: scoped, and position-preserving.** [`editor._on_rename_confirmed`](scripts/editor.gd)
@@ -922,14 +929,17 @@ does. **No new opcode, no block-data-shape change.**
   renames everywhere *except* a sprite that shadows the name with its own local (there the name means
   the local — [`_sprite_has_local`](scripts/editor.gd)). Then the M20 trio (re-point
   `project_variables`, `rebuild()`, `refresh()`) so every menu, chip, and dropdown shows the new name.
-- **Delete: confirm with a count, keep the blocks.**
+- **Delete: confirm with a count, strip the references.**
   [`editor._delete_variable`](scripts/editor.gd) persists the canvas, sums
   `count_variable_refs` over the same scoped scripts, and pops a `ConfirmationDialog` reporting the
-  count. On confirm, [`_on_delete_confirmed`](scripts/editor.gd) removes **only** the in-scope
-  `_variables` entry. Referencing blocks are untouched: the renderer keeps showing the name (M13's
-  append-the-unknown rule), and **re-creating the variable re-binds them** — the dropdown re-lists it
-  as an in-scope option and RUN re-seeds it. So delete is **reversible by re-creation**, the only undo
-  the project has (there is no undo stack — M16).
+  count. On confirm, [`_on_delete_confirmed`](scripts/editor.gd) strips the references where this
+  variable is the in-scope referent (same `_is_referent_for` scoping as rename) — the current sprite
+  in place via [`BlockCanvas.delete_variable_refs`](scripts/block_canvas.gd) (positions preserved),
+  the rest via `BlockView.strip_variable_refs` — then removes the `_variables` entry.
+  `set_var`/`change_var` statements are dropped from their stack; a `variable` reporter reverts its
+  slot to the host opcode's default literal (so `move (speed)` → `move 10`), leaving the host block.
+  No dangling name remains (Scratch's behavior). Delete is **destructive** — there is no undo stack
+  (M16), so the dialog states the count first; relaunch reloads the stock set.
 
 Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **editing a
 stock variable's initial value** (still a `PongScripts.variables()` edit), the **full-body grab** of a
@@ -997,15 +1007,15 @@ main.tscn                  The *game* scene: a single Node2D "Stage" running sta
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete removes only the entry and leaves blocks dangling; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20)
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable() rewrites the working stacks in place on a UI rename, preserving positions (M21); export_script() serializes edits back (M10)
+  editor.gd                Editor root (M8): sprite selector + RUN; lays out palette | canvas, wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20), runs scripts (edited via project_scripts, else PongScripts — M10)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style, so they survive delete + re-make (M21)
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed
 CLAUDE.md                  This file
 ```
 
@@ -1029,7 +1039,8 @@ CLAUDE.md                  This file
   variables group, name it, pick global/local — it is appended to the editor's working model and
   seeded at RUN, but only for the session (relaunch resets to stock). You can also **rename or
   delete** it from its row's menu (M21) — rename cascades across the scripts that reference it; delete
-  removes only the model entry (referencing blocks dangle and re-bind if re-made). **In the stock
+  strips its references (drops `set`/`change` blocks, reverts `variable`-reporter slots to defaults)
+  and removes the entry. **In the stock
   project**: add one `{name, value, scope}` entry to
   [`PongScripts.variables()`](scripts/pong_scripts.gd) (M18) — the seed model the editor starts from
   and the Stage falls back to. `scope` is `"global"` or a sprite name (a per-sprite local). Don't seed

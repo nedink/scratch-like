@@ -47,8 +47,8 @@ const SERVE_SPREAD := 45.0
 ## later "make a variable" / local-vs-global scoping milestone builds on (see CLAUDE.md). Every
 ## declared variable seeds to **0**: a non-zero starting value is set by a `set` block in the owning
 ## script (the Ball's `set speed to BALL_SPEED`), as in Scratch — so it lives in the editable program,
-## not a hidden seed, and survives deleting + re-making the variable (M21). The editor can now add /
-## rename / delete entries from the UI (M20/M21); add a stock one here.
+## not a hidden seed. The editor can now add / rename / delete entries from the UI (M20/M21); add a
+## stock one here.
 static func variables() -> Array:
 	return [
 		{"name": "p1_score", "value": 0, "scope": "global"},
@@ -99,9 +99,9 @@ static func ball() -> Array:
 	return [
 		_hat([
 			# Initialize the ball's speed with a block, not a non-zero seed (Scratch's model): the
-			# variable declares to 0 (PongScripts.variables) and this sets it up front. So deleting +
-			# re-making `speed` in the editor (M21) re-initializes it here, instead of leaving the ball
-			# frozen at the re-created 0 — the starting value is part of the editable program.
+			# variable declares to 0 (PongScripts.variables) and this sets it up front, so the starting
+			# value lives in the editable program rather than a hidden seed — and is editable in the
+			# canvas (click the `{6}` literal) instead of only via PongScripts.
 			_set_var("speed", BALL_SPEED),
 			_go_to(CENTER.x, CENTER.y),
 			_point(_serve_right()),

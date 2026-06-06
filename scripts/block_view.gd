@@ -338,6 +338,44 @@ static func rewrite_variable_refs(blocks: Array, old_name: String, new_name: Str
 				rewrite_variable_refs(value, old_name, new_name)
 
 
+## Remove every reference to `name` from `blocks` (M21 delete), in place. A `set_var`/`change_var`
+## statement naming it is dropped from its array; a `variable` reporter naming it is plucked from its
+## slot, which reverts to the host opcode's default literal (M15's slot_default rule) — so `move
+## (speed)` becomes `move 10` rather than leaving a hole. Host blocks (`move`, `if`, an operator) are
+## kept; only the reference goes. Recurses into nested reporters and `body` substacks, the same tree
+## count/rewrite walk. (Mutates the live arrays/dicts the caller holds.)
+static func strip_variable_refs(blocks: Array, name: String) -> void:
+	var i := 0
+	while i < blocks.size():
+		var block: Variant = blocks[i]
+		if typeof(block) != TYPE_DICTIONARY:
+			i += 1
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if (opcode == "set_var" or opcode == "change_var") and String(inputs.get("name", "")) == name:
+			blocks.remove_at(i)  # drop the statement; don't advance — the next block shifts down
+			continue
+		_strip_input_refs(opcode, inputs, name)
+		i += 1
+
+
+## Scrub one block's input slots (helper for strip_variable_refs): a `variable` reporter naming
+## `name` reverts to this opcode's default for that key; any other nested reporter recurses (it may
+## itself hold a `variable`, e.g. `speed + 1`); a `body` array recurses as a substack.
+static func _strip_input_refs(opcode: String, inputs: Dictionary, name: String) -> void:
+	var defaults: Dictionary = _OPCODES.get(opcode, {}).get("defaults", {})
+	for key in inputs:
+		var value: Variant = inputs[key]
+		if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+			if String(value.get("opcode", "")) == "variable" and String(value.get("inputs", {}).get("name", "")) == name:
+				inputs[key] = defaults.get(key)
+			else:
+				_strip_input_refs(String(value.get("opcode", "")), value.get("inputs", {}), name)
+		elif typeof(value) == TYPE_ARRAY:
+			strip_variable_refs(value, name)
+
+
 ## The opcodes the palette offers, grouped for display: an Array of
 ## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. As of M14 **every** kind is listed,
 ## reporters included — a reporter now has a drop target (a value/condition slot), so you can

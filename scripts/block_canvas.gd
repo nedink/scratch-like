@@ -166,6 +166,19 @@ func rename_variable(old_name: String, new_name: String) -> void:
 	_render()
 
 
+## Remove every reference to `var_name` from the working stacks (M21 delete), in place, then
+## re-render — the current sprite's half of the delete cascade (the editor strips the other sprites'
+## _scripts directly). Like rename_variable this mutates in place to preserve canvas positions. A
+## top-level stack left empty (a loose `set`/`change` that was the whole stack) is dropped.
+func delete_variable_refs(var_name: String) -> void:
+	for stack in _stacks:
+		BlockView.strip_variable_refs(stack["blocks"], var_name)
+	for s in range(_stacks.size() - 1, -1, -1):
+		if (_stacks[s]["blocks"] as Array).is_empty():
+			_stacks.remove_at(s)
+	_render()
+
+
 # --- Rendering -------------------------------------------------------------
 
 ## Rebuild every top-level stack from the data and place it at its stored position.

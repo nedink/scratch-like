@@ -70,7 +70,7 @@ func _ready() -> void:
 	# it handed one over (so a variable *made in the UI* is seeded too), else PongScripts — see
 	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch.
 	# Every declared variable seeds to 0; non-zero starts (the ball's `speed`) come from `set` blocks
-	# in the scripts, not the seed — so deleting + re-making a variable in the editor re-initializes it.
+	# in the scripts, not the seed (Scratch's model — the starting value lives in the editable program).
 	for v in _variable_model():
 		if v["scope"] == "global":
 			set_var(v["name"], v["value"])
