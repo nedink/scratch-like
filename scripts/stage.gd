@@ -68,8 +68,9 @@ func _ready() -> void:
 	# locals — e.g. the ball's `speed`, which move_steps reads as a variable, proving the
 	# local store works alongside the globals. As of M20 the model comes from the editor when
 	# it handed one over (so a variable *made in the UI* is seeded too), else PongScripts — see
-	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch;
-	# `round` starts at 1 (M5's best-of-N counter).
+	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch.
+	# Every declared variable seeds to 0; non-zero starts (the ball's `speed`) come from `set` blocks
+	# in the scripts, not the seed — so deleting + re-making a variable in the editor re-initializes it.
 	for v in _variable_model():
 		if v["scope"] == "global":
 			set_var(v["name"], v["value"])

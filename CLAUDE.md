@@ -1005,7 +1005,7 @@ scripts/
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20)
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style, so they survive delete + re-make (M21)
 CLAUDE.md                  This file
 ```
 
@@ -1048,13 +1048,15 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Value-edit of a stock variable's initial value** — **M20 delivered "make a variable"** and
-  **M21 delivered rename + delete** (each in-scope variable's palette row carries a Rename/Delete
-  menu), so the model is fully editable: you can mint, rename, and remove a global or sprite-local
-  from the editor. What stays deferred is changing an *existing* variable's **initial value** — that
-  still means editing [`PongScripts.variables()`](scripts/pong_scripts.gd) (a made variable always
-  starts at 0). (M21 put rename/delete on the *palette rows*, not on a canvas-pill right-click menu,
-  so it did **not** free the full-body pill grab below — see that bullet.)
+- **Editing a variable's model entry from the UI** — **M20 delivered "make a variable"** and **M21
+  delivered rename + delete** (each in-scope variable's palette row carries a Rename/Delete menu), so
+  the model is fully editable: you can mint, rename, and remove a global or sprite-local from the
+  editor. A variable's **initial value is always 0** — that is Scratch's model, and it is *not* a
+  deferral: a non-zero starting value is expressed by a `set` block in the script (the Ball's
+  `set speed to BALL_SPEED`), which **is** editable in the canvas (click the literal). What still
+  lives only in [`PongScripts.variables()`](scripts/pong_scripts.gd) is the *declaration* (a stock
+  variable's name + scope). (M21 put rename/delete on the *palette rows*, not a canvas-pill
+  right-click menu, so it did **not** free the full-body pill grab below — see that bullet.)
 - **Reset edits to pristine** — edits persist for the session and there's no per-sprite
   "revert" or whole-project reset; relaunching the editor reloads the stock scripts (and the stock
   variable set — a UI-made variable is gone on relaunch, M20).

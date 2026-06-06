@@ -44,16 +44,19 @@ const SERVE_SPREAD := 45.0
 ## target's locals), and the editor derives its `{name}` dropdown options from the names here.
 ##
 ## `scope` is "global" or a sprite name (a per-sprite local). Carrying scope in the data is what a
-## later "make a variable" / local-vs-global scoping milestone builds on (see CLAUDE.md). This
-## still stands in for a real editor's "make a variable" step — you add an entry here, not in the UI.
+## later "make a variable" / local-vs-global scoping milestone builds on (see CLAUDE.md). Every
+## declared variable seeds to **0**: a non-zero starting value is set by a `set` block in the owning
+## script (the Ball's `set speed to BALL_SPEED`), as in Scratch — so it lives in the editable program,
+## not a hidden seed, and survives deleting + re-making the variable (M21). The editor can now add /
+## rename / delete entries from the UI (M20/M21); add a stock one here.
 static func variables() -> Array:
 	return [
 		{"name": "p1_score", "value": 0, "scope": "global"},
 		{"name": "p2_score", "value": 0, "scope": "global"},
 		{"name": "p1_rounds", "value": 0, "scope": "global"},
 		{"name": "p2_rounds", "value": 0, "scope": "global"},
-		{"name": "round", "value": 1, "scope": "global"},
-		{"name": "speed", "value": BALL_SPEED, "scope": "Ball"},
+		{"name": "round", "value": 0, "scope": "global"},  # only `change`d, never read (vestigial)
+		{"name": "speed", "value": 0, "scope": "Ball"},     # set to BALL_SPEED by a block in ball()
 	]
 
 
@@ -95,10 +98,15 @@ static func right_paddle() -> Array:
 static func ball() -> Array:
 	return [
 		_hat([
+			# Initialize the ball's speed with a block, not a non-zero seed (Scratch's model): the
+			# variable declares to 0 (PongScripts.variables) and this sets it up front. So deleting +
+			# re-making `speed` in the editor (M21) re-initializes it here, instead of leaving the ball
+			# frozen at the re-created 0 — the starting value is part of the editable program.
+			_set_var("speed", BALL_SPEED),
 			_go_to(CENTER.x, CENTER.y),
 			_point(_serve_right()),
 			_forever([
-				_move(_var("speed")),  # speed is a per-sprite local (seeded in stage.gd)
+				_move(_var("speed")),  # speed is a per-sprite local, set by the block above
 				_if(_edge("top"), [_point("bounce")]),
 				_if(_edge("bottom"), [_point("bounce")]),
 				_if(_touching("LeftPaddle"), [_point("bounce")]),
