@@ -26,6 +26,15 @@ extends Control
 ## just no longer the project's main_scene (the editor is); it is the *game* now.
 const _GAME_SCENE := "res://main.tscn"
 
+## The starting folder the SAVE/OPEN browser opens in when no project is bound yet (M22) — the project
+## directory, a sensible, findable default. We deliberately impose *no* dedicated saves folder: the
+## file browser uses full filesystem access, so the user picks where a project lives (the repo, the
+## Desktop, anywhere) and that choice is theirs. At runtime Godot's FileDialog has no remembered
+## default, so we set this explicitly; after the first save the dialog reopens at the bound file's
+## folder. `globalize_path` resolves `res://` to the absolute OS path filesystem-access needs.
+func _default_browse_dir() -> String:
+	return ProjectSettings.globalize_path("res://")
+
 ## Display name -> the sprite's block script, for the selector. This mirrors the
 ## name->script wiring inline in stage.gd._ready; the small duplication is fine for now.
 ## A later milestone where the editor *owns* the project model would unify the two.
@@ -52,6 +61,20 @@ var _current: int = -1
 ## The top-bar widgets we wire in _ready: the sprite selector (populated from _scripts) and RUN.
 @onready var _selector: OptionButton = %SpriteSelector
 @onready var _run_button: Button = %RunButton
+
+## Project persistence chrome (M22): the title (rewritten to show the open project's name), the
+## NEW / OPEN / SAVE buttons, and the shared FileDialog the latter two pop. NEW reloads the
+## in-code demo; OPEN / SAVE browse the filesystem for `.json` project files. One FileDialog serves
+## both actions — `_file_action` records which is in flight (the rename/delete dialogs use the same
+## "state var carries the payload the confirmed signal doesn't" idiom), and `_current_path` is the
+## file the working project is bound to ("" for the unsaved demo), so SAVE can pre-fill its name.
+@onready var _title: Label = %Title
+@onready var _new_button: Button = %NewButton
+@onready var _open_button: Button = %OpenButton
+@onready var _save_button: Button = %SaveButton
+@onready var _file_dialog: FileDialog = %FileDialog
+var _file_action: String = ""
+var _current_path: String = ""
 
 ## The project's variable model (M20) — the editor-owned, **mutable** counterpart of _scripts.
 ## Seeded from PongScripts.variables() (the single declaration the runtime also reads), then
@@ -82,40 +105,23 @@ var _deleting: String = ""
 
 
 func _ready() -> void:
-	_scripts = [
-		{"name": "LeftPaddle", "script": PongScripts.left_paddle()},
-		{"name": "RightPaddle", "script": PongScripts.right_paddle()},
-		{"name": "Ball", "script": PongScripts.ball()},
-		{"name": "P1Hud", "script": PongScripts.p1_hud()},
-		{"name": "P2Hud", "script": PongScripts.p2_hud()},
-		{"name": "Announcer", "script": PongScripts.announcer()},
-	]
+	# Land on the in-code demo (the stock Pong project). It is the unsaved default — bound to no
+	# file — so it is always reachable and never overwritten by a saved project (M22).
+	_seed_demo()
 
-	# The editor's own mutable copy of the variable model (M20), seeded from the one runtime
-	# declaration. "Make a Variable" appends to *this* (PongScripts.variables() returns a fresh
-	# array each call, so it was no store to add to); _on_run hands it back to the Stage.
-	_variables = PongScripts.variables().duplicate(true)
-
-	# Hand the project model to the renderer (M17) *before* the palette builds and the canvas
-	# renders, so the `{name}` slots of variable/set/change and touching {name}? draw as
-	# data-scoped dropdowns. Sprite names come straight from the script list above; variable
-	# names from the one project model the runtime seeds from too (M18 — PongScripts.variables(),
-	# no longer a separate hardcoded list here). (Static on BlockView, like Stage.project_scripts.)
-	#
-	# The variable list is **scoped to the sprite being edited** (M19): globals plus that
-	# sprite's own locals, hiding other sprites' locals — so editing the LeftPaddle never
-	# offers the Ball's `speed`. Seed it for the first sprite the selector will show (index 0);
-	# _show re-scopes it on every switch. Sprites aren't scoped (all are valid `touching` targets).
-	BlockView.project_sprites = _sprite_names()
-	BlockView.project_variables = _variables_in_scope(_scripts[0]["name"])
-
-	# The layout (backdrop, top bar, palette | canvas workspace) and the three variable dialogs
-	# are declared in editor.tscn; the @onready vars above already point at them. We supply only
-	# the dynamic parts: fill the sprite selector and wire the signals.
-	for entry in _scripts:
-		_selector.add_item(entry["name"])
+	# Wire the signals/callbacks once (the *contents* below re-render per project, but these
+	# connections are set up a single time). The layout and dialogs are declared in editor.tscn;
+	# the @onready vars already point at them — we supply only the dynamic wiring.
 	_selector.item_selected.connect(_on_select)
 	_run_button.pressed.connect(_on_run)
+	# Project persistence (M22): NEW reloads the demo, OPEN/SAVE pop the file browser.
+	_new_button.pressed.connect(_on_new)
+	_open_button.pressed.connect(_on_open)
+	_save_button.pressed.connect(_on_save)
+	_file_dialog.access = FileDialog.ACCESS_FILESYSTEM
+	_file_dialog.use_native_dialog = false
+	_file_dialog.add_filter("*.json", "Project files")
+	_file_dialog.file_selected.connect(_on_file_selected)
 
 	# The palette feeds fresh blocks to the canvas (M11) and doubles as the canvas's trash:
 	# dragging a block back over the palette region deletes it (M16, Scratch's own gesture).
@@ -136,6 +142,52 @@ func _ready() -> void:
 	_rename_dialog.register_text_enter(_rename_edit)
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)
 
+	# Populate the selector + canvas from the seeded project and show its first sprite.
+	_load_project_into_ui()
+
+
+## ESC quits the program (in-game ESC instead drops back here — see Stage._unhandled_input).
+## Unhandled-input, so an open dialog (its popup grabs ESC to cancel itself) or a focused field
+## gets first crack; only an ESC nothing else claimed reaches here and exits.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		get_tree().quit()
+
+
+## Seed the working project with the stock demo — the in-code PongScripts (M22, extracted from the
+## original _ready). `_scripts` is the **living project** (M10): switching sprites and RUN persist
+## the canvas's edits back here. `_variables` is the editor-owned **mutable** variable model (M20),
+## seeded from the one runtime declaration PongScripts.variables() (a fresh array each call, so the
+## editor keeps its own copy to append to); _on_run hands it back to the Stage. Both are deep copies
+## so editing never mutates the shared PongScripts builders.
+func _seed_demo() -> void:
+	_scripts = [
+		{"name": "LeftPaddle", "script": PongScripts.left_paddle()},
+		{"name": "RightPaddle", "script": PongScripts.right_paddle()},
+		{"name": "Ball", "script": PongScripts.ball()},
+		{"name": "P1Hud", "script": PongScripts.p1_hud()},
+		{"name": "P2Hud", "script": PongScripts.p2_hud()},
+		{"name": "Announcer", "script": PongScripts.announcer()},
+	]
+	_variables = PongScripts.variables().duplicate(true)
+
+
+## Bring the current `_scripts` / `_variables` up in the UI (M22) — the shared path used on launch
+## and after NEW / OPEN replace the working project. Repopulates the sprite selector, re-points the
+## renderer's project model (sprite names + the index-0-scoped variable list — M17/M19; static on
+## BlockView, like Stage.project_scripts) and shows the first sprite. Crucially it resets `_current`
+## to -1 *before* _show, so _show's leading _persist_current() doesn't write the outgoing canvas
+## (still showing the previous project) into the freshly loaded `_scripts`. _show then re-scopes the
+## variables, rebuilds the palette, and loads the canvas.
+func _load_project_into_ui() -> void:
+	_current = -1
+	_selector.clear()
+	for entry in _scripts:
+		_selector.add_item(entry["name"])
+	BlockView.project_sprites = _sprite_names()
+	_update_title()
+	_selector.select(0)
 	_show(0)
 
 
@@ -355,6 +407,103 @@ func _sprite_has_local(sprite_name: String, var_name: String) -> bool:
 func _persist_current() -> void:
 	if _current >= 0 and _current < _scripts.size():
 		_scripts[_current]["script"] = _canvas.export_script()
+
+
+# --- Save / open named projects (M22) --------------------------------------
+
+## Reset the working project to the stock demo, without touching any saved file (M22). The demo is
+## always reachable this way and your saved `.json` projects are left untouched; it is unsaved (no
+## bound path) until you SAVE it under a name. Discards the current canvas's unsaved edits — like
+## the rest of the app there is no undo (M16), so SAVE first if you want to keep them.
+func _on_new() -> void:
+	_seed_demo()
+	_current_path = ""
+	_load_project_into_ui()
+
+
+## Pop the file browser to SAVE the project wherever the user chooses (M22). Persist the canvas first
+## so the file captures the latest edits, then open the browser pre-filled with the bound path (so
+## re-saving is SAVE → confirm) or, for a never-saved project, at the project-dir default. The actual
+## write happens in _on_file_selected once the user picks a name and location.
+func _on_save() -> void:
+	_persist_current()
+	_file_action = "save"
+	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
+	_file_dialog.title = "Save Project"
+	if _current_path != "":
+		_file_dialog.current_path = _current_path
+	else:
+		_file_dialog.current_dir = _default_browse_dir()
+	_file_dialog.popup_centered()
+
+
+## Pop the file browser to OPEN a saved project from wherever the user put it (M22). Opens at the
+## bound file's folder if one is set, else the project-dir default. The load happens in
+## _on_file_selected; it replaces the working project (discarding unsaved canvas edits, as NEW does).
+func _on_open() -> void:
+	_file_action = "open"
+	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
+	_file_dialog.title = "Open Project"
+	_file_dialog.current_dir = _current_path.get_base_dir() if _current_path != "" else _default_browse_dir()
+	_file_dialog.popup_centered()
+
+
+## The FileDialog's pick: route to write or read by the action recorded when it was popped (one
+## dialog serves both, the rename/delete "state var carries the payload" idiom).
+func _on_file_selected(path: String) -> void:
+	if _file_action == "save":
+		_write_project(path)
+	elif _file_action == "open":
+		_read_project(path)
+
+
+## Serialize the project — {scripts, variables} — as JSON to `path` (M22). The block model is
+## already plain dicts / arrays / primitives ("exactly the shape a visual editor would emit"), so
+## this is a near-direct JSON.stringify (tab-indented for a human-readable file). Binds the project
+## to this file so the title shows its name and a later SAVE overwrites it.
+func _write_project(path: String) -> void:
+	var data := {"scripts": _scripts, "variables": _variables}
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null:
+		push_warning("Editor: could not write project to '%s'" % path)
+		return
+	file.store_string(JSON.stringify(data, "\t"))
+	file.close()
+	_current_path = path
+	_update_title()
+
+
+## Load a saved project from `path` (M22), replacing the working project. Unreadable or malformed
+## input is ignored (push_warning, keep the current project) so a hand-edited or corrupt file can't
+## crash the editor. Note JSON parses every number as a float (`10` → `10.0`); this is harmless —
+## the interpreter float()s numerics, BlockView._stringify trims a whole float's `.0`, and the
+## slot-shape typing treats int/float identically — the same round-trip RUN's deep-copy never had to
+## worry about, surfacing here only because JSON has one number type.
+func _read_project(path: String) -> void:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("Editor: could not read project from '%s'" % path)
+		return
+	var text := file.get_as_text()
+	file.close()
+	var data: Variant = JSON.parse_string(text)
+	if typeof(data) != TYPE_DICTIONARY or typeof(data.get("scripts")) != TYPE_ARRAY \
+			or typeof(data.get("variables")) != TYPE_ARRAY:
+		push_warning("Editor: '%s' is not a valid project file" % path)
+		return
+	_scripts = data["scripts"]
+	_variables = data["variables"]
+	_current_path = path
+	_load_project_into_ui()
+
+
+## Reflect the bound project in the title bar (M22): the file's stem for a saved project, or a
+## "(demo)" marker for the unsaved in-code demo, so it is clear what SAVE will overwrite.
+func _update_title() -> void:
+	if _current_path == "":
+		_title.text = "scratch-like — (demo)"
+	else:
+		_title.text = "scratch-like — %s" % _current_path.get_file().get_basename()
 
 
 ## RUN: hand the *edited* project to the Stage and switch to the game scene (M10). The

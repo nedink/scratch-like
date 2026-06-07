@@ -5,58 +5,55 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 21 — rename / delete a variable from the UI
+## Current state: Milestone 22 — save & open named projects (persistence)
 
-**Goal of this milestone:** make the editor-owned variable model **fully editable**. M20 made it
-*mint-only* — you could append a variable but never **rename or remove** one without hand-editing
-[`PongScripts.variables()`](scripts/pong_scripts.gd) and relaunching (the most-pointed-to deferral).
-M21 adds Scratch's own affordance: the palette's VARIABLES group lists each **in-scope** variable as
-a manageable row whose menu offers **Rename** and **Delete**.
+**Goal of this milestone:** make edits **survive relaunch**. Through M21 the editor owned the whole
+project model (scripts via M10's `_scripts`, variables via M20's `_variables`) but it lived only in
+memory — every edit reset to stock on relaunch (the standing deferral since M10). M22 writes that
+model to disk and reads it back: a **file browser** (Godot's `FileDialog`) saves and opens **named
+project files** the user places **wherever they like** (full filesystem access; the browser opens at the project folder by default), while the in-code **demo** stays the always-available
+default — so you can keep the stock Pong *and* accumulate your own saved projects without either
+clobbering the other.
 
-Like M19 — and unlike M20 — **M21 does not touch the runtime.** Rename rewrites the model entry *and*
-the blocks that reference the old name, and the Stage then seeds the new name while the blocks carry
-it; delete removes the model entry *and* **strips the references** (Scratch's behavior — no dangling
-name survives). Both reuse machinery already in place (M20's mutable `_variables`, the rebuild/refresh
-trio, the shared block-tree walkers).
+It is small because the block model was **already serializable** ("exactly the shape a visual editor
+would emit" — plain dicts/arrays/primitives), so saving is a near-direct `JSON.stringify` and loading
+a `JSON.parse_string`. The editor's single ownership of the model (M18–M21) means there is exactly one
+thing to serialize. **No new opcode, no block-data-shape change, no runtime change** — the Stage's
+M10/M20 static hand-off is untouched; persistence is an *editor-side* concern (disk ⇄ `_scripts` /
+`_variables`) that feeds the same RUN path.
 
-- **The palette rows + menu.** [`BlockPalette._build`](scripts/block_palette.gd) draws, beneath the
-  M20 "Make a Variable" button, one [`_make_variable_row`](scripts/block_palette.gd) per name in
-  [`BlockView.project_variables`](scripts/block_view.gd) (already the per-sprite scoped list, M19) —
-  a `MenuButton` whose popup offers Rename / Delete. Like the make button it carries no
-  `palette_opcode`, so the drag hit-test skips it. The choice routes through
-  [`_on_variable_menu`](scripts/block_palette.gd) to two editor callbacks
-  (`_palette._on_rename_variable` / `_on_delete_variable`), unset by non-editor callers (no rows).
-  [`BlockPalette.rebuild`](scripts/block_palette.gd) (M19) already re-scopes the rows per sprite.
-- **Shared block-tree walkers.** The cascade is one walk over the `{opcode, inputs}` tree, factored
-  onto [`BlockView`](scripts/block_view.gd) (beside the opcode knowledge):
-  [`count_variable_refs`](scripts/block_view.gd) tallies, and
-  [`rewrite_variable_refs`](scripts/block_view.gd) renames, every `variable`/`set_var`/`change_var`
-  whose `inputs.name` matches — recursing into nested reporters and `body` substacks.
-- **Rename, scoped + position-preserving.** [`editor._on_rename_confirmed`](scripts/editor.gd)
-  updates the model entry's `name`, then rewrites every script where this variable is the in-scope
-  *referent*: the **current** sprite through [`BlockCanvas.rename_variable`](scripts/block_canvas.gd)
-  (mutates the working `_stacks` **in place** and re-renders, so canvas positions survive — unlike a
-  `load_script` reload), the rest through `BlockView.rewrite_variable_refs` on `_scripts[i]`.
-  Scoping ([`_is_referent_for`](scripts/editor.gd)): a **local** renames only its own sprite; a
-  **global** renames everywhere *except* a sprite that shadows the name with its own local. A blank,
-  unchanged, or already-in-scope new name is rejected silently (the make-variable guard).
-- **Delete, confirm-and-strip-references.** [`editor._delete_variable`](scripts/editor.gd) pops a
-  `ConfirmationDialog` reporting how many references will be removed (summed via `count_variable_refs`
-  over the same scoped scripts); on confirm [`_on_delete_confirmed`](scripts/editor.gd) removes the
-  in-scope `_variables` entry **and** strips every reference — `set_var`/`change_var` statements are
-  dropped, and a `variable` reporter is plucked from its slot, which reverts to the host opcode's
-  default literal (M15's slot_default rule), so `move (speed)` becomes `move 10`. Host blocks
-  (`move`, `if`, operators) survive; only the reference goes. The current sprite is stripped in place
-  via [`BlockCanvas.delete_variable_refs`](scripts/block_canvas.gd) (positions preserved), the rest
-  via [`BlockView.strip_variable_refs`](scripts/block_view.gd). Delete is destructive — there is no
-  undo (relaunch reloads the stock set), so the dialog states the count first.
+- **The chrome.** [editor.tscn](editor.tscn) gains three top-bar buttons — **NEW**, **OPEN**,
+  **SAVE** — beside RUN, and one shared `%FileDialog`. The `%Title` label is rewritten to show the
+  bound project's name (or `(demo)` for the unsaved default), so it is clear what SAVE overwrites.
+- **The demo is the in-code default, never a file.** [`editor._seed_demo`](scripts/editor.gd)
+  (extracted from the old `_ready`) loads the stock PongScripts project; `_ready` lands on it every
+  launch, and [`_on_new`](scripts/editor.gd) returns to it without touching any saved file. So the
+  demo can never be overwritten and your `.json` projects are left alone.
+- **One dialog, two actions.** [`_on_save`](scripts/editor.gd) / [`_on_open`](scripts/editor.gd) set
+  the `FileDialog`'s `file_mode` and pop it — at the bound file's folder, else the project-dir default
+  ([`_default_browse_dir`](scripts/editor.gd)); `_file_action` records which is in flight — the
+  rename/delete "state var carries the payload the confirmed signal doesn't" idiom — and
+  [`_on_file_selected`](scripts/editor.gd) routes the pick to write or read. `access = ACCESS_FILESYSTEM`
+  + a `*.json` filter let the user save/open **anywhere on disk** rather than in an imposed folder.
+- **Write / read.** [`_write_project`](scripts/editor.gd) persists the canvas first (`_persist_current`),
+  then `JSON.stringify({scripts, variables}, "\t")` to the chosen path and binds it (`_current_path`).
+  [`_read_project`](scripts/editor.gd) parses, **validates** (a non-dictionary, or a missing/wrong-typed
+  `scripts`/`variables`, is `push_warning`'d and ignored — a corrupt file can't crash the editor), then
+  replaces the model and rebuilds the UI.
+- **One bring-up path.** [`_load_project_into_ui`](scripts/editor.gd) (shared by launch / NEW / OPEN)
+  repopulates the sprite selector, re-points `BlockView.project_sprites`, and shows sprite 0 — resetting
+  `_current = -1` **first** so `_show`'s leading `_persist_current()` can't write the outgoing canvas
+  into the freshly loaded `_scripts`.
 
 What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-**editing a stock variable's initial value** (still [`PongScripts.variables()`](scripts/pong_scripts.gd)),
-the **full-body grab** of a bare `variable` pill (M21's menu lives on the *palette rows*, not a
-canvas-pill right-click), and **persistence beyond the session** — `_variables` resets to stock on
-relaunch, like every session edit (M10). The *scripts* remain duplicated in spirit (both editor and
-Stage call the `PongScripts` builders), as since M18.
+**canvas layout** isn't saved (`export_script` drops each stack's `(x, y)` — editor-only UI state the
+runtime shape never carried — so a reopened project re-flows to default positions, exactly as a sprite
+switch already does); **delete / rename of a saved file** from the browser, **autosave**, and a
+**recent-projects / last-opened-on-launch** convenience are all unbuilt (launch always lands on the
+demo). JSON has one number type, so a saved `10` reads back as `10.0` — harmless (the interpreter
+`float()`s numerics, `_stringify` trims a whole float's `.0`, slot-shape typing treats int/float
+alike). The **scripts** remain duplicated in spirit (both editor and Stage call the `PongScripts`
+builders), as since M18.
 
 ---
 
@@ -175,8 +172,15 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    **red** to show it will be deleted (no snap bar / slot highlight) — and let go. Drop anywhere
    *off* the palette instead to place it as usual. (There's no undo; relaunch to reload a
    sprite's stock script.)
-   Edits **persist** as you switch sprites (the session's project accumulates them);
-   there's no reset-to-pristine yet, so relaunch the editor to start clean.
+   Edits **persist** as you switch sprites (the session's project accumulates them).
+   **Save your project** (M22) with **SAVE** in the top bar: pick a name and **location** in the file
+   browser (it opens at the project folder by default, but you can save anywhere) and it writes a
+   `.json` file, so your work survives relaunch. **OPEN** browses to reload a saved project; **NEW**
+   returns to the stock **demo** (the in-code Pong) — the demo is never a file, so it is always there
+   and your saved projects are never overwritten by it (or it by them). The title bar shows the open project's name (`(demo)` when unsaved). NEW/OPEN replace the
+   working project, discarding unsaved canvas edits (there's no undo — SAVE first); launch always lands
+   on the demo. (Canvas *layout* isn't saved — a reopened project re-flows its stacks to default
+   positions, as a sprite switch already does.)
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
    version, or the stock script if you didn't touch it. With no edits it plays the M7
@@ -950,13 +954,60 @@ block-data-shape change.**
 Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **editing a
 stock variable's initial value** (still a `PongScripts.variables()` edit), the **full-body grab** of a
 bare `variable` pill (M21's menu sits on the *palette rows*, not a canvas-pill right-click — so that
-pill is still grabbed by its thin border, M15), and **persistence past the session** (`_variables`
-resets to stock on relaunch). The **scripts** remain duplicated in spirit (editor and Stage both call
-the `PongScripts` builders), as since M18.
+pill is still grabbed by its thin border, M15). **Persistence past the session** was M21's standing
+deferral; **M22 (below) delivered it.** The **scripts** remain duplicated in spirit (editor and Stage
+both call the `PongScripts` builders), as since M18.
+
+### Save & open named projects (M22)
+
+Persistence, deferred since M10: through M21 every edit reset to stock on relaunch. The editor already
+**owned the whole project model** (`_scripts` from M10, `_variables` from M20), and the block model was
+**already serializable** ("exactly the shape a visual editor would emit"), so M22 just writes that model
+to disk as JSON and reads it back — a **file browser** for **named project files**, with the in-code demo
+kept as the always-available default. **No new opcode, no block-data-shape change, no runtime change**:
+the Stage's M10/M20 static hand-off (`project_scripts` / `project_variables`) is untouched — persistence
+is an editor-side disk ⇄ model concern that feeds the same RUN path.
+
+- **The chrome.** [editor.tscn](editor.tscn) adds three top-bar buttons — **NEW** / **OPEN** / **SAVE**
+  — beside RUN, one shared `%FileDialog`, and a unique name on `%Title` so it can show the bound
+  project's name. [editor.gd](scripts/editor.gd) wires them in `_ready` (once, like the other signals)
+  and configures the dialog: `access = ACCESS_FILESYSTEM` (browse the whole disk — the user picks where
+  a project lives), a `*.json` filter, non-native (renders in the engine window like the M20/M21 dialogs).
+- **The demo is in-code, never a file.** [`_seed_demo`](scripts/editor.gd) — the stock-project seeding
+  extracted from the original `_ready` — loads PongScripts into `_scripts` / `_variables`. `_ready`
+  lands on it each launch; [`_on_new`](scripts/editor.gd) returns to it (clearing `_current_path`)
+  without touching disk. So the demo can't be overwritten and saved `.json` files are left untouched —
+  the answer to "preserve the demo *and* accumulate saved work."
+- **One dialog, two actions** (the rename/delete state-var idiom). [`_on_save`](scripts/editor.gd) and
+  [`_on_open`](scripts/editor.gd) set the dialog's `file_mode`, record `_file_action`, and pop it at the
+  bound file's folder (else the project-dir default, [`_default_browse_dir`](scripts/editor.gd) —
+  runtime FileDialog has no remembered default, so we set one explicitly); SAVE pre-fills `_current_path`
+  so re-saving is SAVE → confirm-overwrite. [`_on_file_selected`](scripts/editor.gd) routes the pick to
+  write or read. Paths are absolute OS paths under filesystem access; `FileAccess`/`JSON` handle them the
+  same as a `res://` path would.
+- **Write / read, validated.** [`_write_project`](scripts/editor.gd) calls `_persist_current()` first,
+  then `JSON.stringify({"scripts": _scripts, "variables": _variables}, "\t")` (tab-indented, human-
+  readable) to the path and binds it. [`_read_project`](scripts/editor.gd) parses and **guards** — a
+  non-dictionary, or a missing / non-array `scripts` or `variables`, is `push_warning`'d and ignored, so
+  a corrupt or hand-edited file keeps the current project rather than crashing — then swaps in the model
+  and rebuilds the UI.
+- **One bring-up path.** [`_load_project_into_ui`](scripts/editor.gd) (shared by launch, NEW, OPEN)
+  repopulates the sprite selector, re-points `BlockView.project_sprites`, updates the title, and shows
+  sprite 0 — first setting `_current = -1` so `_show`'s leading `_persist_current()` can't write the
+  *outgoing* canvas into the freshly loaded `_scripts` (`_show` then re-scopes the variables, rebuilds
+  the palette, and loads the canvas, M19's path).
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **canvas
+layout** isn't persisted — `export_script` drops each stack's `(x, y)` (editor-only UI state the runtime
+shape never carried), so a reopened project re-flows to default positions, exactly as a sprite switch
+already does; **delete / rename of a saved file** from the browser, **autosave**, and **opening the last
+project on launch** (launch always lands on the demo) are unbuilt. JSON's single number type means a
+saved `10` reads back `10.0` — harmless, as above. The **scripts** stay duplicated in spirit (editor and
+Stage both call the `PongScripts` builders), as since M18.
 
 ## Opcodes implemented
 
-**M21 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20) — the editor is a
+**M22 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21) — the editor is a
 pure *view + interaction* over the existing language. Every opcode below has a `BlockView._OPCODES`
 entry so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
@@ -1008,12 +1059,12 @@ assemble from them.
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); 480x360 window
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + RUN), the palette | canvas workspace (each in a ScrollContainer), and the Make/Rename/Delete variable dialogs — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs, and the project-file browser (a FileDialog, M22) — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20)
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo), keeping the demo and saved projects from clobbering each other
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
@@ -1024,6 +1075,11 @@ scripts/
   pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed
 CLAUDE.md                  This file
 ```
+
+> Saved projects (M22) are plain `.json` files written/read by the editor's SAVE/OPEN, placed
+> *wherever the user chooses* (full filesystem access; the browser defaults to this project folder).
+> There is no dedicated saves directory — location is the user's call — so saved files are not part of
+> the repo unless the user deliberately saves one inside it.
 
 ## Conventions for extending
 
@@ -1043,7 +1099,8 @@ CLAUDE.md                  This file
   renders, as a grey box.
 - New variable? Two ways. **From the UI** (M20): click **Make a Variable** atop the palette's
   variables group, name it, pick global/local — it is appended to the editor's working model and
-  seeded at RUN, but only for the session (relaunch resets to stock). You can also **rename or
+  seeded at RUN. It survives relaunch only if you **SAVE** the project (M22); otherwise it resets to
+  stock, like every unsaved edit. You can also **rename or
   delete** it from its row's menu (M21) — rename cascades across the scripts that reference it; delete
   strips its references (drops `set`/`change` blocks, reverts `variable`-reporter slots to defaults)
   and removes the entry. **In the stock
@@ -1074,9 +1131,11 @@ CLAUDE.md                  This file
   lives only in [`PongScripts.variables()`](scripts/pong_scripts.gd) is the *declaration* (a stock
   variable's name + scope). (M21 put rename/delete on the *palette rows*, not a canvas-pill
   right-click menu, so it did **not** free the full-body pill grab below — see that bullet.)
-- **Reset edits to pristine** — edits persist for the session and there's no per-sprite
-  "revert" or whole-project reset; relaunching the editor reloads the stock scripts (and the stock
-  variable set — a UI-made variable is gone on relaunch, M20).
+- **Reset edits to pristine** — **M22's NEW button** is the whole-project reset: it reloads the stock
+  demo (the in-code PongScripts) without touching any saved file. What's still unbuilt is a **per-sprite
+  "revert"** (re-load one sprite's stock script, leaving the others edited). Note M22 changed the
+  relaunch behavior: launch still lands on the demo, but a project now only survives relaunch if you
+  **SAVE** it — unsaved edits are still discarded on relaunch (and by NEW/OPEN), there being no undo.
 - **Full-body grab of an all-field pill, and ejecting/wrapping** — M15 made on-canvas
   reporter pills grabbable, but a pill whose interior is *entirely* one widget — a bare
   `variable`, whose only content is its name slot — can be grabbed only by its thin coloured

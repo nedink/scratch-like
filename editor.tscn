@@ -40,6 +40,7 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="Title" type="Label" parent="Page/Bar"]
+unique_name_in_owner = true
 layout_mode = 2
 text = "scratch-like"
 
@@ -50,6 +51,21 @@ layout_mode = 2
 [node name="Spacer" type="Control" parent="Page/Bar"]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="NewButton" type="Button" parent="Page/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "NEW"
+
+[node name="OpenButton" type="Button" parent="Page/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "OPEN"
+
+[node name="SaveButton" type="Button" parent="Page/Bar"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "SAVE"
 
 [node name="RunButton" type="Button" parent="Page/Bar"]
 unique_name_in_owner = true
@@ -153,3 +169,11 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="FileDialog" type="FileDialog" parent="."]
+unique_name_in_owner = true
+title = "Save Project"
+size = Vector2i(420, 320)
+visible = false
+access = 2
+use_native_dialog = false
