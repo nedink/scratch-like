@@ -183,8 +183,9 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    positions, as a sprite switch already does.)
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
-   version, or the stock script if you didn't touch it. With no edits it plays the M7
-   Pong exactly as before:
+   version, or the stock script if you didn't touch it. Press **ESC** in-game to
+   return to the editor (the inverse of RUN's editor→game hand-off). With no edits it
+   plays the M7 Pong exactly as before:
    A yellow ball serves from the center at a **randomized angle** and bounces off
    the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
@@ -1068,7 +1069,7 @@ scripts/
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20), runs scripts (edited via project_scripts, else PongScripts — M10)
+  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20), runs scripts (edited via project_scripts, else PongScripts — M10); ESC returns to the editor (the inverse of editor.gd's RUN)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)

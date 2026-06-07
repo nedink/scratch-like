@@ -13,6 +13,10 @@ extends Node2D
 ## Like M1, the sprites are generated in code (colored placeholder rectangles)
 ## so the scene stays a near-empty root and the project needs no image assets.
 
+## The editor scene to return to on ESC — the inverse of editor.gd's RUN (_GAME_SCENE).
+## In-game, ESC drops back into the block editor; in the editor it quits the program.
+const _EDITOR_SCENE := "res://editor.tscn"
+
 ## name (String) -> Target. The single source of truth for "who is on stage".
 var _targets: Dictionary = {}
 
@@ -120,6 +124,14 @@ func _ready() -> void:
 	_run(p1_hud, _script_for("P1Hud", PongScripts.p1_hud()))
 	_run(p2_hud, _script_for("P2Hud", PongScripts.p2_hud()))
 	_run(announcer, _script_for("Announcer", PongScripts.announcer()))
+
+
+## ESC returns to the editor (the inverse of RUN's editor→game hand-off). Unhandled-input,
+## so anything that wants ESC first — a focused control — gets it before we leave the scene.
+func _unhandled_input(event: InputEvent) -> void:
+	if event.is_action_pressed("ui_cancel"):
+		get_viewport().set_input_as_handled()
+		get_tree().change_scene_to_file(_EDITOR_SCENE)
 
 
 ## The script to run for a sprite: the editor's edited version if it handed one over
