@@ -4,3 +4,7 @@
 
 # Editor / local tooling
 .claude/settings.local.json
+
+# Block-editor project saves (M22): user data, not source — the demo is in-code.
+# (The editor can save anywhere; this ignores the conventional in-repo spot.)
+/saves/
