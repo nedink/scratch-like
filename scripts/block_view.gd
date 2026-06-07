@@ -62,7 +62,7 @@ static var _CATEGORY_COLORS := {
 ## The editor (editor.gd) owns these — it sets them before anything renders — and the `{name}`
 ## slots of variable/set_var/change_var (variables) and touching_sprite? (sprites) read them to
 ## render as **data-scoped dropdowns**: a fixed-choice menu of the project's *real* names rather
-## than M12 free text. Static (like Stage.project_scripts) so the value reaches the static render
+## than M12 free text. Static (like Stage.project_sprites) so the value reaches the static render
 ## path from one place. Empty by default — the palette built before the editor sets them, or any
 ## non-editor caller — in which case those slots fall back to a plain text field, exactly as
 ## before M17.

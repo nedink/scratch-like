@@ -39,32 +39,44 @@ var _running: bool = true
 ## resource every sprite reaches, never reloaded per sprite.
 var _font: PixelFont
 
-## name (String) -> edited block script (Array), the M10 hand-off from the editor. The
-## editor sets this *static* (so it survives change_scene_to_file, which can't pass a
-## value) right before launching the game. _ready runs each sprite's edited script when
-## present and falls back to the hardcoded PongScripts otherwise — so launching this
-## scene directly (no editor) still plays stock Pong. Static, so it outlives any one
-## Stage instance and is shared by the class, exactly like the scripts it carries.
-static var project_scripts: Dictionary = {}
+## The sprite model to build from, the M24 hand-off from the editor: an Array of
+## {name, x, y, w, h, color, script} dicts (color a hex string). It is the editor's whole
+## working project — every sprite's placeholder geometry *and* its (possibly edited) script,
+## including any sprites *added in the UI* — replacing M10's separate name->script Dictionary
+## (project_scripts) now that the script rides inside each sprite entry. The editor sets this
+## *static* (so it survives change_scene_to_file, which can't pass a value) right before launching
+## the game. _ready falls back to PongScripts.sprites() when it is empty, so launching this scene
+## directly (no editor) still builds and plays stock Pong. Static, so it outlives any one Stage
+## instance, exactly like the model it carries.
+static var project_sprites: Array = []
 
-## The variable model to seed from, the M20 counterpart of project_scripts: an Array of
+## The variable model to seed from, the M20 counterpart of project_sprites: an Array of
 ## {name, value, scope} dicts the editor hands over right before launching the game. It may
 ## include variables *made in the UI* ("Make a Variable"), which is why the runtime can no
 ## longer just read PongScripts.variables() directly. Static (survives change_scene_to_file)
 ## and falls back to PongScripts.variables() when empty — so launching this scene directly
-## (no editor) still seeds stock Pong's variables, exactly like _script_for / project_scripts.
+## (no editor) still seeds stock Pong's variables, exactly like _sprite_model / project_sprites.
 static var project_variables: Array = []
 
 
 func _ready() -> void:
 	_font = PixelFont.new()
 
-	# Two tall thin paddles on the rails, one small ball in the center.
-	var paddle := Color(0.9, 0.9, 0.95)
-	var ball_color := Color(1.0, 0.8, 0.25)
-	var left := _add_sprite("LeftPaddle", Vector2(24, 180), 16, 96, paddle)
-	var right := _add_sprite("RightPaddle", Vector2(456, 180), 16, 96, paddle)
-	var ball := _add_sprite("Ball", Vector2(240, 180), 16, 16, ball_color)
+	# Build every sprite from the one project model (Milestone 24) — the editor's edited model
+	# when it handed one over (Stage.project_sprites, which may include sprites *added in the UI*),
+	# else PongScripts.sprites() so a direct launch still builds stock Pong (see _sprite_model).
+	# Each entry carries the placeholder geometry stage.gd used to hardcode plus the sprite's script:
+	#   * the paddles 16x96 on their rails and the ball 16x16 at center (the playfield);
+	#   * the two HUDs (top corners) and the Announcer (parked off-screen) as 1x1 transparent
+	#     placeholders — they carry no costume of their own, `say` supplies one each tick / on the
+	#     win, drawn at the sprite's native scale 1 (the 480x360 window is integer-upscaled, so even
+	#     the native "large" glyph reads cleanly). See pong_scripts.gd for why each script exists.
+	# `color` is a hex string in the model (JSON-friendly for SAVE/OPEN); Color() parses it here.
+	# We build *all* sprites first so the registry is fully populated before variable seeding, which
+	# needs a sprite-scoped local's target to already exist.
+	var model := _sprite_model()
+	for s in model:
+		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])))
 
 	# Seed every variable from the one project model (Milestone 18) — the same declaration
 	# the editor reads its `{name}` dropdown options from, so the two can no longer drift.
@@ -85,27 +97,6 @@ func _ready() -> void:
 			else:
 				push_warning("Stage: variable '%s' scoped to unknown sprite '%s'" % [v["name"], v["scope"]])
 
-	# Milestone 7: a live numeric score readout that replaces M4/M5's clone-built
-	# pip grids. Each HUD sprite sits where its player's pips used to (top-left for
-	# P1, top-right for P2) and `say`s its score every tick (see pong_scripts.gd).
-	# The sprites carry no costume of their own — `say` supplies one (white glyphs in
-	# the "large" face) — so they start as a transparent 1x1 placeholder, like the
-	# Announcer. Like the Announcer's banner they draw at the sprite's *native* scale
-	# (1), no node scaling: the 480x360 window is upscaled to fullscreen by a whole-
-	# number factor (integer stretch), so every source pixel maps to an NxN block and
-	# even the native "large" digit is plenty legible.
-	var transparent := Color(1, 1, 1, 0)
-	var p1_hud := _add_sprite("P1Hud", Vector2(36, 24), 1, 1, transparent)
-	var p2_hud := _add_sprite("P2Hud", Vector2(444, 24), 1, 1, transparent)
-
-	# Milestone 6: a text banner. The Announcer parks off-screen until a player
-	# takes the match, then jumps to center, `say`s the winner (a font.png costume),
-	# and fires `stop "all"` itself — so the game-over freeze lands with the winner
-	# named on screen, the payoff earlier milestones kept deferring. It `say`s in the
-	# "large" (5x9) face, sized to read at the viewport's own resolution, so the node
-	# stays at scale 1 — the banner is drawn 1:1, never scaled up.
-	var announcer := _add_sprite("Announcer", Vector2(-400, -400), 1, 1, Color(1, 1, 1, 0))
-
 	# "Press the green flag" on the first *rendered* frame, not during scene
 	# construction. A script's first `forever` iteration runs synchronously the
 	# moment it starts (the interpreter only yields at the first `await`), so
@@ -118,12 +109,11 @@ func _ready() -> void:
 	# ready early on some launches but not others.)
 	await get_tree().process_frame
 
-	_run(left, _script_for("LeftPaddle", PongScripts.left_paddle()))
-	_run(right, _script_for("RightPaddle", PongScripts.right_paddle()))
-	_run(ball, _script_for("Ball", PongScripts.ball()))
-	_run(p1_hud, _script_for("P1Hud", PongScripts.p1_hud()))
-	_run(p2_hud, _script_for("P2Hud", PongScripts.p2_hud()))
-	_run(announcer, _script_for("Announcer", PongScripts.announcer()))
+	# Run each sprite's script (the same model, second pass). The script rides inside the entry now
+	# (M24), so there is no separate name->script lookup; an editor-edited or UI-added sprite's
+	# script is simply the one in its entry.
+	for s in model:
+		_run(find_target(String(s["name"])), s["script"])
 
 
 ## ESC returns to the editor (the inverse of RUN's editor→game hand-off). Unhandled-input,
@@ -134,11 +124,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().change_scene_to_file(_EDITOR_SCENE)
 
 
-## The script to run for a sprite: the editor's edited version if it handed one over
-## (M10), else the hardcoded default. Keyed by the same registry name the sprite is
-## built under, so edits land on the matching sprite.
-func _script_for(target_name: String, default_script: Array) -> Array:
-	return project_scripts.get(target_name, default_script)
+## The sprite model to build from (Milestone 24): the editor's edited model when it handed one
+## over (Stage.project_sprites — including any sprites made in the UI), else the hardcoded
+## PongScripts.sprites(). The sprite counterpart of _variable_model — launching this scene directly
+## (no editor) still builds and plays stock Pong. (Replaces M10's _script_for / project_scripts now
+## that each sprite entry carries its own script.)
+func _sprite_model() -> Array:
+	return project_sprites if not project_sprites.is_empty() else PongScripts.sprites()
 
 
 ## The variable model to seed from (M20): the editor's edited model when it handed one over

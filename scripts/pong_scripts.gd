@@ -60,6 +60,34 @@ static func variables() -> Array:
 	]
 
 
+## The project's sprite model (Milestone 24): the single declaration of every sprite's name,
+## starting geometry (placeholder rectangle), and script — the sprite counterpart of variables(),
+## and the one source both the runtime and the editor read.
+##
+## It retires a hardcoded set that lived only in stage.gd._ready (six literal _add_sprite + _run
+## calls), the last pillar of the project model not yet data-owned. Stage._ready now loops this
+## (build each placeholder from x/y/w/h/color, then run its script); the editor seeds its working
+## _scripts from it and hands the edited model back at RUN (Stage.project_sprites). Geometry values
+## are exactly what stage.gd hardcoded (480x360 window): the paddles 16x96 on their rails, the ball
+## 16x16 at center, the two HUDs and the announcer 1x1 transparent placeholders (`say` supplies
+## their costume each tick / on the win).
+##
+## `color` is a **hex string** (not a Color) so the model serialises straight to JSON for SAVE/OPEN
+## (M22); Stage converts it with Color(hex). Each entry carries its `script` from the builders below —
+## a sprite owns its scripts (Scratch). A sprite's *starting* position here is just the placeholder;
+## real positioning is blocks (the ball `go_to`s center itself), so a new sprite the editor adds can
+## position itself with a `go_to` block rather than needing a UI to move it.
+static func sprites() -> Array:
+	return [
+		{"name": "LeftPaddle", "x": 24, "y": 180, "w": 16, "h": 96, "color": "#e6e6f2", "script": left_paddle()},
+		{"name": "RightPaddle", "x": 456, "y": 180, "w": 16, "h": 96, "color": "#e6e6f2", "script": right_paddle()},
+		{"name": "Ball", "x": 240, "y": 180, "w": 16, "h": 16, "color": "#ffcc40", "script": ball()},
+		{"name": "P1Hud", "x": 36, "y": 24, "w": 1, "h": 1, "color": "#ffffff00", "script": p1_hud()},
+		{"name": "P2Hud", "x": 444, "y": 24, "w": 1, "h": 1, "color": "#ffffff00", "script": p2_hud()},
+		{"name": "Announcer", "x": -400, "y": -400, "w": 1, "h": 1, "color": "#ffffff00", "script": announcer()},
+	]
+
+
 ## A keyboard-driven paddle: move on its vertical rail while a key is held, and
 ## clamp back onto the playfield at the top and bottom. `rail_x` is the fixed x,
 ## so the clamp targets are literals.

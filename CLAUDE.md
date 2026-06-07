@@ -5,47 +5,64 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 23 — boolean-vs-value slot typing
+## Current state: Milestone 24 — sprites are a data-owned, editable model
 
-**Goal of this milestone:** make the editor **refuse mismatched reporter drops**. Since M14 *any*
-reporter could drop into *any* slot — a comparison (`score > 5`) into `move`'s `steps`, a number into
-an `if` condition — and the runtime just coped. Scratch instead distinguishes **hexagonal boolean
-slots** from **round value slots** and refuses the mismatch; M23 brings that to the editor. It is small
-because M14/M15 already stamp every input slot as a drop target (`slot_*` meta) and the canvas already
-picks the nearest one ([`_nearest_slot`](scripts/block_canvas.gd)) — M23 only adds a **type** to each
-slot and each reporter and filters the candidates by it. **No new opcode, no block-data-shape change,
-no runtime change** — the interpreter still evaluates any reporter in any position; this only constrains
-what the editor *lets* you assemble.
+**Goal of this milestone:** make the **sprite set** part of the data-owned project model and **editable
+from the editor**. The editor already owned the project's **scripts** (M10), **variables** (M18/M20),
+and **persistence** (M22) — but the sprites themselves (their names, starting positions, sizes, colours)
+were still **hardcoded** in [`stage.gd`](scripts/stage.gd)`._ready` (six literal `_add_sprite` calls),
+and the editor only *mirrored the names* off its script list. So you could rewrite a sprite's script but
+could not **add or remove** a sprite. M24 is the **sprite counterpart of M18**: one model both the
+runtime and the editor read, retiring the last hardcoded pillar. **No new opcode, no block-data-shape
+change, and the interpreter is untouched.**
 
-- **Two table-driven fields, the slot-typing pair.** [block_view.gd](scripts/block_view.gd)'s `_OPCODES`
-  gains `output` (a reporter's value kind — `"boolean"` for the `?`-suffixed sensing reporters and the
-  comparison/boolean operators `equals`/`>`/`<`/`and`/`or`/`not`; default `"value"` for arithmetic,
-  `random`, `variable`) and `bool_inputs` (the keys of the slots that *expect* a boolean — `if`'s
-  `condition`, `and`/`or`'s `a`/`b`, `not`'s `a`). Every other slot is a value slot. The same
-  one-field-per-entry idiom as M13's `enums` / M17's `data_enums`.
-- **Stamp the slot, expose the reporter.** [`build_input`](scripts/block_view.gd) stamps each widget's
-  expected kind as a `slot_type` meta (computed in [`_header_from_template`](scripts/block_view.gd) from
-  the opcode's `bool_inputs`); [`reporter_output_type`](scripts/block_view.gd) reads an opcode's
-  `output`. These are the two ends the canvas matches.
-- **Enforce on drop.** [`BlockCanvas._nearest_slot`](scripts/block_canvas.gd) now skips any slot whose
-  `slot_type` ≠ the dragged reporter's `output`, so a boolean reporter is offered only boolean slots and
-  a value reporter only value slots. A mismatched hover finds **no** slot (no highlight), and releasing
-  there discards the reporter — the existing off-slot behavior (M14), now also the "this doesn't fit"
-  outcome. Pickup ([`_reporter_at`](scripts/block_canvas.gd)) is unchanged; the type check lives only in
-  where a reporter may *land*.
-- **The shape cue.** [`build_reporter`](scripts/block_view.gd) draws a **boolean** pill with a tight
-  (angular) corner radius where a **value** pill stays round — Scratch's hexagon-vs-round shorthand,
-  approximated with corner radii exactly as M13 shaped number (oval) vs text (rectangle) literal fields.
-  So the type a slot will accept reads at a glance, even though true hexagon/notch geometry stays
-  deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)).
+- **One sprite model.** [`PongScripts.sprites()`](scripts/pong_scripts.gd) (new, beside `variables()`)
+  returns an `Array` of `{name, x, y, w, h, color, script}` dicts — each sprite's placeholder geometry
+  *and* its script (a sprite owns its scripts, Scratch-style). `color` is a **hex string** (e.g.
+  `"#ffcc40"`) so the model serialises straight to JSON for SAVE/OPEN (M22); the geometry values are
+  exactly what `stage.gd` used to hardcode. This is the single declaration both ends read.
+- **The runtime builds from it.** [stage.gd](scripts/stage.gd)`._ready` now loops
+  [`_sprite_model()`](scripts/stage.gd) (the editor's `Stage.project_sprites` when handed one, else
+  `PongScripts.sprites()` — the M10/M20 fallback idiom, so launching `main.tscn` directly still builds
+  stock Pong): pass 1 builds every placeholder (`Color(hex)` parses the colour) so the registry is
+  populated before variable seeding; pass 2 (after the viewport-ready frame) runs each entry's script.
+  The separate `Stage.project_scripts` / `_script_for` of M10 are **retired** — the script rides inside
+  each sprite entry now.
+- **The editor owns it, mutably.** [editor.gd](scripts/editor.gd)'s working `_scripts` is now this full
+  sprite model (`_seed_demo` seeds it from `PongScripts.sprites().duplicate(true)`; each entry gained
+  the geometry keys). [`_persist_current`](scripts/editor.gd) still overwrites only `["script"]`, so
+  geometry survives a sprite switch / RUN; [`_on_run`](scripts/editor.gd) hands the whole model over as
+  `Stage.project_sprites`.
+- **Add / Delete a sprite — the visible payoff.** New top-bar **+ Sprite** / **− Sprite** buttons
+  (editor.tscn) pop dialogs: Add ([`_on_new_sprite_confirmed`](scripts/editor.gd)) appends a fresh
+  `{name, default geometry, script: []}` (a grey square at centre, empty script — Scratch's new sprite
+  has none) and selects it; Delete ([`_on_del_sprite_confirmed`](scripts/editor.gd)) drops the entry
+  **and** every variable scoped to that sprite (its locals), refusing the last sprite. A new sprite
+  appears at RUN as a placeholder you script; like the ball it positions itself with a `go_to` block
+  (behaviour is blocks), so no in-UI move/resize is needed yet.
+- **Save/open carries geometry.** The save format key stays `{scripts, variables}` (M22) — each
+  `scripts` entry just carries the geometry now. [`_read_project`](scripts/editor.gd) runs
+  [`_normalize_sprite`](scripts/editor.gd) over loaded entries, defaulting any missing geometry, so a
+  **pre-M24 saved file** (entries with only `name`/`script`) still opens.
 
-What this leaves deferred: **true Scratch block geometry** (the shapes are still corner-radius
-approximations, the slot match still rectangular *proximity*, not a notch/hexagon connection point);
-**ejecting / wrapping** a reporter a drop displaces (a matching drop onto an occupied slot still discards
-the old, M14); and the **full-body grab** of an all-field pill. The **scripts** remain duplicated in
-spirit (both editor and Stage call the `PongScripts` builders), as since M18.
+What this leaves deferred: **renaming a sprite** (a real cascade — the selector, every
+`touching_sprite?` reference across all scripts, and every variable `scope` field — the sprite analog
+of M21's variable rename) and **editing a sprite's starting geometry from the UI** (you set position
+with a `go_to` block instead). **Stripping dangling `touching_sprite?` references** to a deleted sprite
+is part of that same rename cascade and waits with it — for now such a reference resolves to null
+(false) at RUN and the dropdown keeps the name visible (M13's append-the-unknown). The **stock project
+data** still lives in `PongScripts` (both ends read `sprites()` / `variables()`), the same shared-seed
+arrangement as since M18 — now consolidated through one `sprites()` call rather than six builder calls.
 
 ---
+
+For context, the M23 mechanics this builds on:
+
+- **Boolean-vs-value slot typing (M23).** The editor refuses a mismatched reporter drop — a `boolean`
+  reporter into a value slot or vice-versa — via an `output` / `bool_inputs` pair on each `_OPCODES`
+  entry and a `slot_type` filter in [`_nearest_slot`](scripts/block_canvas.gd). M24 adds no slots or
+  reporters, so the typing is unaffected; see [Boolean-vs-value slot typing
+  (M23)](#boolean-vs-value-slot-typing-m23).
 
 For context, the M22 mechanics this builds on:
 
@@ -122,6 +139,11 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    editor** opens, showing a **palette of new blocks** down the left, a sprite selector,
    and one sprite's script rendered as a stack of visual blocks (pick another sprite
    from the dropdown to load it).
+   **Add or remove a sprite** (M24) with the **+ Sprite** / **− Sprite** buttons beside the selector:
+   *+ Sprite* names a new sprite (it starts as a grey square at the stage centre with an empty script —
+   give it a `when_flag_clicked` and blocks, and a `go_to` to place it); *− Sprite* deletes the selected
+   one along with its local variables (the last sprite can't be deleted). New sprites and deletions are
+   part of the project, so RUN reflects them and **SAVE** keeps them across relaunch.
    **Drag a block from the palette** (M11) to add a fresh one; it rides the cursor and
    snaps just like an existing block. **Drag a block already on the canvas** to pull it
    (and the blocks below it) out of its stack. Either way a yellow bar marks where it
@@ -1054,20 +1076,65 @@ block geometry** (corner-radius approximations, proximity snapping); **ejecting 
 reporter (a matching drop onto an occupied slot still discards the old, M14); and the **full-body grab**
 of an all-field pill (M15). The **scripts** remain duplicated in spirit, as since M18.
 
+### Sprites are a data-owned, editable model (M24)
+
+The last hardcoded pillar of the project model, made data. The editor owned the **scripts** (M10),
+**variables** (M18/M20), and **persistence** (M22), but the sprite set — names, starting positions,
+sizes, colours — lived only in [`stage.gd`](scripts/stage.gd)`._ready` as six literal `_add_sprite`
+calls, with the editor merely *deriving the names* from its script list. M24 is the **sprite counterpart
+of M18**: one model both the runtime and editor read, plus Add / Delete from the UI. **No new opcode, no
+block-data-shape change, no interpreter change.**
+
+- **The model.** [`PongScripts.sprites()`](scripts/pong_scripts.gd) returns an `Array` of
+  `{name, x, y, w, h, color, script}` — placeholder geometry + script per sprite (a sprite owns its
+  scripts). `color` is a **hex string** so the model is JSON-clean for SAVE/OPEN (M22); `stage.gd`
+  parses it with `Color(hex)`. The geometry is exactly what M2–M7 hardcoded. This is the single
+  declaration both ends read — the sibling of `variables()` (M18).
+- **The runtime builds from it.** [stage.gd](scripts/stage.gd)`._ready` loops
+  [`_sprite_model()`](scripts/stage.gd) (the editor's `Stage.project_sprites` when handed one, else
+  `PongScripts.sprites()` — the M10/M20 fallback, so a direct `main.tscn` launch still builds stock
+  Pong): **pass 1** builds every placeholder *before* the variable seed (a sprite-scoped local needs
+  its target to exist); **pass 2** (after the viewport-ready frame) runs each entry's script. M10's
+  `project_scripts` / `_script_for` are **retired** — the script lives inside each sprite entry now.
+- **The editor owns it, mutably.** [editor.gd](scripts/editor.gd)'s `_scripts` *is* this model
+  (`_seed_demo` seeds it from `PongScripts.sprites().duplicate(true)`); [`_persist_current`](scripts/editor.gd)
+  overwrites only `["script"]`, so geometry survives a switch / RUN, and [`_on_run`](scripts/editor.gd)
+  hands the whole model over as `Stage.project_sprites` (deep-copied, like the variable model).
+- **Add / Delete (the payoff).** Top-bar **+ Sprite** / **− Sprite** buttons pop dialogs:
+  [`_on_new_sprite_confirmed`](scripts/editor.gd) appends `{name, default geometry, script: []}` (a
+  grey square at centre with no script — Scratch's new sprite) and lands the selector on it (via
+  [`_load_project_into_ui(select_index)`](scripts/editor.gd), its new optional arg);
+  [`_on_del_sprite_confirmed`](scripts/editor.gd) removes the entry **and** every variable scoped to it
+  (its locals), refusing the last sprite. Names must stay unique (they are the target registry). A new
+  sprite positions itself with a `go_to` block (behaviour is blocks), so no in-UI move/resize yet.
+- **Persistence is unchanged in shape.** Save still writes `{scripts, variables}` (M22); the `scripts`
+  entries simply carry geometry now. [`_read_project`](scripts/editor.gd) runs
+  [`_normalize_sprite`](scripts/editor.gd) to default any missing geometry, so a **pre-M24** saved file
+  still opens.
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **renaming a
+sprite** (a cross-script cascade — selector + every `touching_sprite?` ref + every variable `scope` —
+the sprite analog of M21's variable rename), **stripping dangling `touching` refs** to a deleted sprite
+(part of that cascade; for now it resolves null/false at RUN, name kept visible by M13's
+append-the-unknown), and **editing a sprite's starting geometry from the UI** (set position with a
+`go_to` block instead). The stock data still lives in `PongScripts`, the shared-seed arrangement since
+M18 — now through one `sprites()` call.
+
 ## Opcodes implemented
 
-**M23 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22) — the editor is a
-pure *view + interaction* over the existing language. Every opcode below has a `BlockView._OPCODES`
-entry so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
-palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
-value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns, M17 the
+**M24 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23) — the editor is a
+pure *view + interaction* over the existing language, and M24 makes the **sprite set** data-owned and
+editable (add/delete a sprite) without touching the block language. Every opcode below has a
+`BlockView._OPCODES` entry so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh
+one in from the palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal
+input's value (M13 shapes the field by type and turns the fixed-choice slots into dropdowns, M17 the
 `{name}` slots into dropdowns of the project's real variables/sprites, M19 **scoping** those
 variable menus to the selected sprite, M20 letting you **make a new variable** from the palette and
 M21 **rename or delete** one from its palette row);
 M14 lets you **drop a reporter into a value/condition slot** and M15 lets you **grab one back
 out** (M23 making that drop **type-aware** — a boolean reporter only into a boolean slot, a value only
 into a value slot); M16 lets you **delete a block by dragging it onto the palette**; and M10 runs whatever
-you assemble from them.
+you assemble from them (M24: across whatever sprites the project now has).
 
 
 | opcode | kind | inputs | notes |
@@ -1109,20 +1176,20 @@ you assemble from them.
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); 480x360 window
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs, and the project-file browser (a FileDialog, M22) — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + Add/Del sprite buttons (M24) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete sprite dialogs (M24), and the project-file browser (a FileDialog, M22) — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo), keeping the demo and saved projects from clobbering each other
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20), runs scripts (edited via project_scripts, else PongScripts — M10); ESC returns to the editor (the inverse of editor.gd's RUN)
+  stage.gd                 Runtime root: builds sprites + runs their scripts from the one sprite model (the editor's via static project_sprites — which may include UI-added sprites — else PongScripts.sprites(), M24; each entry carries geometry + script, so M10's separate project_scripts/_script_for are retired), owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20); ESC returns to the editor (the inverse of editor.gd's RUN)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed variable model — variables() declares each variable's name/value/scope, the editor's starting set and the Stage's fallback (M18; the editor extends its own copy via Make a Variable, M20). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed
 CLAUDE.md                  This file
 ```
 
@@ -1162,6 +1229,15 @@ CLAUDE.md                  This file
   and the Stage falls back to. `scope` is `"global"` or a sprite name (a per-sprite local). Don't seed
   a variable inline in `stage.gd` or name it in the editor separately; that is exactly the duplication
   M18 removed.
+- New sprite? Two ways, mirroring variables. **From the UI** (M24): **+ Sprite** in the top bar names
+  a new sprite (a grey placeholder at centre with an empty script); **− Sprite** deletes the selected
+  one (and its locals). A UI-added sprite is seeded/built at RUN and survives relaunch only if you
+  **SAVE** the project. **In the stock project**: add one `{name, x, y, w, h, color, script}` entry to
+  [`PongScripts.sprites()`](scripts/pong_scripts.gd) (M24) — the seed sprite model the editor starts
+  from and the Stage falls back to (`color` a hex string; `script` from a builder). Don't build a
+  sprite inline in `stage.gd`; that is exactly the duplication M24 removed (the sprite sibling of M18).
+  A sprite's starting position here is just the placeholder — real positioning is a `go_to` block in
+  its script (behaviour is blocks); renaming a sprite from the UI is not built yet (deferred).
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -1209,6 +1285,18 @@ CLAUDE.md                  This file
   rectangular *proximity* (a highlighted slot rect), now gated by type. What's *still* deferred is
   **ejecting/wrapping** a displaced reporter (a matching drop onto an occupied slot discards the old, M14)
   — see the full-body-grab bullet above.
+- **Data-owned sprite set** — **M24 delivered this.** The sprite set is now one model
+  ([`PongScripts.sprites()`](scripts/pong_scripts.gd) — `{name, x, y, w, h, color, script}` per
+  sprite) that both the runtime and the editor read, retiring the six hardcoded `_add_sprite` calls in
+  `stage.gd` and the editor's name-only mirror; **+ Sprite / − Sprite** add and delete sprites from the
+  UI. What's *still* deferred: **renaming a sprite** (a cross-script cascade — the selector, every
+  `touching_sprite?` reference across all scripts, and every variable `scope` field — the sprite analog
+  of M21's variable rename), and as part of that same cascade **stripping dangling `touching_sprite?`
+  references** to a deleted sprite (today such a reference resolves to null → false at RUN, with the
+  name kept visible in the dropdown by M13's append-the-unknown). Also deferred: **editing a sprite's
+  starting geometry from the UI** (position/size/colour) — a new sprite starts as a grey centre
+  placeholder and is repositioned by a `go_to` block in its script (behaviour is blocks), so there is
+  no on-stage drag or inspector yet.
 - **Canvas panning / auto-scroll while dragging** — the canvas sits in a
   `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
   panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.

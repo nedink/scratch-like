@@ -1,13 +1,13 @@
-[gd_scene load_steps=5 format=3 uid="uid://c8m3rqv2x7n4d"]
+[gd_scene format=3 uid="uid://br1y883s7tol6"]
 
-[ext_resource type="Script" path="res://scripts/editor.gd" id="1_editor"]
-[ext_resource type="Script" path="res://scripts/block_palette.gd" id="2_palette"]
-[ext_resource type="Script" path="res://scripts/block_canvas.gd" id="3_canvas"]
+[ext_resource type="Script" uid="uid://c02x7i7846g6w" path="res://scripts/editor.gd" id="1_editor"]
+[ext_resource type="Script" uid="uid://vfyg3fbmcnyo" path="res://scripts/block_palette.gd" id="2_palette"]
+[ext_resource type="Script" uid="uid://btx44p6nb4eos" path="res://scripts/block_canvas.gd" id="3_canvas"]
 
 [sub_resource type="Theme" id="Theme_ui"]
 default_font_size = 11
 
-[node name="Editor" type="Control"]
+[node name="Editor" type="Control" unique_id=1899586967]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -17,7 +17,7 @@ grow_vertical = 2
 theme = SubResource("Theme_ui")
 script = ExtResource("1_editor")
 
-[node name="Backdrop" type="ColorRect" parent="."]
+[node name="Backdrop" type="ColorRect" parent="." unique_id=350105569]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -26,7 +26,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.117647, 0.117647, 0.133333, 1)
 
-[node name="Page" type="VBoxContainer" parent="."]
+[node name="Page" type="VBoxContainer" parent="." unique_id=1904749509]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -35,78 +35,86 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="Bar" type="HBoxContainer" parent="Page"]
+[node name="Bar" type="HBoxContainer" parent="Page" unique_id=1721499136]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Page/Bar"]
+[node name="Title" type="Label" parent="Page/Bar" unique_id=504235260]
 unique_name_in_owner = true
 layout_mode = 2
 text = "scratch-like"
 
-[node name="SpriteSelector" type="OptionButton" parent="Page/Bar"]
+[node name="SpriteSelector" type="OptionButton" parent="Page/Bar" unique_id=1853098916]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="Spacer" type="Control" parent="Page/Bar"]
+[node name="AddSpriteButton" type="Button" parent="Page/Bar" unique_id=1458511911]
+unique_name_in_owner = true
+layout_mode = 2
+text = "+ Sprite"
+
+[node name="DelSpriteButton" type="Button" parent="Page/Bar" unique_id=155060642]
+unique_name_in_owner = true
+layout_mode = 2
+text = "- Sprite"
+
+[node name="Spacer" type="Control" parent="Page/Bar" unique_id=1330330019]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="NewButton" type="Button" parent="Page/Bar"]
+[node name="NewButton" type="Button" parent="Page/Bar" unique_id=1782081314]
 unique_name_in_owner = true
 layout_mode = 2
 text = "NEW"
 
-[node name="OpenButton" type="Button" parent="Page/Bar"]
+[node name="OpenButton" type="Button" parent="Page/Bar" unique_id=307340559]
 unique_name_in_owner = true
 layout_mode = 2
 text = "OPEN"
 
-[node name="SaveButton" type="Button" parent="Page/Bar"]
+[node name="SaveButton" type="Button" parent="Page/Bar" unique_id=245657938]
 unique_name_in_owner = true
 layout_mode = 2
 text = "SAVE"
 
-[node name="RunButton" type="Button" parent="Page/Bar"]
+[node name="RunButton" type="Button" parent="Page/Bar" unique_id=348307656]
 unique_name_in_owner = true
 layout_mode = 2
 text = "RUN"
 
-[node name="Workspace" type="HBoxContainer" parent="Page"]
+[node name="Workspace" type="HBoxContainer" parent="Page" unique_id=1692817026]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 4
 
-[node name="PaletteScroll" type="ScrollContainer" parent="Page/Workspace"]
+[node name="PaletteScroll" type="ScrollContainer" parent="Page/Workspace" unique_id=1873497012]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(150, 0)
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="Palette" type="VBoxContainer" parent="Page/Workspace/PaletteScroll"]
+[node name="Palette" type="VBoxContainer" parent="Page/Workspace/PaletteScroll" unique_id=38906745]
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("2_palette")
 
-[node name="CanvasScroll" type="ScrollContainer" parent="Page/Workspace"]
+[node name="CanvasScroll" type="ScrollContainer" parent="Page/Workspace" unique_id=566786302]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 
-[node name="Canvas" type="Control" parent="Page/Workspace/CanvasScroll"]
+[node name="Canvas" type="Control" parent="Page/Workspace/CanvasScroll" unique_id=1712130241]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(1200, 1200)
 layout_mode = 2
 script = ExtResource("3_canvas")
 
-[node name="VarDialog" type="ConfirmationDialog" parent="."]
+[node name="VarDialog" type="ConfirmationDialog" parent="." unique_id=300687861]
 unique_name_in_owner = true
 title = "New Variable"
-visible = false
 
-[node name="VBox" type="VBoxContainer" parent="VarDialog"]
-layout_mode = 1
+[node name="VBox" type="VBoxContainer" parent="VarDialog" unique_id=1540282817]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -114,32 +122,30 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 6
 
-[node name="NameLabel" type="Label" parent="VarDialog/VBox"]
+[node name="NameLabel" type="Label" parent="VarDialog/VBox" unique_id=333799083]
 layout_mode = 2
 text = "Variable name:"
 
-[node name="VarNameEdit" type="LineEdit" parent="VarDialog/VBox"]
+[node name="VarNameEdit" type="LineEdit" parent="VarDialog/VBox" unique_id=1503640777]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
-[node name="VarScope" type="OptionButton" parent="VarDialog/VBox"]
+[node name="VarScope" type="OptionButton" parent="VarDialog/VBox" unique_id=959526222]
 unique_name_in_owner = true
 layout_mode = 2
+selected = 0
 item_count = 2
 popup/item_0/text = "For all sprites"
 popup/item_0/id = 0
 popup/item_1/text = "For this sprite only"
 popup/item_1/id = 1
-selected = 0
 
-[node name="RenameDialog" type="ConfirmationDialog" parent="."]
+[node name="RenameDialog" type="ConfirmationDialog" parent="." unique_id=1583072994]
 unique_name_in_owner = true
 title = "Rename Variable"
-visible = false
 
-[node name="VBox" type="VBoxContainer" parent="RenameDialog"]
-layout_mode = 1
+[node name="VBox" type="VBoxContainer" parent="RenameDialog" unique_id=431825691]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -147,33 +153,62 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 6
 
-[node name="NameLabel" type="Label" parent="RenameDialog/VBox"]
+[node name="NameLabel" type="Label" parent="RenameDialog/VBox" unique_id=2082155501]
 layout_mode = 2
 text = "New name:"
 
-[node name="RenameEdit" type="LineEdit" parent="RenameDialog/VBox"]
+[node name="RenameEdit" type="LineEdit" parent="RenameDialog/VBox" unique_id=1838774768]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
-[node name="DeleteDialog" type="ConfirmationDialog" parent="."]
+[node name="DeleteDialog" type="ConfirmationDialog" parent="." unique_id=1541941497]
 unique_name_in_owner = true
 title = "Delete Variable"
-visible = false
 
-[node name="DeleteLabel" type="Label" parent="DeleteDialog"]
+[node name="DeleteLabel" type="Label" parent="DeleteDialog" unique_id=1128951977]
 unique_name_in_owner = true
-layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="FileDialog" type="FileDialog" parent="."]
+[node name="SpriteDialog" type="ConfirmationDialog" parent="." unique_id=375404441]
+unique_name_in_owner = true
+title = "New Sprite"
+
+[node name="VBox" type="VBoxContainer" parent="SpriteDialog" unique_id=915086461]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="SpriteDialog/VBox" unique_id=1356016723]
+layout_mode = 2
+text = "Sprite name:"
+
+[node name="SpriteNameEdit" type="LineEdit" parent="SpriteDialog/VBox" unique_id=1792226483]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
+[node name="DelSpriteDialog" type="ConfirmationDialog" parent="." unique_id=163454552]
+unique_name_in_owner = true
+title = "Delete Sprite"
+
+[node name="DelSpriteLabel" type="Label" parent="DelSpriteDialog" unique_id=1113019899]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true
 title = "Save Project"
 size = Vector2i(420, 320)
-visible = false
 access = 2
-use_native_dialog = false

@@ -103,6 +103,25 @@ var _renaming: String = ""
 @onready var _delete_label: Label = %DeleteLabel
 var _deleting: String = ""
 
+## Add / Delete **sprite** chrome (M24): the top-bar buttons beside the selector, and the two dialogs
+## (declared in editor.tscn, reused). Add pops a name prompt; Delete pops a confirmation whose label is
+## rewritten per-invocation with the count of locals that go with the sprite. `_deleting_sprite` holds
+## the name the open delete dialog acts on (the confirmed signal carries no payload — the same state-var
+## idiom the variable rename/delete dialogs use).
+@onready var _add_sprite_button: Button = %AddSpriteButton
+@onready var _del_sprite_button: Button = %DelSpriteButton
+@onready var _sprite_dialog: ConfirmationDialog = %SpriteDialog
+@onready var _sprite_name_edit: LineEdit = %SpriteNameEdit
+@onready var _del_sprite_dialog: ConfirmationDialog = %DelSpriteDialog
+@onready var _del_sprite_label: Label = %DelSpriteLabel
+var _deleting_sprite: String = ""
+
+## A freshly added sprite's placeholder geometry (M24): a small grey square at the stage center. It is
+## just a starting placeholder — real positioning is blocks (a `go_to` in the sprite's script, as the
+## ball does), so there is no UI yet to move/resize/recolour it (deferred to M25). Also the fill values
+## _read_project defaults a pre-M24 saved entry to.
+const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 24, "h": 24, "color": "#cccccc"}
+
 
 func _ready() -> void:
 	# Land on the in-code demo (the stock Pong project). It is the unsaved default — bound to no
@@ -142,6 +161,14 @@ func _ready() -> void:
 	_rename_dialog.register_text_enter(_rename_edit)
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)
 
+	# Add / Delete sprite (M24): the top-bar buttons and their dialogs. Add's name field confirms on
+	# Enter (matching the variable dialogs); both dialogs' confirmed signal routes to its handler.
+	_add_sprite_button.pressed.connect(_add_sprite_pressed)
+	_del_sprite_button.pressed.connect(_del_sprite_pressed)
+	_sprite_dialog.confirmed.connect(_on_new_sprite_confirmed)
+	_sprite_dialog.register_text_enter(_sprite_name_edit)
+	_del_sprite_dialog.confirmed.connect(_on_del_sprite_confirmed)
+
 	# Populate the selector + canvas from the seeded project and show its first sprite.
 	_load_project_into_ui()
 
@@ -157,38 +184,41 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Seed the working project with the stock demo — the in-code PongScripts (M22, extracted from the
 ## original _ready). `_scripts` is the **living project** (M10): switching sprites and RUN persist
-## the canvas's edits back here. `_variables` is the editor-owned **mutable** variable model (M20),
+## the canvas's edits back here. As of M24 each `_scripts` entry is a full **sprite def** —
+## {name, x, y, w, h, color, script} — so it owns the sprite's placeholder geometry too (the sprite
+## counterpart of M18's variable model); the editor can add/delete entries from the UI.
+## `_variables` is the editor-owned **mutable** variable model (M20),
 ## seeded from the one runtime declaration PongScripts.variables() (a fresh array each call, so the
 ## editor keeps its own copy to append to); _on_run hands it back to the Stage. Both are deep copies
 ## so editing never mutates the shared PongScripts builders.
 func _seed_demo() -> void:
-	_scripts = [
-		{"name": "LeftPaddle", "script": PongScripts.left_paddle()},
-		{"name": "RightPaddle", "script": PongScripts.right_paddle()},
-		{"name": "Ball", "script": PongScripts.ball()},
-		{"name": "P1Hud", "script": PongScripts.p1_hud()},
-		{"name": "P2Hud", "script": PongScripts.p2_hud()},
-		{"name": "Announcer", "script": PongScripts.announcer()},
-	]
+	# Each entry is now a full sprite def — name + placeholder geometry + script (M24) — sourced from
+	# the one sprite model PongScripts.sprites(), the same declaration the Stage builds from, so the
+	# editor and runtime can no longer drift on the sprite set (the sprite counterpart of M18's
+	# variable unification). Deep-copied so editing never mutates the shared PongScripts builders.
+	_scripts = PongScripts.sprites().duplicate(true)
 	_variables = PongScripts.variables().duplicate(true)
 
 
 ## Bring the current `_scripts` / `_variables` up in the UI (M22) — the shared path used on launch
 ## and after NEW / OPEN replace the working project. Repopulates the sprite selector, re-points the
 ## renderer's project model (sprite names + the index-0-scoped variable list — M17/M19; static on
-## BlockView, like Stage.project_scripts) and shows the first sprite. Crucially it resets `_current`
+## BlockView, like Stage.project_sprites) and shows the chosen sprite. Crucially it resets `_current`
 ## to -1 *before* _show, so _show's leading _persist_current() doesn't write the outgoing canvas
 ## (still showing the previous project) into the freshly loaded `_scripts`. _show then re-scopes the
 ## variables, rebuilds the palette, and loads the canvas.
-func _load_project_into_ui() -> void:
+## `select_index` (M24) is which sprite to land on — 0 for launch / NEW / OPEN (their default), but
+## the new sprite after Add and a surviving neighbour after Delete, so the selector follows the edit.
+func _load_project_into_ui(select_index := 0) -> void:
 	_current = -1
 	_selector.clear()
 	for entry in _scripts:
 		_selector.add_item(entry["name"])
 	BlockView.project_sprites = _sprite_names()
 	_update_title()
-	_selector.select(0)
-	_show(0)
+	var index: int = clampi(select_index, 0, _scripts.size() - 1)
+	_selector.select(index)
+	_show(index)
 
 
 ## Load the script at `index` into the canvas, first persisting the outgoing sprite's
@@ -218,6 +248,82 @@ func _sprite_names() -> Array:
 	for entry in _scripts:
 		names.append(entry["name"])
 	return names
+
+
+# --- Add / delete a sprite (M24) -------------------------------------------
+
+## Pop the Add-Sprite name prompt (the top-bar button's callback). The dialog is declared in
+## editor.tscn and reused; Enter-to-confirm is wired in _ready.
+func _add_sprite_pressed() -> void:
+	_sprite_name_edit.text = ""
+	_sprite_dialog.popup_centered(Vector2i(280, 130))
+	_sprite_name_edit.grab_focus()
+
+
+## Mint a sprite: append a fresh entry — the typed name + default placeholder geometry + an empty
+## script (Scratch's new sprite has no scripts) — to the working model, then bring it up in the UI
+## selected. A blank or duplicate name is rejected silently (names are the project's target registry,
+## so they must stay unique). It starts at the stage center as a grey square; you script it from there
+## (a `go_to` block repositions it, as the ball does), and it is seeded/run at RUN like any sprite.
+func _on_new_sprite_confirmed() -> void:
+	var sprite_name := _sprite_name_edit.text.strip_edges()
+	if sprite_name == "" or sprite_name in _sprite_names():
+		return
+	_persist_current()  # keep the outgoing canvas's edits before the selector reloads
+	var entry := _DEFAULT_SPRITE.duplicate()
+	entry["name"] = sprite_name
+	entry["script"] = []
+	_scripts.append(entry)
+	_load_project_into_ui(_scripts.size() - 1)
+
+
+## Pop the delete-confirmation dialog for the selected sprite, reporting how many of its locals go with
+## it. Refused when only one sprite is left (the project always has at least one target). We persist the
+## canvas first so a switch away can't lose edits, and stash the name the confirm acts on.
+func _del_sprite_pressed() -> void:
+	if _scripts.size() <= 1:
+		return
+	_persist_current()
+	var sprite_name := String(_scripts[_current]["name"])
+	_deleting_sprite = sprite_name
+	var locals := 0
+	for v in _variables:
+		if String(v.get("scope", "global")) == sprite_name:
+			locals += 1
+	_del_sprite_label.text = "Delete sprite \"%s\"?\nIts script%s removed." % \
+		[sprite_name, (" and %d local variable(s) will be" % locals) if locals > 0 else " will be"]
+	_del_sprite_dialog.popup_centered(Vector2i(380, 140))
+
+
+## Commit a sprite delete: drop the sprite's model entry and every variable scoped to it (its locals),
+## then reload the UI on a surviving neighbour. References to the gone sprite in *other* scripts (a
+## `touching {name}?` slot) are left as-is — find_target returns null so the reporter is simply false at
+## RUN (no crash), and the dropdown keeps the name visible (M13's append-the-unknown). Stripping those
+## is the sprite-rename cascade, deferred to M25. Destructive; there is no undo (relaunch reloads stock).
+func _on_del_sprite_confirmed() -> void:
+	var index := -1
+	for i in _scripts.size():
+		if String(_scripts[i]["name"]) == _deleting_sprite:
+			index = i
+			break
+	if index < 0:
+		return
+	_scripts.remove_at(index)
+	for i in range(_variables.size() - 1, -1, -1):
+		if String(_variables[i].get("scope", "global")) == _deleting_sprite:
+			_variables.remove_at(i)
+	# _load_project_into_ui resets _current to -1 before showing, so its leading _persist_current can't
+	# write the just-removed sprite's stale canvas back. `index` is clamped to the new (smaller) bounds,
+	# landing on the sprite that shifted into this slot, or the new last one if we deleted the tail.
+	_load_project_into_ui(index)
+
+
+## Fill any missing placeholder geometry on a sprite entry with the defaults (M24) — used to upgrade a
+## project saved before M24 (entries with only name/script) so the Stage can build it.
+func _normalize_sprite(entry: Dictionary) -> void:
+	for key in _DEFAULT_SPRITE:
+		if not entry.has(key):
+			entry[key] = _DEFAULT_SPRITE[key]
 
 
 ## The variable names in scope for `sprite_name` (M19) — the options its `{name}` slots offer.
@@ -492,6 +598,11 @@ func _read_project(path: String) -> void:
 		push_warning("Editor: '%s' is not a valid project file" % path)
 		return
 	_scripts = data["scripts"]
+	# Fill any missing geometry (M24): a project saved before M24 has entries with only name/script,
+	# so default their placeholder geometry rather than crash when the Stage builds them. New saves
+	# carry x/y/w/h/color; this only matters for older files.
+	for entry in _scripts:
+		_normalize_sprite(entry)
 	_variables = data["variables"]
 	_current_path = path
 	_load_project_into_ui()
@@ -513,11 +624,11 @@ func _update_title() -> void:
 ## deep-duplicate so the running game can't mutate the editor's working data.
 func _on_run() -> void:
 	_persist_current()
-	var project: Dictionary = {}
-	for entry in _scripts:
-		project[entry["name"]] = (entry["script"] as Array).duplicate(true)
-	Stage.project_scripts = project
+	# Hand the whole sprite model over (M24): each entry's geometry *and* script, including any
+	# sprites added in the UI. This replaces M10's separate name->script Dictionary now that the
+	# script rides inside each sprite entry (Stage builds from project_sprites). Deep-duplicated, so
+	# the running game can't mutate the editor's working copy.
+	Stage.project_sprites = _scripts.duplicate(true)
 	# Hand over the variable model too (M20), so a variable made in the editor is seeded at RUN.
-	# Deep-duplicated like the scripts, so the running game can't mutate the editor's working copy.
 	Stage.project_variables = _variables.duplicate(true)
 	get_tree().change_scene_to_file(_GAME_SCENE)
