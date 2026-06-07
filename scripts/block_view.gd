@@ -104,13 +104,27 @@ static var project_sprites: Array = []
 ##     through the same _enum_field path; when the model is empty (non-editor caller) it falls
 ##     back to a text field. The matching `defaults` point at a real name so a freshly-spawned
 ##     block lands on a valid menu item (not a phantom appended value).
+##
+## M23 added two optional fields, the **slot-typing** pair (Scratch's hexagon-vs-round
+## distinction) — both consumed by the editor's reporter-drop, neither touching the runtime:
+##   * `output` — a reporter's value kind, "boolean" or (default) "value". The `?`-suffixed
+##     sensing reporters and the comparison/boolean operators (`equals`/`>`/`<`/`and`/`or`/
+##     `not`) are booleans; arithmetic, `random`, and `variable` are values. `build_reporter`
+##     shapes a boolean pill with a tight (angular) corner radius vs a value pill's round one
+##     — the same corner-radius shorthand M13 used for number-vs-text literal fields (true
+##     hexagon geometry stays deferred).
+##   * `bool_inputs` — `[input_key, …]` naming the slots that expect a boolean (`if`'s
+##     `condition`, `and`/`or`'s `a`/`b`, `not`'s `a`); every other slot is a value slot.
+##     build_input stamps each widget's expected kind as `slot_type` meta, and the canvas's
+##     _nearest_slot only offers a reporter the slots whose `slot_type` matches its `output`
+##     — so a boolean can't land in `move`'s `steps` nor a value in an `if` condition.
 const _OPCODES := {
 	# events (hats)
 	"when_flag_clicked": {"category": "events", "kind": "hat", "template": "when flag clicked", "defaults": {"body": []}},
 	"when_i_start_as_a_clone": {"category": "events", "kind": "hat", "template": "when I start as a clone", "defaults": {"body": []}},
 	# control
 	"forever": {"category": "control", "kind": "statement", "template": "forever", "defaults": {"body": []}},
-	"if": {"category": "control", "kind": "statement", "template": "if {condition} then", "defaults": {"condition": true, "body": []}},
+	"if": {"category": "control", "kind": "statement", "template": "if {condition} then", "defaults": {"condition": true, "body": []}, "bool_inputs": ["condition"]},
 	"wait_seconds": {"category": "control", "kind": "statement", "template": "wait {seconds} seconds", "defaults": {"seconds": 1}},
 	"stop": {"category": "control", "kind": "statement", "template": "stop {mode}", "defaults": {"mode": "all"}, "enums": {"mode": ["all", "this script"]}},
 	"create_clone": {"category": "control", "kind": "statement", "template": "create clone of {target}", "defaults": {"target": "myself"}, "enums": {"target": ["myself"]}},
@@ -123,9 +137,9 @@ const _OPCODES := {
 	# looks
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	# sensing
-	"touching_edge?": {"category": "sensing", "kind": "reporter", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
-	"touching_sprite?": {"category": "sensing", "kind": "reporter", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
-	"key_pressed?": {"category": "sensing", "kind": "reporter", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
+	"touching_edge?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
+	"touching_sprite?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
+	"key_pressed?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
 	# variables
 	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "p1_score", "value": 0}, "data_enums": {"name": "variables"}},
 	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "p1_score", "by": 1}, "data_enums": {"name": "variables"}},
@@ -136,12 +150,12 @@ const _OPCODES := {
 	"multiply": {"category": "operators", "kind": "reporter", "template": "{a} * {b}", "defaults": {"a": 0, "b": 0}},
 	"divide": {"category": "operators", "kind": "reporter", "template": "{a} / {b}", "defaults": {"a": 0, "b": 0}},
 	"mod": {"category": "operators", "kind": "reporter", "template": "{a} mod {b}", "defaults": {"a": 0, "b": 0}},
-	"equals": {"category": "operators", "kind": "reporter", "template": "{a} = {b}", "defaults": {"a": 0, "b": 0}},
-	"greater_than": {"category": "operators", "kind": "reporter", "template": "{a} > {b}", "defaults": {"a": 0, "b": 0}},
-	"less_than": {"category": "operators", "kind": "reporter", "template": "{a} < {b}", "defaults": {"a": 0, "b": 0}},
-	"and": {"category": "operators", "kind": "reporter", "template": "{a} and {b}", "defaults": {"a": false, "b": false}},
-	"or": {"category": "operators", "kind": "reporter", "template": "{a} or {b}", "defaults": {"a": false, "b": false}},
-	"not": {"category": "operators", "kind": "reporter", "template": "not {a}", "defaults": {"a": false}},
+	"equals": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} = {b}", "defaults": {"a": 0, "b": 0}},
+	"greater_than": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} > {b}", "defaults": {"a": 0, "b": 0}},
+	"less_than": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} < {b}", "defaults": {"a": 0, "b": 0}},
+	"and": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} and {b}", "defaults": {"a": false, "b": false}, "bool_inputs": ["a", "b"]},
+	"or": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} or {b}", "defaults": {"a": false, "b": false}, "bool_inputs": ["a", "b"]},
+	"not": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "not {a}", "defaults": {"a": false}, "bool_inputs": ["a"]},
 	"random": {"category": "operators", "kind": "reporter", "template": "pick random {from} to {to}", "defaults": {"from": 1, "to": 10}},
 }
 
@@ -205,18 +219,22 @@ static func build_block(block: Dictionary) -> Control:
 	return panel
 
 
-## A reporter / boolean block, drawn inline inside its parent's header as a rounded
-## pill. Recurses into its own reporter inputs to any depth — the drawing
-## counterpart to the interpreter's _evaluate, which dispatches a reporter and
-## evaluates *its* inputs the same way (e.g. add(90, random(-45, 45))).
+## A reporter / boolean block, drawn inline inside its parent's header as a pill.
+## Recurses into its own reporter inputs to any depth — the drawing counterpart to the
+## interpreter's _evaluate, which dispatches a reporter and evaluates *its* inputs the same
+## way (e.g. add(90, random(-45, 45))). A **boolean** reporter (output "boolean", M23) gets a
+## tight corner radius (angular) where a **value** reporter stays round — Scratch's
+## hexagon-vs-round shorthand, approximated with corner radii as M13 did for number-vs-text
+## literal slots (true hexagon geometry is still deferred).
 static func build_reporter(block: Dictionary) -> Control:
 	var opcode := String(block.get("opcode", ""))
 	var info: Dictionary = _OPCODES.get(opcode, {})
 	var category := String(info.get("category", "operators"))
 	var template := String(info.get("template", opcode))
+	var radius := 3 if reporter_output_type(opcode) == "boolean" else 10
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], 10))
+	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], radius))
 	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	panel.add_child(_header_from_template(template, block))
@@ -240,7 +258,10 @@ static func build_reporter(block: Dictionary) -> Control:
 ##   * `slot_default` — the opcode's default literal for this key. M15 restores it when a
 ##     reporter is *grabbed out* of the slot: pulling the reporter leaves the slot's default
 ##     literal (we never kept the literal a reporter displaced, so the default stands in).
-static func build_input(inputs: Dictionary, key: String, options: Array = [], default: Variant = null) -> Control:
+##   * `slot_type` — the slot's expected value kind, "boolean" or (default) "value" (M23). The
+##     canvas's _nearest_slot offers a dragged reporter only the slots whose `slot_type` matches
+##     its `output`, so a boolean and a value can't drop into each other's slots.
+static func build_input(inputs: Dictionary, key: String, options: Array = [], default: Variant = null, slot_type := "value") -> Control:
 	var value: Variant = inputs.get(key)
 	var widget: Control
 	if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
@@ -255,6 +276,7 @@ static func build_input(inputs: Dictionary, key: String, options: Array = [], de
 	widget.set_meta("slot_inputs", inputs)
 	widget.set_meta("slot_key", key)
 	widget.set_meta("slot_default", default)
+	widget.set_meta("slot_type", slot_type)
 	return widget
 
 
@@ -399,6 +421,14 @@ static func is_reporter(opcode: String) -> bool:
 	return _OPCODES.get(opcode, {}).get("kind", "") == "reporter"
 
 
+## A reporter's output kind (M23): "boolean" or (default) "value". The canvas's _nearest_slot
+## matches this against a slot's expected `slot_type` so a boolean reporter only lands in a
+## boolean slot and a value reporter only in a value slot. A non-reporter opcode reports "value"
+## (harmless — only reporters are ever dragged into slots).
+static func reporter_output_type(opcode: String) -> String:
+	return String(_OPCODES.get(opcode, {}).get("output", "value"))
+
+
 ## The display colour for a category (used by the palette for its group headers). Falls
 ## back to the "unknown" grey for an unrecognized category.
 static func category_color(category: String) -> Color:
@@ -437,7 +467,8 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			literal = ""
 			var close := template.find("}", i)
 			var key := template.substr(i + 1, close - i - 1)
-			row.add_child(build_input(inputs, key, _options_for(info, key), info.get("defaults", {}).get(key)))
+			var slot_type := "boolean" if key in info.get("bool_inputs", []) else "value"
+			row.add_child(build_input(inputs, key, _options_for(info, key), info.get("defaults", {}).get(key), slot_type))
 			i = close + 1
 		else:
 			literal += template[i]

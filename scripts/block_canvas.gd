@@ -49,6 +49,14 @@ extends Control
 ## _trashing). No new opcode, no data-model change — a deleted block is one the export simply
 ## no longer contains.
 ##
+## M23 makes the reporter drop **type-aware**: each slot carries an expected `slot_type`
+## ("boolean"/"value", stamped by BlockView from the opcode's `bool_inputs`) and each reporter
+## an `output` kind. _nearest_slot only offers a dragged reporter the slots whose type matches,
+## so a boolean can't land in `move`'s value slot nor a value in an `if` condition — Scratch's
+## hexagon-vs-round refusal. A mismatched release discards the reporter (the off-slot path).
+## Still no runtime change — the interpreter already coped with any reporter anywhere; this only
+## constrains what the editor *lets* you assemble.
+##
 ## Position is the editor's own UI state (a Vector2 per top-level stack), kept here and
 ## out of the block dictionaries, so the data stays exactly the runtime's shape.
 
@@ -605,12 +613,21 @@ func _columns(node: Node, out: Array = []) -> Array:
 ## (deeper) slot wins, so you fill an inner slot rather than replacing the whole reporter
 ## (cf. _block_at's smallest-area rule). The epsilon keeps that tie-break from letting a
 ## strictly-farther slot win on area alone.
+##
+## M23 type-filters the candidates: only slots whose expected `slot_type` matches the dragged
+## reporter's `output` are considered, so a boolean reporter (`touching edge?`, `>`) is offered
+## only boolean slots (`if`'s condition, `and`'s operands) and a value reporter only value slots.
+## A mismatched hover finds no slot — no highlight — and a release there discards the reporter,
+## the existing off-slot behavior (M14). Scratch's hexagon-vs-round refusal, enforced here.
 func _nearest_slot() -> Dictionary:
 	var anchor := global_position + _ghost.position  # ghost top-left, in global space
+	var drag_type := BlockView.reporter_output_type(String(_grabbed[0].get("opcode", "")))
 	var best := {}
 	var best_dist := SNAP_DISTANCE
 	var best_area := INF
 	for slot in _slots(_layer):
+		if String(slot.get_meta("slot_type", "value")) != drag_type:
+			continue  # boolean ⇄ value mismatch: not a legal drop target
 		var r: Rect2 = (slot as Control).get_global_rect()
 		var d := _dist_to_rect(anchor, r)
 		if d >= SNAP_DISTANCE:

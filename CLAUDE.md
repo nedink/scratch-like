@@ -5,57 +5,55 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 22 — save & open named projects (persistence)
+## Current state: Milestone 23 — boolean-vs-value slot typing
 
-**Goal of this milestone:** make edits **survive relaunch**. Through M21 the editor owned the whole
-project model (scripts via M10's `_scripts`, variables via M20's `_variables`) but it lived only in
-memory — every edit reset to stock on relaunch (the standing deferral since M10). M22 writes that
-model to disk and reads it back: a **file browser** (Godot's `FileDialog`) saves and opens **named
-project files** the user places **wherever they like** (full filesystem access; the browser opens at the project folder by default), while the in-code **demo** stays the always-available
-default — so you can keep the stock Pong *and* accumulate your own saved projects without either
-clobbering the other.
+**Goal of this milestone:** make the editor **refuse mismatched reporter drops**. Since M14 *any*
+reporter could drop into *any* slot — a comparison (`score > 5`) into `move`'s `steps`, a number into
+an `if` condition — and the runtime just coped. Scratch instead distinguishes **hexagonal boolean
+slots** from **round value slots** and refuses the mismatch; M23 brings that to the editor. It is small
+because M14/M15 already stamp every input slot as a drop target (`slot_*` meta) and the canvas already
+picks the nearest one ([`_nearest_slot`](scripts/block_canvas.gd)) — M23 only adds a **type** to each
+slot and each reporter and filters the candidates by it. **No new opcode, no block-data-shape change,
+no runtime change** — the interpreter still evaluates any reporter in any position; this only constrains
+what the editor *lets* you assemble.
 
-It is small because the block model was **already serializable** ("exactly the shape a visual editor
-would emit" — plain dicts/arrays/primitives), so saving is a near-direct `JSON.stringify` and loading
-a `JSON.parse_string`. The editor's single ownership of the model (M18–M21) means there is exactly one
-thing to serialize. **No new opcode, no block-data-shape change, no runtime change** — the Stage's
-M10/M20 static hand-off is untouched; persistence is an *editor-side* concern (disk ⇄ `_scripts` /
-`_variables`) that feeds the same RUN path.
+- **Two table-driven fields, the slot-typing pair.** [block_view.gd](scripts/block_view.gd)'s `_OPCODES`
+  gains `output` (a reporter's value kind — `"boolean"` for the `?`-suffixed sensing reporters and the
+  comparison/boolean operators `equals`/`>`/`<`/`and`/`or`/`not`; default `"value"` for arithmetic,
+  `random`, `variable`) and `bool_inputs` (the keys of the slots that *expect* a boolean — `if`'s
+  `condition`, `and`/`or`'s `a`/`b`, `not`'s `a`). Every other slot is a value slot. The same
+  one-field-per-entry idiom as M13's `enums` / M17's `data_enums`.
+- **Stamp the slot, expose the reporter.** [`build_input`](scripts/block_view.gd) stamps each widget's
+  expected kind as a `slot_type` meta (computed in [`_header_from_template`](scripts/block_view.gd) from
+  the opcode's `bool_inputs`); [`reporter_output_type`](scripts/block_view.gd) reads an opcode's
+  `output`. These are the two ends the canvas matches.
+- **Enforce on drop.** [`BlockCanvas._nearest_slot`](scripts/block_canvas.gd) now skips any slot whose
+  `slot_type` ≠ the dragged reporter's `output`, so a boolean reporter is offered only boolean slots and
+  a value reporter only value slots. A mismatched hover finds **no** slot (no highlight), and releasing
+  there discards the reporter — the existing off-slot behavior (M14), now also the "this doesn't fit"
+  outcome. Pickup ([`_reporter_at`](scripts/block_canvas.gd)) is unchanged; the type check lives only in
+  where a reporter may *land*.
+- **The shape cue.** [`build_reporter`](scripts/block_view.gd) draws a **boolean** pill with a tight
+  (angular) corner radius where a **value** pill stays round — Scratch's hexagon-vs-round shorthand,
+  approximated with corner radii exactly as M13 shaped number (oval) vs text (rectangle) literal fields.
+  So the type a slot will accept reads at a glance, even though true hexagon/notch geometry stays
+  deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)).
 
-- **The chrome.** [editor.tscn](editor.tscn) gains three top-bar buttons — **NEW**, **OPEN**,
-  **SAVE** — beside RUN, and one shared `%FileDialog`. The `%Title` label is rewritten to show the
-  bound project's name (or `(demo)` for the unsaved default), so it is clear what SAVE overwrites.
-- **The demo is the in-code default, never a file.** [`editor._seed_demo`](scripts/editor.gd)
-  (extracted from the old `_ready`) loads the stock PongScripts project; `_ready` lands on it every
-  launch, and [`_on_new`](scripts/editor.gd) returns to it without touching any saved file. So the
-  demo can never be overwritten and your `.json` projects are left alone.
-- **One dialog, two actions.** [`_on_save`](scripts/editor.gd) / [`_on_open`](scripts/editor.gd) set
-  the `FileDialog`'s `file_mode` and pop it — at the bound file's folder, else the project-dir default
-  ([`_default_browse_dir`](scripts/editor.gd)); `_file_action` records which is in flight — the
-  rename/delete "state var carries the payload the confirmed signal doesn't" idiom — and
-  [`_on_file_selected`](scripts/editor.gd) routes the pick to write or read. `access = ACCESS_FILESYSTEM`
-  + a `*.json` filter let the user save/open **anywhere on disk** rather than in an imposed folder.
-- **Write / read.** [`_write_project`](scripts/editor.gd) persists the canvas first (`_persist_current`),
-  then `JSON.stringify({scripts, variables}, "\t")` to the chosen path and binds it (`_current_path`).
-  [`_read_project`](scripts/editor.gd) parses, **validates** (a non-dictionary, or a missing/wrong-typed
-  `scripts`/`variables`, is `push_warning`'d and ignored — a corrupt file can't crash the editor), then
-  replaces the model and rebuilds the UI.
-- **One bring-up path.** [`_load_project_into_ui`](scripts/editor.gd) (shared by launch / NEW / OPEN)
-  repopulates the sprite selector, re-points `BlockView.project_sprites`, and shows sprite 0 — resetting
-  `_current = -1` **first** so `_show`'s leading `_persist_current()` can't write the outgoing canvas
-  into the freshly loaded `_scripts`.
-
-What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
-**canvas layout** isn't saved (`export_script` drops each stack's `(x, y)` — editor-only UI state the
-runtime shape never carried — so a reopened project re-flows to default positions, exactly as a sprite
-switch already does); **delete / rename of a saved file** from the browser, **autosave**, and a
-**recent-projects / last-opened-on-launch** convenience are all unbuilt (launch always lands on the
-demo). JSON has one number type, so a saved `10` reads back as `10.0` — harmless (the interpreter
-`float()`s numerics, `_stringify` trims a whole float's `.0`, slot-shape typing treats int/float
-alike). The **scripts** remain duplicated in spirit (both editor and Stage call the `PongScripts`
-builders), as since M18.
+What this leaves deferred: **true Scratch block geometry** (the shapes are still corner-radius
+approximations, the slot match still rectangular *proximity*, not a notch/hexagon connection point);
+**ejecting / wrapping** a reporter a drop displaces (a matching drop onto an occupied slot still discards
+the old, M14); and the **full-body grab** of an all-field pill. The **scripts** remain duplicated in
+spirit (both editor and Stage call the `PongScripts` builders), as since M18.
 
 ---
+
+For context, the M22 mechanics this builds on:
+
+- **Save & open (M22).** The editor owns the whole project model (`_scripts`/`_variables`) and writes it
+  to disk as JSON via a `FileDialog` ([`_write_project`](scripts/editor.gd) / [`_read_project`](scripts/editor.gd)),
+  with the in-code **demo** ([`_seed_demo`](scripts/editor.gd)) as the always-available default that NEW
+  returns to. M23 doesn't touch persistence — a type-checked drop is the same block data, saved the same
+  way.
 
 For context, the M19 + M18 + M17 mechanics this builds on:
 
@@ -160,6 +158,12 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    a value/condition slot (a highlight marks the slot it will land in) and release to make,
    e.g., `move {10}` into `move {score}`. The slot's old value is replaced; a reporter
    dropped anywhere but a slot is discarded.
+   **Slots are typed** (M23): a **boolean** reporter (the rounded-off, angular pills — `>`, `touching
+   edge?`, `and`) drops only into a **boolean** slot (an `if` condition, an `and`/`or`/`not` operand),
+   and a **value** reporter (the round pills — `+`, `score`) only into a **value** slot (`move`'s steps,
+   `set`'s value). Drag one over a slot of the wrong kind and **no slot highlights** — Scratch's
+   hexagon-vs-round refusal — and releasing there discards the pill (like releasing off any slot). The
+   pill's shape tells you which slots will take it.
    **Grab a reporter that's already in a slot** (M15) to pull it back out — press the
    coloured body of a pill and drag; the slot reverts to its default value (`move {score}`
    back to `move {10}`), and you can drop the pill into another slot or release it over empty
@@ -1006,9 +1010,53 @@ project on launch** (launch always lands on the demo) are unbuilt. JSON's single
 saved `10` reads back `10.0` — harmless, as above. The **scripts** stay duplicated in spirit (editor and
 Stage both call the `PongScripts` builders), as since M18.
 
+### Boolean-vs-value slot typing (M23)
+
+The deferral M14 opened: it let *any* reporter drop into *any* slot (a number into an `if` condition, a
+boolean into `move`'s `steps`) because, as M14 noted, refusing mismatches "needs the true connector
+geometry" and the runtime coped regardless. M23 pays off the **refusal** without the geometry — Scratch
+distinguishes hexagonal boolean slots from round value slots, and now so does the editor. It is small
+because M14/M15 already made every input slot a tagged drop target (`slot_*` meta) and the canvas already
+selects the nearest one — M23 only assigns each slot and each reporter a **type** and filters by it.
+**No new opcode, no block-data-shape change, no runtime change** — the type lives in the editor's
+`_OPCODES` table and gates only what a drop *lands in*; the interpreter still evaluates any reporter in
+any position (so a hand-written / loaded script with a "wrong" reporter still runs, it just couldn't be
+*assembled* that way in the editor now).
+
+- **The model: two optional `_OPCODES` fields** ([block_view.gd](scripts/block_view.gd)), the
+  slot-typing pair, declared the same one-line way as M13's `enums` / M17's `data_enums`:
+  - `output` — a reporter's value kind. `"boolean"` for the `?`-suffixed sensing reporters
+    (`touching_edge?`, `touching_sprite?`, `key_pressed?`) and the comparison/boolean operators
+    (`equals`, `greater_than`, `less_than`, `and`, `or`, `not`); default `"value"` for arithmetic,
+    `random`, and `variable`. ([`reporter_output_type`](scripts/block_view.gd) reads it.)
+  - `bool_inputs` — the input keys whose slots *expect* a boolean: `if` → `condition`, `and`/`or` →
+    `a`,`b`, `not` → `a`. Every other slot is a value slot. (Note `and`/`or`/`not` are both boolean
+    *outputs* and boolean *inputs*, so the booleans compose only with booleans, as in Scratch.)
+- **Stamp + expose.** [`build_input`](scripts/block_view.gd) stamps each widget's expected kind as a
+  `slot_type` meta — computed in [`_header_from_template`](scripts/block_view.gd) from the host opcode's
+  `bool_inputs` (so the meta is a property of the *containing slot*, independent of what currently fills
+  it: replacing a comparison inside an `if` still requires a boolean). It joins the `slot_inputs`/
+  `slot_key`/`slot_default` metas M14/M15 already stamp.
+- **Enforce.** [`BlockCanvas._nearest_slot`](scripts/block_canvas.gd) skips any slot whose `slot_type`
+  ≠ the dragged reporter's `output` before the existing proximity / smallest-area selection — so a
+  boolean reporter highlights and lands only in boolean slots, a value reporter only in value slots. A
+  mismatched hover finds no slot, so no highlight appears and a release there **discards** the reporter,
+  reusing M14's off-slot path verbatim (no new drop outcome). Pickup ([`_reporter_at`](scripts/block_canvas.gd))
+  is untouched — pulling a reporter *out* is type-agnostic; the check governs only where it goes back in.
+- **The shape cue.** [`build_reporter`](scripts/block_view.gd) gives a **boolean** pill a tight
+  (angular) corner radius where a **value** pill stays round — the same corner-radius shorthand M13 used
+  for number (oval) vs text (rectangle) literal fields. So which slots will accept a dragged pill reads
+  at a glance: only the like-shaped ones highlight. True hexagon/notch geometry, and the precise
+  connection points, stay deferred (the match is still rectangular *proximity*).
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **true Scratch
+block geometry** (corner-radius approximations, proximity snapping); **ejecting / wrapping** a displaced
+reporter (a matching drop onto an occupied slot still discards the old, M14); and the **full-body grab**
+of an all-field pill (M15). The **scripts** remain duplicated in spirit, as since M18.
+
 ## Opcodes implemented
 
-**M22 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21) — the editor is a
+**M23 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22) — the editor is a
 pure *view + interaction* over the existing language. Every opcode below has a `BlockView._OPCODES`
 entry so it draws; M9 makes every drawn block draggable; M11 lets you drag a fresh one in from the
 palette (M14 extends the palette to **reporters** too); M12 lets you edit any literal input's
@@ -1016,9 +1064,10 @@ value (M13 shapes the field by type and turns the fixed-choice slots into dropdo
 `{name}` slots into dropdowns of the project's real variables/sprites, M19 **scoping** those
 variable menus to the selected sprite, M20 letting you **make a new variable** from the palette and
 M21 **rename or delete** one from its palette row);
-M14 lets you **drop a reporter into any value/condition slot** and M15 lets you **grab one back
-out**; M16 lets you **delete a block by dragging it onto the palette**; and M10 runs whatever you
-assemble from them.
+M14 lets you **drop a reporter into a value/condition slot** and M15 lets you **grab one back
+out** (M23 making that drop **type-aware** — a boolean reporter only into a boolean slot, a value only
+into a value slot); M16 lets you **delete a block by dragging it onto the palette**; and M10 runs whatever
+you assemble from them.
 
 
 | opcode | kind | inputs | notes |
@@ -1066,9 +1115,9 @@ icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; persists script edits + hands both the scripts and the variable model to the Stage on RUN (M10/M20); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo), keeping the demo and saved projects from clobbering each other
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites, owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20), runs scripts (edited via project_scripts, else PongScripts — M10); ESC returns to the editor (the inverse of editor.gd's RUN)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
@@ -1096,8 +1145,11 @@ CLAUDE.md                  This file
   `input_key -> [allowed values]` — and that slot renders as a dropdown instead of a
   free-text field. If instead the choice is **project data** — a variable or sprite name — give the
   entry a `data_enums` field (M17), `input_key -> "variables"`/`"sprites"`, and the slot becomes a
-  dropdown of the editor's live `project_variables`/`project_sprites`. An opcode with no entry still
-  renders, as a grey box.
+  dropdown of the editor's live `project_variables`/`project_sprites`. If the block is a **boolean**
+  reporter (a condition), give it `output: "boolean"` (M23) so it draws as an angular pill and may drop
+  only into boolean slots; if it *has* a boolean input slot, list that key in `bool_inputs` so only
+  boolean reporters may drop there (default: a value reporter / value slot). An opcode with no entry
+  still renders, as a grey box.
 - New variable? Two ways. **From the UI** (M20): click **Make a Variable** atop the palette's
   variables group, name it, pick global/local — it is appended to the editor's working model and
   seeded at RUN. It survives relaunch only if you **SAVE** the project (M22); otherwise it resets to
@@ -1149,10 +1201,14 @@ CLAUDE.md                  This file
   **ejecting / wrapping** the reporter a drop
   displaces — dropping a reporter onto a slot that already holds one discards the old (M14), rather
   than ejecting it to the cursor or wrapping it as an input of the new.
-- **Boolean-vs-value slot typing** — M14 lets any reporter drop into any slot (a number
-  reporter into an `if` condition, a boolean into `move`'s `steps`). Scratch distinguishes
-  hexagonal boolean slots from round value slots and refuses mismatches; that needs the true
-  connector geometry below, so until then the editor permits any drop and the runtime copes.
+- **Boolean-vs-value slot typing** — **M23 delivered this.** Each reporter declares an `output`
+  (`"boolean"`/`"value"`) and each boolean slot is named in its opcode's `bool_inputs`; the canvas's
+  `_nearest_slot` offers a dragged reporter only the matching slots, so a number can't land in an `if`
+  condition nor a boolean in `move`'s `steps` — Scratch's refusal — and boolean pills draw angular vs
+  value pills round to cue it. It did **not** need the true connector geometry below: the match is still
+  rectangular *proximity* (a highlighted slot rect), now gated by type. What's *still* deferred is
+  **ejecting/wrapping** a displaced reporter (a matching drop onto an occupied slot discards the old, M14)
+  — see the full-body-grab bullet above.
 - **Canvas panning / auto-scroll while dragging** — the canvas sits in a
   `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
   panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.
