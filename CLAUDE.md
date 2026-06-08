@@ -5,58 +5,55 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 25 — rename a sprite (the cross-script cascade)
+## Current state: Milestone 26 — editor resolution decoupled from the fixed runtime viewport
 
-**Goal of this milestone:** let you **rename a sprite from the editor**, the last piece of making the
-M24 sprite model fully editable (M24 added / deleted sprites but couldn't rename one). It is the
-**sprite analog of M21's variable rename**: a single name change has to **cascade** through everything
-that refers to the sprite by name. As part of the same cascade it also pays off M24's standing
-deferral — **stripping dangling `touching_sprite?` references** to a *deleted* sprite. **No new opcode,
-no block-data-shape change, no runtime change** — the cascade is an editor-side rewrite of the same
-block data the runtime reads, exactly as M21 was for variables.
+**Goal of this milestone:** let the **block editor lay out at a high resolution** while the **runtime
+stays locked to its fixed 480×360 logical viewport**. The editor had outgrown 480×360 — its chrome was
+designed against that tiny logical space and upscaled wholesale, so blocks and text were chunky and the
+workspace cramped — but the *game* genuinely needs 480×360: `go_to` coordinates, `touching_edge?` /
+`_bounce` edge detection via `get_viewport_rect()`, and the integer-upscaled pixel-art `say` costumes
+are all authored against it. M26 is a pure **display / content-scale** milestone — **no new opcode, no
+block-data-shape change, no runtime-logic change** — that has each scene impose its own content-scale
+policy on the shared window at launch.
 
-A sprite name is referred to in **three** places, and a rename must touch all three (where a variable's
-name in M21 was touched in only the scripts that referenced it):
+The two scenes share one OS window but now stamp **opposite content-scale policies** on it in their
+`_ready`:
 
-- **The selector + the model entry.** [`editor._on_rename_sprite_confirmed`](scripts/editor.gd) updates
-  the sprite's `_scripts` entry `name` and the [`OptionButton`](editor.tscn) item text in place.
-- **Every `touching_sprite?` reference, across *all* scripts.** Unlike a variable (whose rename is
-  *scoped* — a local renames only its own sprite, a global skips a shadowing sprite, M21's
-  `_is_referent_for`), a **sprite name is globally unique**, so the cascade is **unscoped**: any sprite
-  may touch any other, so *every* script is rewritten. The current sprite is rewritten **in place** via
-  [`BlockCanvas.rename_sprite`](scripts/block_canvas.gd) (so canvas positions survive, the M21
-  reasoning); the rest via [`BlockView.rewrite_sprite_refs`](scripts/block_view.gd) on `_scripts[i]`.
-- **Every variable `scope` field equal to the sprite.** A sprite's **locals** are scoped *by its name*
-  (M18's `{name, value, scope}`), so they must follow the rename or they'd dangle, scoped to a sprite
-  that no longer exists. The confirm rewrites each `_variables` entry whose `scope` matches.
+- **The game re-imposes 480×360, integer-snapped.** [`Stage._apply_game_scaling`](scripts/stage.gd)
+  (called first in `_ready`) sets `content_scale_size = _GAME_SIZE` (`480×360`, so `get_viewport_rect()`
+  still reports 480×360 — *every bit of edge/position logic is untouched*), `CONTENT_SCALE_MODE_VIEWPORT`
+  (the whole 2D world renders into that small viewport and blits up to fill the window),
+  `CONTENT_SCALE_ASPECT_KEEP` (preserve 4:3, letterbox the slack), and **`CONTENT_SCALE_STRETCH_INTEGER`**
+  — the whole-number-snap that keeps the `say` glyphs crisp. `content_scale_factor` stays `1.0`: it is an
+  *extra* multiplier layered on top of the automatic fit, **not** the fit itself — a first cut set it to
+  the computed integer factor and zoomed the view that many times too far (only a central slice showed).
+- **The editor lays out at its own logical resolution.** [`BlockEditor._ready`](scripts/editor.gd) sets
+  `content_scale_size = _EDITOR_SIZE` (`960×540` — the single zoom knob: larger → more room / smaller
+  blocks, smaller → the reverse), keeps `CONTENT_SCALE_MODE_VIEWPORT` (the same stretch the M9
+  [`BlockCanvas`](scripts/block_canvas.gd) manual global-coordinate hit-testing was written against, so
+  dragging is unaffected), and uses `CONTENT_SCALE_ASPECT_EXPAND` (fill the window, no letterbox) +
+  `CONTENT_SCALE_STRETCH_FRACTIONAL`. On a 1080p screen that is a clean 2× upscale — double the old
+  480×360 workspace, blocks/text back to a readable size.
 
-After the cascade the editor re-points [`BlockView.project_sprites`](scripts/block_view.gd) (the
-`touching` dropdown options) and the re-scoped [`project_variables`](scripts/block_view.gd) (the renamed
-sprite's locals are still in scope under the new name), rebuilds the palette, and refreshes the canvas —
-all **in place**, no full reload, so positions hold (the M21 trio). Blank / unchanged / duplicate names
-are rejected silently (names are the project's target registry, so they must stay unique).
+Because the editor and game **swap which policy the shared window carries**, each `_ready` re-asserts its
+own on arrival — so the RUN→game→ESC→editor round trip (M10's RUN hand-off, M7's ESC return) restores the
+editor's roomy layout every time. The project defaults ([project.godot](project.godot)) now only govern
+the **initial window** before a scene's `_ready` runs (a 1280×720 starting size, fullscreen mode 3); the
+per-scene overrides take it from there.
 
-- **The cascade walkers, on `BlockView`.** Three statics mirror M21's variable walkers, sharing the same
-  one tree-recursion shape (a block dict; nested reporter inputs; `body` substacks):
-  [`count_sprite_refs`](scripts/block_view.gd) (tally), [`rewrite_sprite_refs`](scripts/block_view.gd)
-  (rename), [`strip_sprite_refs`](scripts/block_view.gd) (remove). The opcode set is
-  [`_SPRITE_OPCODES`](scripts/block_view.gd) `== ["touching_sprite?"]` — the only block that names
-  another sprite. Because `touching_sprite?` is **always a reporter** (never a statement), `strip` never
-  *drops* a block; it reverts the `touching {name}?` reporter to its **host opcode's default** literal
-  for that slot (M15's `slot_default` rule), so `if (touching Ghost?)` becomes `if true` once `Ghost` is
-  gone.
-- **Delete now strips, not dangles.** [`_on_del_sprite_confirmed`](scripts/editor.gd) runs
-  `strip_sprite_refs` over every surviving script after dropping the sprite (and its locals), so no
-  block names a sprite that's gone — Scratch's behaviour, and M24's explicit deferral, now paid off.
-  The confirm dialog ([`_del_sprite_pressed`](scripts/editor.gd)) reports the `touching` reference count
-  it will clear (over the *surviving* scripts) alongside the local-variable count, the M21
-  delete-with-a-count pattern. (The deleted sprite's own self-references aren't counted — its whole
-  script goes wholesale.)
+What this leaves deferred: **embedding the game inside the editor** (a live stage panel beside the
+canvas) — that needs the runtime in a `SubViewport` rather than a full scene swap, a larger restructure;
+and **finer editor zoom / font tuning** past the single `_EDITOR_SIZE` knob.
 
-What this leaves deferred: **editing a sprite's starting geometry from the UI** (position / size /
-colour) — a sprite is still placed by a `go_to` block in its script (behaviour is blocks), so there is
-no on-stage drag or inspector. The **stock project data** still lives in `PongScripts` (both ends read
-`sprites()` / `variables()`), the same shared-seed arrangement as since M18.
+---
+
+For context, the M25 mechanics this builds on:
+
+- **Rename a sprite (M25).** A top-bar **Rename Sprite** button cascades a new sprite name across the
+  selector, every `touching_sprite?` reference in *all* scripts (a sprite name is global, so the cascade
+  is unscoped), and every variable `scope` field equal to the sprite; sprite *delete* now also strips the
+  dangling `touching_sprite?` references it would leave. M26 changes none of this — it is a display-layer
+  milestone over the same editor — see [Rename a sprite (M25)](#rename-a-sprite-m25).
 
 ---
 
@@ -1197,7 +1194,59 @@ sprite's starting geometry from the UI** (position / size / colour) — a sprite
 **scripts** (now sprite entries) remain shared-seed in spirit (editor and Stage both read
 `PongScripts.sprites()`), as since M18/M24.
 
+### Editor resolution decoupled from the runtime (M26)
+
+The editor outgrew 480×360. Through M25 the *whole* project — editor chrome included — rendered into a
+single 480×360 logical viewport (`window/stretch/mode="viewport"`, a **project-wide** setting) and was
+upscaled to fill the window, so the palette, canvas, and dialogs were laid out against 480 logical pixels
+and stretched: chunky and cramped. The runtime, though, *needs* 480×360 — `go_to` coordinates,
+`touching_edge?` / `_bounce` edge detection (`get_viewport_rect()` in [interpreter.gd](scripts/interpreter.gd)),
+and the integer-upscaled pixel-art `say` costumes are all authored against it. M26 lets the editor lay out
+at a high resolution while the runtime stays pinned to 480×360, by having **each scene set the shared
+window's content-scale policy in its own `_ready`** rather than relying on the one project-wide stretch.
+**No new opcode, no block-data-shape change, no runtime-logic change** — only the window's *presentation*
+differs per scene.
+
+- **The lever: per-window content scale, set at runtime.** Godot's `Window.content_scale_*` properties
+  decouple a window's **logical** resolution (what Controls / `get_viewport_rect()` see) from its
+  **pixel** resolution. The project-wide `stretch/mode` is just the default before a scene's `_ready`
+  runs; both scenes override it. [project.godot](project.godot)'s `[display]` now carries only the
+  initial window (1280×720, fullscreen mode 3) and a comment pointing at the two `_ready` methods.
+- **The game re-imposes 480×360, integer-snapped.** [`Stage._apply_game_scaling`](scripts/stage.gd)
+  (called first thing in `_ready`, before sprites build) sets `content_scale_size = _GAME_SIZE` (`480×360`
+  — so `get_viewport_rect()` still reports 480×360 and **no runtime logic changes**),
+  `CONTENT_SCALE_MODE_VIEWPORT` (the 2D world renders into the small viewport and blits up),
+  `CONTENT_SCALE_ASPECT_KEEP` (keep 4:3, letterbox the slack), and `CONTENT_SCALE_STRETCH_INTEGER` — the
+  whole-number-snap (Godot 4.2+) that is the *correct* "strict integer" knob and keeps the bitmap glyphs
+  crisp. `content_scale_factor` stays `1.0`: it multiplies *on top of* the automatic fit, so setting it to
+  the computed integer factor (a first cut did) zooms the view that many times too far — the bug that
+  showed only a central slice of the playfield.
+- **The editor lays out at its own larger logical resolution.** [`BlockEditor._ready`](scripts/editor.gd)
+  sets `content_scale_size = _EDITOR_SIZE` (`960×540` — the **single zoom knob**: bigger → more room /
+  smaller blocks; smaller → the reverse), keeps `CONTENT_SCALE_MODE_VIEWPORT` (deliberately — the M9
+  [`BlockCanvas`](scripts/block_canvas.gd) manual global-coordinate hit-testing was written against the
+  viewport-stretch coordinate transform, so reusing it leaves dragging untouched),
+  `CONTENT_SCALE_ASPECT_EXPAND` (fill the window, no letterbox), and `CONTENT_SCALE_STRETCH_FRACTIONAL`
+  (smooth scaling to any screen; also *resets* the INTEGER snap the game left). On a 1080p screen that is
+  a 2× upscale — double the old 480×360 workspace, blocks/text readable again.
+- **Each scene re-asserts its own policy on arrival.** The editor and game swap which content-scale policy
+  the one shared window carries, so the RUN→game (M10) and ESC→editor (M7) hand-offs each restore the
+  arriving scene's layout — no separate teardown needed. A first cut reset the editor to
+  `CONTENT_SCALE_MODE_DISABLED` (raw window pixels, factor 1), which made the chrome lay out at ~1920px
+  with no upscale — minuscule; the `_EDITOR_SIZE` viewport is the fix.
+
+Still deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): **embedding the
+game inside the editor** (a live stage panel beside the canvas) — that needs the runtime in a `SubViewport`
+rather than a full scene swap; and **finer editor zoom / theme-font tuning** past the one `_EDITOR_SIZE`
+knob. The **scripts** stay shared-seed in spirit (editor and Stage both read `PongScripts.sprites()` /
+`variables()`), as since M18/M24.
+
 ## Opcodes implemented
+
+**M26 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24/M25) — M26 is a
+pure **display / content-scale** change (the editor lays out at a high resolution while the runtime stays
+pinned to its fixed 480×360 viewport), touching neither the block language nor the runtime logic; the
+note below is kept as written for M25.
 
 **M25 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24) — the editor is a
 pure *view + interaction* over the existing language, and M25 makes the **sprite name** editable
@@ -1253,17 +1302,17 @@ you assemble from them (M24: across whatever sprites the project now has — M25
 ## File layout
 
 ```
-project.godot              Godot project config; main scene = editor.tscn (M8); 480x360 window
+project.godot              Godot project config; main scene = editor.tscn (M8); initial window 1280x720 fullscreen (M26) — the per-scene content-scale overrides in editor.gd/stage.gd take over from there (editor 960x540 logical, game a fixed 480x360 integer-snapped viewport)
 editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25), and the project-file browser (a FileDialog, M22) — which editor.gd reaches by unique name. (The palette/canvas *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26)
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds sprites + runs their scripts from the one sprite model (the editor's via static project_sprites — which may include UI-added sprites — else PongScripts.sprites(), M24; each entry carries geometry + script, so M10's separate project_scripts/_script_for are retired), owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20); ESC returns to the editor (the inverse of editor.gd's RUN)
+  stage.gd                 Runtime root: builds sprites + runs their scripts from the one sprite model (the editor's via static project_sprites — which may include UI-added sprites — else PongScripts.sprites(), M24; each entry carries geometry + script, so M10's separate project_scripts/_script_for are retired), owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); ESC returns to the editor (the inverse of editor.gd's RUN)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
@@ -1382,6 +1431,13 @@ CLAUDE.md                  This file
 - **Canvas panning / auto-scroll while dragging** — the canvas sits in a
   `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
   panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.
+- **Editor resolution decoupled from the runtime** — **M26 delivered this.** Each scene sets the
+  shared window's content scale in `_ready`: the editor a 960×540 logical viewport (roomy, high-res
+  chrome, `_EDITOR_SIZE` the one zoom knob), the game a fixed 480×360 integer-snapped one (pixel-perfect,
+  runtime logic untouched since `get_viewport_rect()` still reads 480×360). What's *still* deferred:
+  **embedding the game inside the editor** as a live stage panel — that needs the runtime in a
+  `SubViewport` instead of the current full scene swap (RUN/ESC) — and **finer editor zoom / theme-font
+  tuning** beyond the single `_EDITOR_SIZE` value.
 - **True Scratch block geometry** — the editor approximates block/reporter/boolean
   shapes with `StyleBoxFlat` corner radii; real connector notches and hexagonal
   booleans are cosmetic. M9's stack snapping and M14's slot drop both use rectangular

@@ -26,6 +26,13 @@ extends Control
 ## just no longer the project's main_scene (the editor is); it is the *game* now.
 const _GAME_SCENE := "res://main.tscn"
 
+## The editor's logical resolution (M26) — the coordinate space its chrome lays out in, independent
+## of the runtime's fixed 480x360. Larger than 480x360 (more workspace) but smaller than a typical
+## screen's raw pixels (so blocks/text scale up to a readable size rather than shrinking). On a
+## 1920x1080 screen this is a 2x upscale. Bump it for more room (smaller blocks) or shrink it for
+## bigger blocks (less room) — it is the one knob for the editor's zoom. See _ready.
+const _EDITOR_SIZE := Vector2i(960, 540)
+
 ## The starting folder the SAVE/OPEN browser opens in when no project is bound yet (M22) — the project
 ## directory, a sensible, findable default. We deliberately impose *no* dedicated saves folder: the
 ## file browser uses full filesystem access, so the user picks where a project lives (the repo, the
@@ -135,6 +142,20 @@ const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 24, "h": 24, "color": "#ccccc
 
 
 func _ready() -> void:
+	# Lay the editor chrome out against its own logical resolution (M26) — bigger than the runtime's
+	# fixed 480x360 (so the workspace has room) but well under the raw window pixels (so blocks/text
+	# don't shrink to nothing on a large screen). We keep VIEWPORT mode (the same stretch the canvas's
+	# manual global-coordinate hit-testing was written against) at _EDITOR_SIZE, with EXPAND so the
+	# chrome fills the whole window (no letterbox) and FRACTIONAL stretch so it scales smoothly to any
+	# screen. This also *resets* the window after a RUN: stage.gd flips it to a 480x360 INTEGER viewport
+	# for the game, and ESC returns here, so we restore the editor's policy every time _ready runs.
+	var win := get_window()
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+	win.content_scale_size = _EDITOR_SIZE
+	win.content_scale_factor = 1.0
+
 	# Land on the in-code demo (the stock Pong project). It is the unsaved default — bound to no
 	# file — so it is always reachable and never overwritten by a saved project (M22).
 	_seed_demo()
