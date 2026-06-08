@@ -18,10 +18,14 @@ config/icon="res://icon.svg"
 
 [display]
 
-window/size/viewport_width=480
-window/size/viewport_height=360
+; Window/content-scale policy is set *per scene* in code (M26), not here: editor.gd._ready picks a
+; 960x540 logical viewport (roomy editor chrome) and stage.gd._ready a fixed 480x360 integer-snapped
+; one (pixel-perfect game) — see those _ready methods. These project defaults only govern the initial
+; window before a scene's _ready runs: a 1280x720 starting size, fullscreen (mode 3). stretch/mode is
+; left at the default; the scenes override content_scale_* regardless.
+window/size/viewport_width=1280
+window/size/viewport_height=720
 window/size/mode=3
-window/stretch/mode="viewport"
 
 [physics]
 

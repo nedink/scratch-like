@@ -17,6 +17,11 @@ extends Node2D
 ## In-game, ESC drops back into the block editor; in the editor it quits the program.
 const _EDITOR_SCENE := "res://editor.tscn"
 
+## The runtime's fixed logical resolution (M26). The window is sized for the editor now, so the
+## game re-imposes this on itself (see _apply_game_scaling). go_to coordinates, edge detection,
+## and the pixel-art costumes are all authored against it — it must stay 480x360.
+const _GAME_SIZE := Vector2i(480, 360)
+
 ## name (String) -> Target. The single source of truth for "who is on stage".
 var _targets: Dictionary = {}
 
@@ -60,6 +65,15 @@ static var project_variables: Array = []
 
 
 func _ready() -> void:
+	# Re-impose the runtime's fixed logical resolution (M26). The project window is now sized for
+	# the *editor* (a large window, stretch "disabled"), so the game has to opt back into the
+	# 480x360 logical viewport it has always assumed: go_to coordinates, edge detection via
+	# get_viewport_rect(), and the integer-upscaled pixel-art costumes all depend on it. Setting
+	# content_scale_size keeps get_viewport_rect() reporting 480x360 — so no runtime logic changes —
+	# while content_scale_factor forces a *whole-number* upscale (crisp glyphs, the old look) and
+	# ASPECT_KEEP centers + letterboxes the slack. editor.gd._ready resets this on the ESC return.
+	_apply_game_scaling()
+
 	_font = PixelFont.new()
 
 	# Build every sprite from the one project model (Milestone 24) — the editor's edited model
@@ -122,6 +136,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("ui_cancel"):
 		get_viewport().set_input_as_handled()
 		get_tree().change_scene_to_file(_EDITOR_SCENE)
+
+
+## Lock the window into the fixed 480x360 logical viewport with a strict integer upscale (M26).
+## content_scale_size = _GAME_SIZE makes get_viewport_rect() report 480x360 (so every bit of
+## edge/position logic is untouched); VIEWPORT mode renders the whole 2D world into that small
+## viewport and blits it up to fill the window. ASPECT_KEEP preserves the 4:3 ratio (letterboxing
+## the slack), and STRETCH_INTEGER snaps the fit to a whole-number scale so the pixel-art / `say`
+## glyphs stay crisp. content_scale_factor stays 1.0: it is an *extra* multiplier on top of the
+## automatic fit, not the fit itself — setting it to the integer factor (as a first cut did) zooms
+## the view that many times too far. The editor undoes all of this on the ESC return.
+func _apply_game_scaling() -> void:
+	var win := get_window()
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
+	win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER
+	win.content_scale_size = _GAME_SIZE
+	win.content_scale_factor = 1.0
 
 
 ## The sprite model to build from (Milestone 24): the editor's edited model when it handed one
