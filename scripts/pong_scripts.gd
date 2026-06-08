@@ -71,6 +71,21 @@ static func background() -> String:
 	return "#0c0c12"
 
 
+## The project's stage-editor grid settings (Milestone 27): the alignment grid's visibility, snap
+## behaviour, colour, and spacing. Like background() this is a stage-level project property — seeded
+## into the editor's working copy, saved under a top-level "grid" key, and reloaded on OPEN — so a
+## project remembers how its author set up the grid. `color` is a hex string with alpha (the
+## JSON-clean format the sprite/background colours use); `step` is in model pixels. The stock values
+## match the stage view's standalone defaults (a faint sky-blue 8px grid, show + snap on).
+static func grid() -> Dictionary:
+	return {
+		"show": true,
+		"snap": true,
+		"color": "#" + Color(0.529, 0.808, 0.980, 0.35).to_html(true),
+		"step": 8,
+	}
+
+
 ## The project's sprite model (Milestone 24): the single declaration of every sprite's name,
 ## starting geometry (placeholder rectangle), and script — the sprite counterpart of variables(),
 ## and the one source both the runtime and the editor read.

@@ -213,6 +213,17 @@ layout_mode = 2
 text = "Grid colour"
 color = Color(0.529, 0.808, 0.98, 0.35)
 
+[node name="GridStepLabel" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786318]
+layout_mode = 2
+text = "Grid step"
+
+[node name="GridStep" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786319]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 64.0
+value = 8.0
+
 [node name="VarDialog" type="ConfirmationDialog" parent="." unique_id=300687861]
 unique_name_in_owner = true
 title = "New Variable"

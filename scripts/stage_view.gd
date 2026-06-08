@@ -21,9 +21,11 @@ extends Control
 ## the editor (on_pick) so it flows through the same selector/_show path the dropdown uses; geometry
 ## changes during a drag call back (on_geometry_changed) so the editor's inspector tracks live.
 ##
+## Resize anchors the top-left corner by default (the sprite grows right/down), or about the centre
+## while Alt is held — both with independent w/h.
+##
 ## What it deliberately leaves out (deferred): a live embedded *run* of the game (that needs the
-## runtime in a SubViewport, a larger restructure), and uniform / aspect-locked / edge-anchored
-## resize (we resize about the centre with independent w/h — the simplest predictable behaviour).
+## runtime in a SubViewport, a larger restructure), and uniform / aspect-locked resize.
 
 ## Pixels the cursor must travel after pressing before a click becomes a drag, so a plain click
 ## selects a sprite rather than nudging it. Matches block_canvas / block_palette.
@@ -45,10 +47,11 @@ const _HANDLE := 10.0
 ## Smallest sprite dimension a resize can produce (model px), so a sprite can't be shrunk to nothing.
 const _MIN_DIM := 4
 
-## Grid spacing in **model** pixels (M27). Drawn lines (and snapping) step by this much; one knob.
-## 16 is a useful coarse grid you can actually see at _DISPLAY_SCALE and snap meaningfully to (the
-## model is already integer-valued, so a finer step would snap to nothing the round-to-int doesn't).
-const _GRID_STEP := 16
+## Default grid spacing in **model** pixels (M27). Drawn lines (and snapping) step by this much.
+## 8 is a fine grid you can still see at _DISPLAY_SCALE and snap meaningfully to (the model is
+## integer-valued, so a step finer than 1 buys nothing the round-to-int doesn't). The user can
+## change it from the inspector via set_grid_step.
+const _DEFAULT_GRID_STEP := 8
 
 ## The starting grid colour — a soft sky blue at low alpha, so the overlay reads as a faint guide
 ## over the dark stage rather than a wash. The user can recolour it from the inspector.
@@ -68,7 +71,7 @@ class _GridLayer:
 	# Default mirrors StageView._DEFAULT_GRID_COLOR (a bare literal — an inner class can't reference the
 	# outer class's constants by name). StageView/the editor overwrites this via set_grid_color anyway.
 	var color: Color = Color(0.529, 0.808, 0.980, 0.35)
-	var step: float = 1.0   # display px between lines (model _GRID_STEP * _DISPLAY_SCALE); set by StageView
+	var step: float = 1.0   # display px between lines (model _grid_step * _DISPLAY_SCALE); set by StageView
 	var show_grid: bool = true
 
 	func _draw() -> void:
@@ -122,6 +125,10 @@ var _grid: _GridLayer
 ## the existing sprites (per the M27 brief: "only when the user goes to make a change").
 var _grid_snap: bool = true
 
+## Grid spacing in **model** pixels (M27); the inspector's "Grid step" spinner drives it via
+## set_grid_step. Both the drawn grid and snap-to-grid read this.
+var _grid_step: int = _DEFAULT_GRID_STEP
+
 var _state: int = _IDLE
 var _press_pos: Vector2            # global position of the initial press
 var _pending: Dictionary = {}      # {index, mode, corner?} of the sprite/handle pressed
@@ -154,7 +161,7 @@ func _ready() -> void:
 	_grid = _GridLayer.new()
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grid.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_grid.step = _GRID_STEP * _DISPLAY_SCALE
+	_grid.step = _grid_step * _DISPLAY_SCALE
 	_grid.color = _DEFAULT_GRID_COLOR  # the editor overrides via set_grid_color; this is the standalone default
 	_stage_area.add_child(_grid)
 
@@ -218,6 +225,15 @@ func set_grid_snap(snap: bool) -> void:
 	_grid_snap = snap
 
 
+## Set the grid spacing (model px). Updates the drawn grid live; the new step governs the user's next
+## snapped drag (like set_grid_snap, it never re-snaps existing sprites). Clamped to a sane minimum.
+func set_grid_step(step: int) -> void:
+	_grid_step = maxi(1, step)
+	if _grid:
+		_grid.step = _grid_step * _DISPLAY_SCALE
+		_grid.queue_redraw()
+
+
 # --- Rendering -------------------------------------------------------------
 
 ## Rebuild the stage from the data: centre the stage region, then draw one rectangle per sprite and,
@@ -253,8 +269,9 @@ func _render() -> void:
 		_layer.add_child(panel)
 
 	# The selection overlay is drawn last so it sits above every sprite. A single resize handle on the
-	# bottom-right corner (M27): resize keeps the sprite's centre — its model position — fixed, so a
-	# lone corner is enough and the position never shifts while you resize (the M27 brief).
+	# bottom-right corner (M27): by default resize anchors the top-left and moves the right/bottom
+	# edges (grows right/down), so the bottom-right corner is the natural handle; holding Alt resizes
+	# about the centre instead.
 	if _selected >= 0 and _selected < _sprites.size():
 		var sel := _display_rect(_sprites[_selected])
 		_add_selection_outline(sel)
@@ -277,8 +294,8 @@ func _add_selection_outline(rect: Rect2) -> void:
 
 ## A small square resize handle centred on one corner of the selected sprite's rect. `corner` is a
 ## sign vector (±1, ±1) picking which corner; it is stamped as meta so the press handler can tell a
-## handle grab from a body grab (the corner itself doesn't affect the resize — we keep the centre
-## fixed and derive w/h from the cursor's distance to it).
+## handle grab from a body grab (the corner itself doesn't affect the resize — the dragged corner is
+## the cursor; by default the top-left is anchored, or with Alt the centre is).
 func _add_handle(rect: Rect2, corner: Vector2) -> void:
 	var c := rect.position + rect.size * (corner * 0.5 + Vector2(0.5, 0.5))  # the chosen corner point
 	var handle := Panel.new()
@@ -389,9 +406,10 @@ func _begin_drag() -> void:
 	_state = _DRAGGING
 
 
-## Apply the drag to the model and re-render. A move shifts the entry's x/y; a resize keeps the
-## centre (the position) fixed and sets w/h from the dragged corner's distance to it, clamped to
-## _MIN_DIM. Both go through _snap_model, which snaps to the grid when Snap is on (else rounds to the
+## Apply the drag to the model and re-render. A move shifts the entry's x/y; a resize moves only the
+## right/bottom edges, keeping the **top-left corner anchored** (the sprite grows right and downward) —
+## unless **Alt** is held, which resizes about the fixed centre (growing in all directions). Both go
+## through _snap_model, which snaps the dragged corner to the grid when Snap is on (else rounds to the
 ## nearest whole pixel) — so the model stays the int shape PongScripts uses and Stage reads with
 ## int(...). The editor's inspector tracks via the on_geometry_changed callback.
 func _update_drag(global_point: Vector2) -> void:
@@ -404,13 +422,25 @@ func _update_drag(global_point: Vector2) -> void:
 		var centre := m + _grab_offset_model
 		entry["x"] = _snap_model(centre.x)
 		entry["y"] = _snap_model(centre.y)
-	else:  # resize about the fixed centre
-		# Snap the dragged corner (the handle) to the grid, then derive w/h from its distance to the
-		# fixed centre — so the handle lands on a grid line and the centre/position never moves.
+	elif Input.is_key_pressed(KEY_ALT):
+		# Alt: resize about the fixed centre — derive w/h from the dragged corner's distance to the
+		# centre (doubled), so the sprite grows symmetrically and the position never moves.
 		var cx := float(entry["x"])
 		var cy := float(entry["y"])
 		entry["w"] = maxi(_MIN_DIM, roundi(absf(_snap_model(m.x) - cx) * 2.0))
 		entry["h"] = maxi(_MIN_DIM, roundi(absf(_snap_model(m.y) - cy) * 2.0))
+	else:
+		# Default: anchor the top-left corner and move only the right/bottom edges, so the sprite is
+		# resized rightward/downward. The model stores x/y as the *centre*, so as w/h grow the centre
+		# shifts to keep the top-left fixed.
+		var left := float(entry["x"]) - float(entry["w"]) * 0.5
+		var top := float(entry["y"]) - float(entry["h"]) * 0.5
+		var new_w := maxi(_MIN_DIM, roundi(_snap_model(m.x) - left))
+		var new_h := maxi(_MIN_DIM, roundi(_snap_model(m.y) - top))
+		entry["w"] = new_w
+		entry["h"] = new_h
+		entry["x"] = roundi(left + new_w * 0.5)
+		entry["y"] = roundi(top + new_h * 0.5)
 	_render()
 	if on_geometry_changed.is_valid():
 		on_geometry_changed.call(_drag_index)
@@ -431,10 +461,10 @@ func _global_to_model(global_point: Vector2) -> Vector2:
 	return local / _DISPLAY_SCALE
 
 
-## Round a model coordinate to the grid when snap is on (nearest multiple of _GRID_STEP), else to the
+## Round a model coordinate to the grid when snap is on (nearest multiple of _grid_step), else to the
 ## nearest whole pixel (the model's int shape). Both paths return an int — the shape PongScripts uses
 ## and Stage reads with int(...).
 func _snap_model(value: float) -> int:
 	if _grid_snap:
-		return roundi(value / float(_GRID_STEP)) * _GRID_STEP
+		return roundi(value / float(_grid_step)) * _grid_step
 	return roundi(value)

@@ -85,19 +85,27 @@ var _current: int = -1
 @onready var _insp_color: ColorPickerButton = %InspColor
 
 ## Stage-level settings in the inspector (M27): the project's background colour, plus the grid's
-## show / snap toggles and colour. Background is a real project property (seeded from
-## PongScripts.background(), persisted in the .json, applied to the running game at RUN); the grid
-## settings are editor authoring aids — session state on the stage view, not saved.
+## show / snap toggles, colour, and step. All are real project properties (seeded from PongScripts,
+## persisted in the .json, synced to these controls on every project load) — the background also
+## drives the running game at RUN; the grid settings are editor authoring aids the project remembers.
 @onready var _bg_color: ColorPickerButton = %BgColor
 @onready var _grid_show: CheckBox = %GridShow
 @onready var _grid_snap: CheckBox = %GridSnap
 @onready var _grid_color: ColorPickerButton = %GridColor
+@onready var _grid_step: SpinBox = %GridStep
 
 ## The project's stage background colour as a hex string (M27) — a real project property, the
 ## stage-level counterpart of _scripts / _variables. Seeded from PongScripts.background(), edited via
 ## the inspector's Background picker (_on_insp_bg_color), saved under a top-level "background" key, and
 ## handed to the Stage at RUN (project_background). _read_project defaults it for a pre-M27 save.
 var _background: String = ""
+
+## The project's stage-editor grid settings (M27) — {show, snap, color (hex), step} — a project
+## property like _background. Seeded from PongScripts.grid(), edited via the inspector's grid controls
+## (_on_grid_*), saved under a top-level "grid" key, and synced to the controls + stage view on every
+## project load (_sync_grid). _read_project defaults it for a pre-grid save. Editor-only: unlike the
+## background it isn't handed to the running game (the grid is an authoring aid, not part of the scene).
+var _grid_settings: Dictionary = {}
 
 ## True while the Stage view is showing (vs the block canvas). The toggle flips it.
 var _stage_mode: bool = false
@@ -233,16 +241,14 @@ func _ready() -> void:
 	_insp_h.value_changed.connect(_on_insp_h)
 	_insp_color.color_changed.connect(_on_insp_color)
 
-	# Stage-level settings (M27): the background picker writes the project property; the grid toggles /
-	# colour drive the stage view's authoring aids directly. Push the inspector's default grid state to
-	# the view up front (the background is synced per project in _load_project_into_ui).
+	# Stage-level settings (M27): the background picker and grid controls all write project properties
+	# via editor handlers; both are synced to their controls + the stage view per project in
+	# _load_project_into_ui (_sync_background / _sync_grid), so no up-front push is needed here.
 	_bg_color.color_changed.connect(_on_insp_bg_color)
-	_grid_show.toggled.connect(_stage_view.set_grid_show)
-	_grid_snap.toggled.connect(_stage_view.set_grid_snap)
-	_grid_color.color_changed.connect(_stage_view.set_grid_color)
-	_stage_view.set_grid_show(_grid_show.button_pressed)
-	_stage_view.set_grid_snap(_grid_snap.button_pressed)
-	_stage_view.set_grid_color(_grid_color.color)
+	_grid_show.toggled.connect(_on_grid_show)
+	_grid_snap.toggled.connect(_on_grid_snap)
+	_grid_color.color_changed.connect(_on_grid_color)
+	_grid_step.value_changed.connect(_on_grid_step_changed)
 
 	# Wire the scene's dialogs: their confirmed signal to the handler, and Enter in the text
 	# field to confirm (register_text_enter, matching Scratch's quick flow). The delete dialog
@@ -295,6 +301,7 @@ func _seed_demo() -> void:
 	_scripts = PongScripts.sprites().duplicate(true)
 	_variables = PongScripts.variables().duplicate(true)
 	_background = PongScripts.background()
+	_grid_settings = PongScripts.grid()
 
 
 ## Bring the current `_scripts` / `_variables` up in the UI (M22) — the shared path used on launch
@@ -314,6 +321,7 @@ func _load_project_into_ui(select_index := 0) -> void:
 	BlockView.project_sprites = _sprite_names()
 	_update_title()
 	_sync_background()  # NEW/OPEN may have changed the project's background; push it to the view + picker
+	_sync_grid()        # likewise the grid settings (show/snap/colour/step) — push to the controls + view
 	var index: int = clampi(select_index, 0, _scripts.size() - 1)
 	_selector.select(index)
 	_show(index)
@@ -437,8 +445,8 @@ func _on_insp_color(color: Color) -> void:
 
 ## Load the Background picker from the project's `_background` and apply it to the stage view (M27).
 ## Guarded by _loading_inspector so setting the picker can't echo back through _on_insp_bg_color. Run
-## on every project load (launch / NEW / OPEN) — the background is a project property, unlike the grid
-## settings, which are session aids that keep their value across projects.
+## on every project load (launch / NEW / OPEN), like _sync_grid — both the background and the grid are
+## project properties now, reloaded with the project rather than kept across it.
 func _sync_background() -> void:
 	_loading_inspector = true
 	_bg_color.color = Color(_background)
@@ -454,6 +462,55 @@ func _on_insp_bg_color(color: Color) -> void:
 		return
 	_background = "#" + color.to_html(true)
 	_stage_view.set_background(color)
+
+
+## Load the grid controls (show / snap / colour / step) from the project's `_grid_settings` and apply
+## them to the stage view (M27). The mirror of _sync_background — run on every project load, since the
+## grid is now a project property. Guarded by _loading_inspector so setting a control can't echo back
+## through its _on_grid_* handler and dirty the project during a load.
+func _sync_grid() -> void:
+	_loading_inspector = true
+	_grid_show.button_pressed = bool(_grid_settings.get("show", true))
+	_grid_snap.button_pressed = bool(_grid_settings.get("snap", true))
+	_grid_color.color = Color(String(_grid_settings.get("color", "#87cefa59")))
+	_grid_step.value = float(_grid_settings.get("step", 8))
+	_loading_inspector = false
+	_stage_view.set_grid_show(_grid_show.button_pressed)
+	_stage_view.set_grid_snap(_grid_snap.button_pressed)
+	_stage_view.set_grid_color(_grid_color.color)
+	_stage_view.set_grid_step(int(_grid_step.value))
+
+
+## The grid inspector handlers (M27): each writes its value into the `_grid_settings` project property
+## and applies it to the stage view, so the change rides _write_project on SAVE. Skipped while
+## _sync_grid is loading the controls (so a read can't echo back). The step spinner reports a float, so
+## it casts to the int model px the grid/snap use.
+func _on_grid_show(shown: bool) -> void:
+	if _loading_inspector:
+		return
+	_grid_settings["show"] = shown
+	_stage_view.set_grid_show(shown)
+
+
+func _on_grid_snap(snap: bool) -> void:
+	if _loading_inspector:
+		return
+	_grid_settings["snap"] = snap
+	_stage_view.set_grid_snap(snap)
+
+
+func _on_grid_color(color: Color) -> void:
+	if _loading_inspector:
+		return
+	_grid_settings["color"] = "#" + color.to_html(true)
+	_stage_view.set_grid_color(color)
+
+
+func _on_grid_step_changed(value: float) -> void:
+	if _loading_inspector:
+		return
+	_grid_settings["step"] = int(value)
+	_stage_view.set_grid_step(int(value))
 
 
 ## The project's sprite names (M17), the sprites half of the project model — the targets a
@@ -862,7 +919,7 @@ func _on_file_selected(path: String) -> void:
 ## this is a near-direct JSON.stringify (tab-indented for a human-readable file). Binds the project
 ## to this file so the title shows its name and a later SAVE overwrites it.
 func _write_project(path: String) -> void:
-	var data := {"scripts": _scripts, "variables": _variables, "background": _background}
+	var data := {"scripts": _scripts, "variables": _variables, "background": _background, "grid": _grid_settings}
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		push_warning("Editor: could not write project to '%s'" % path)
@@ -901,6 +958,14 @@ func _read_project(path: String) -> void:
 	# Background is a top-level project property (M27); default it for a project saved before M27 (or
 	# any file without the key) so an older save still opens.
 	_background = String(data.get("background", PongScripts.background()))
+	# Grid settings are likewise a top-level project property (M27). Start from the stock defaults and
+	# overlay whatever the file carried, so a save written before the grid was persisted — or one
+	# missing individual keys — still opens with sane values rather than a partial dict.
+	_grid_settings = PongScripts.grid()
+	var saved_grid: Variant = data.get("grid")
+	if typeof(saved_grid) == TYPE_DICTIONARY:
+		for key in saved_grid:
+			_grid_settings[key] = saved_grid[key]
 	_current_path = path
 	_load_project_into_ui()
 
