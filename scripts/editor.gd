@@ -116,10 +116,21 @@ var _deleting: String = ""
 @onready var _del_sprite_label: Label = %DelSpriteLabel
 var _deleting_sprite: String = ""
 
+## Rename **sprite** chrome (M25): the top-bar Rename Sprite button and its dialog (declared in
+## editor.tscn, reused). The button pops a name prompt pre-filled with the selected sprite's name;
+## `_renaming_sprite` holds the name the open dialog acts on (the confirmed signal carries no payload —
+## the same state-var idiom the variable rename dialog and the sprite delete dialog use). This is the
+## sprite analog of M21's variable rename: confirming cascades the new name across every script's
+## `touching_sprite?` references and every variable scoped to the sprite (its locals).
+@onready var _rename_sprite_button: Button = %RenameSpriteButton
+@onready var _rename_sprite_dialog: ConfirmationDialog = %RenameSpriteDialog
+@onready var _rename_sprite_edit: LineEdit = %RenameSpriteEdit
+var _renaming_sprite: String = ""
+
 ## A freshly added sprite's placeholder geometry (M24): a small grey square at the stage center. It is
 ## just a starting placeholder — real positioning is blocks (a `go_to` in the sprite's script, as the
-## ball does), so there is no UI yet to move/resize/recolour it (deferred to M25). Also the fill values
-## _read_project defaults a pre-M24 saved entry to.
+## ball does), so there is no UI yet to move/resize/recolour it (M25 added rename but left geometry
+## editing deferred). Also the fill values _read_project defaults a pre-M24 saved entry to.
 const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 24, "h": 24, "color": "#cccccc"}
 
 
@@ -168,6 +179,10 @@ func _ready() -> void:
 	_sprite_dialog.confirmed.connect(_on_new_sprite_confirmed)
 	_sprite_dialog.register_text_enter(_sprite_name_edit)
 	_del_sprite_dialog.confirmed.connect(_on_del_sprite_confirmed)
+	# Rename sprite (M25): the button pops the name prompt, the dialog cascades the rename on confirm.
+	_rename_sprite_button.pressed.connect(_rename_sprite_pressed)
+	_rename_sprite_dialog.confirmed.connect(_on_rename_sprite_confirmed)
+	_rename_sprite_dialog.register_text_enter(_rename_sprite_edit)
 
 	# Populate the selector + canvas from the seeded project and show its first sprite.
 	_load_project_into_ui()
@@ -278,8 +293,9 @@ func _on_new_sprite_confirmed() -> void:
 
 
 ## Pop the delete-confirmation dialog for the selected sprite, reporting how many of its locals go with
-## it. Refused when only one sprite is left (the project always has at least one target). We persist the
-## canvas first so a switch away can't lose edits, and stash the name the confirm acts on.
+## it and how many `touching` references to it will be cleared (M25). Refused when only one sprite is
+## left (the project always has at least one target). We persist the canvas first so a switch away can't
+## lose edits, and stash the name the confirm acts on.
 func _del_sprite_pressed() -> void:
 	if _scripts.size() <= 1:
 		return
@@ -290,16 +306,30 @@ func _del_sprite_pressed() -> void:
 	for v in _variables:
 		if String(v.get("scope", "global")) == sprite_name:
 			locals += 1
-	_del_sprite_label.text = "Delete sprite \"%s\"?\nIts script%s removed." % \
-		[sprite_name, (" and %d local variable(s) will be" % locals) if locals > 0 else " will be"]
-	_del_sprite_dialog.popup_centered(Vector2i(380, 140))
+	# Count the dangling `touching {name}?` references the delete will clear in the *surviving* scripts
+	# (the deleted sprite's own script goes wholesale, so its self-references aren't "cleared", just
+	# gone). M24 left these dangling (they resolved null/false at RUN); M25 strips them, so the dialog
+	# warns up front.
+	var refs := 0
+	for i in _scripts.size():
+		if i != _current:
+			refs += BlockView.count_sprite_refs(_scripts[i]["script"], sprite_name)
+	var msg := "Delete sprite \"%s\"? Its script" % sprite_name
+	if locals > 0:
+		msg += " and %d local variable(s)" % locals
+	msg += " will be removed."
+	if refs > 0:
+		msg += "\n%d \"touching\" reference(s) to it will be cleared." % refs
+	_del_sprite_label.text = msg
+	_del_sprite_dialog.popup_centered(Vector2i(380, 150))
 
 
 ## Commit a sprite delete: drop the sprite's model entry and every variable scoped to it (its locals),
-## then reload the UI on a surviving neighbour. References to the gone sprite in *other* scripts (a
-## `touching {name}?` slot) are left as-is — find_target returns null so the reporter is simply false at
-## RUN (no crash), and the dropdown keeps the name visible (M13's append-the-unknown). Stripping those
-## is the sprite-rename cascade, deferred to M25. Destructive; there is no undo (relaunch reloads stock).
+## strip every dangling `touching {name}?` reference to it across the surviving scripts (M25 — the
+## sprite analog of M21's variable-delete strip; M24 left these dangling, resolving null/false at RUN),
+## then reload the UI on a surviving neighbour. A stripped `touching {name}?` reporter reverts its slot
+## to the host opcode's default (so `if (touching Gone?)` becomes `if true`); no dangling name remains
+## (Scratch's behaviour). Destructive; there is no undo (relaunch reloads stock).
 func _on_del_sprite_confirmed() -> void:
 	var index := -1
 	for i in _scripts.size():
@@ -312,10 +342,71 @@ func _on_del_sprite_confirmed() -> void:
 	for i in range(_variables.size() - 1, -1, -1):
 		if String(_variables[i].get("scope", "global")) == _deleting_sprite:
 			_variables.remove_at(i)
+	# Clear the references the gone sprite leaves behind in every remaining script (M25). We strip
+	# directly on each `_scripts` entry rather than in place on the canvas because the delete always
+	# navigates to a surviving neighbour, whose canvas _load_project_into_ui reloads from scratch anyway.
+	for entry in _scripts:
+		BlockView.strip_sprite_refs(entry["script"], _deleting_sprite)
 	# _load_project_into_ui resets _current to -1 before showing, so its leading _persist_current can't
 	# write the just-removed sprite's stale canvas back. `index` is clamped to the new (smaller) bounds,
 	# landing on the sprite that shifted into this slot, or the new last one if we deleted the tail.
 	_load_project_into_ui(index)
+
+
+## Pop the rename dialog for the selected sprite (M25), pre-filled with its current name (selected, so
+## the user can type a replacement immediately). The button always targets the selected sprite, so the
+## name we stash is `_current`'s — the sprite analog of the variable rename's `_renaming`.
+func _rename_sprite_pressed() -> void:
+	var sprite_name := String(_scripts[_current]["name"])
+	_renaming_sprite = sprite_name
+	_rename_sprite_edit.text = sprite_name
+	_rename_sprite_dialog.popup_centered(Vector2i(280, 130))
+	_rename_sprite_edit.grab_focus()
+	_rename_sprite_edit.select_all()
+
+
+## Commit a sprite rename (M25 — the sprite analog of M21's variable rename). Update the model entry's
+## name, re-scope every variable local to the sprite (a local is scoped by its sprite's name, so it must
+## follow the rename), then cascade the new name into every script's `touching {name}?` references. A
+## sprite name is globally unique, so the cascade is unscoped — every script may reference it (any sprite
+## can touch any other), unlike a variable's per-scope referent test. The current sprite is rewritten in
+## place via the canvas (preserving its layout, the M21 reasoning); the others via
+## BlockView.rewrite_sprite_refs on `_scripts[i]`. Then the chrome + data-scoped menus pick up the new
+## name in place (the selector item, project_sprites, the re-scoped project_variables, the palette, the
+## canvas) — no full reload, so canvas positions survive. Blank / unchanged / duplicate names are rejected
+## silently (names are the project's target registry, so they must stay unique).
+func _on_rename_sprite_confirmed() -> void:
+	var new_name := _rename_sprite_edit.text.strip_edges()
+	var old_name := _renaming_sprite
+	if new_name == "" or new_name == old_name or new_name in _sprite_names():
+		return
+	# The button targets the selected sprite, so the stashed name is _current's; bail if they've
+	# diverged (defensive — the dialog is modal, so this shouldn't happen).
+	if _current < 0 or _current >= _scripts.size() or String(_scripts[_current]["name"]) != old_name:
+		return
+
+	_persist_current()  # sync the canvas into _scripts[_current] before the cascade
+	_scripts[_current]["name"] = new_name
+	# A sprite's locals are scoped by its name (PongScripts.variables / Make a Variable), so the rename
+	# carries them along — else they'd dangle, scoped to a sprite that no longer exists.
+	for v in _variables:
+		if String(v.get("scope", "global")) == old_name:
+			v["scope"] = new_name
+	# Cascade `touching {name}?` references across every script.
+	for i in _scripts.size():
+		if i == _current:
+			_canvas.rename_sprite(old_name, new_name)  # in place — preserves canvas positions
+		else:
+			BlockView.rewrite_sprite_refs(_scripts[i]["script"], old_name, new_name)
+
+	# Reflect the new name in the chrome and the data-scoped menus, in place (no reload, so positions
+	# hold): the selector item, the `touching` dropdown options, the re-scoped variable list (the
+	# renamed sprite's locals are still in scope under its new name), the palette, and the canvas.
+	_selector.set_item_text(_current, new_name)
+	BlockView.project_sprites = _sprite_names()
+	BlockView.project_variables = _variables_in_scope(new_name)
+	_palette.rebuild()
+	_canvas.refresh()  # after re-pointing project_sprites, so the new name is an in-scope option
 
 
 ## Fill any missing placeholder geometry on a sprite entry with the defaults (M24) — used to upgrade a

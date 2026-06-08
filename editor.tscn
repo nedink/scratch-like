@@ -58,6 +58,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "- Sprite"
 
+[node name="RenameSpriteButton" type="Button" parent="Page/Bar" unique_id=1458511912]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Rename Sprite"
+
 [node name="Spacer" type="Control" parent="Page/Bar" unique_id=1330330019]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -206,6 +211,27 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="RenameSpriteDialog" type="ConfirmationDialog" parent="." unique_id=163454553]
+unique_name_in_owner = true
+title = "Rename Sprite"
+
+[node name="VBox" type="VBoxContainer" parent="RenameSpriteDialog" unique_id=915086462]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="RenameSpriteDialog/VBox" unique_id=1356016724]
+layout_mode = 2
+text = "New name:"
+
+[node name="RenameSpriteEdit" type="LineEdit" parent="RenameSpriteDialog/VBox" unique_id=1792226484]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
 
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true

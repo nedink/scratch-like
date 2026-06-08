@@ -187,6 +187,17 @@ func delete_variable_refs(var_name: String) -> void:
 	_render()
 
 
+## Rewrite every reference to sprite `old_name` in the working stacks to `new_name`, in place, then
+## re-render (M25) — the sprite counterpart of rename_variable. The canvas holds the authoritative
+## working copy of the edited sprite, so a sprite rename has to rewrite *these* block dicts (the editor
+## rewrites the other sprites' `_scripts` directly). Mutating in place and re-rendering — rather than
+## reloading via load_script — keeps each stack's canvas position. The walk lives on BlockView (shared).
+func rename_sprite(old_name: String, new_name: String) -> void:
+	for stack in _stacks:
+		BlockView.rewrite_sprite_refs(stack["blocks"], old_name, new_name)
+	_render()
+
+
 # --- Rendering -------------------------------------------------------------
 
 ## Rebuild every top-level stack from the data and place it at its stored position.

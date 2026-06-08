@@ -398,6 +398,86 @@ static func _strip_input_refs(opcode: String, inputs: Dictionary, name: String) 
 			strip_variable_refs(value, name)
 
 
+## The opcodes whose `{name}` input names a sprite — the targets a sprite rename/delete cascade
+## (M25) walks for. Only `touching_sprite?` names another sprite (its `data_enums` maps
+## `name -> "sprites"`); it is the sprite analog of _VARIABLE_OPCODES. Unlike a variable, a sprite
+## name is globally unique, so the cascade is unscoped — it rewrites/strips every match in every
+## script (any sprite may touch any other), with no global-vs-local distinction.
+const _SPRITE_OPCODES := ["touching_sprite?"]
+
+
+## Count how many blocks in `blocks` reference the sprite `name` (M25) — the sprite counterpart of
+## count_variable_refs. A `touching {name}?` whose `inputs.name` matches is one reference. Recurses
+## into nested reporter inputs and `body` substacks. The editor sums this across the other scripts to
+## report how many references a sprite deletion will clear.
+static func count_sprite_refs(blocks: Array, name: String) -> int:
+	var count := 0
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _SPRITE_OPCODES and String(inputs.get("name", "")) == name:
+			count += 1
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				count += count_sprite_refs([value], name)
+			elif typeof(value) == TYPE_ARRAY:
+				count += count_sprite_refs(value, name)
+	return count
+
+
+## Rewrite every reference to sprite `old_name` in `blocks` to `new_name` (M25), in place — the
+## sprite counterpart of rewrite_variable_refs, the cascade a UI sprite-rename performs across a
+## script. A `_SPRITE_OPCODES` block's `inputs.name` is reassigned; nested reporter inputs / `body`
+## substacks recurse. (`blocks` and the dicts within are references, so this mutates the live script.)
+static func rewrite_sprite_refs(blocks: Array, old_name: String, new_name: String) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _SPRITE_OPCODES and String(inputs.get("name", "")) == old_name:
+			inputs["name"] = new_name
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				rewrite_sprite_refs([value], old_name, new_name)
+			elif typeof(value) == TYPE_ARRAY:
+				rewrite_sprite_refs(value, old_name, new_name)
+
+
+## Remove every dangling reference to the deleted sprite `name` from `blocks` (M25 delete), in place —
+## the sprite counterpart of strip_variable_refs. The only block naming another sprite is
+## `touching_sprite?`, always a **reporter** (never a statement), so this never drops a block; it
+## reverts a `touching {name}?` reporter to its host opcode's default literal for that slot (M15's
+## slot_default rule), so `if (touching Ghost?)` becomes `if true` once `Ghost` is gone. Recurses into
+## nested reporters and `body` substacks. (Mutates the live arrays/dicts the caller holds.)
+static func strip_sprite_refs(blocks: Array, name: String) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		_strip_sprite_input_refs(String(block.get("opcode", "")), block.get("inputs", {}), name)
+
+
+## Scrub one block's input slots of references to sprite `name` (helper for strip_sprite_refs): a
+## `touching_sprite?` reporter naming it reverts to this opcode's default for that key; any other
+## nested reporter recurses (it may itself hold a `touching_sprite?`, e.g. `not (touching Ghost?)`);
+## a `body` array recurses as a substack.
+static func _strip_sprite_input_refs(opcode: String, inputs: Dictionary, name: String) -> void:
+	var defaults: Dictionary = _OPCODES.get(opcode, {}).get("defaults", {})
+	for key in inputs:
+		var value: Variant = inputs[key]
+		if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+			if String(value.get("opcode", "")) == "touching_sprite?" and String(value.get("inputs", {}).get("name", "")) == name:
+				inputs[key] = defaults.get(key)
+			else:
+				_strip_sprite_input_refs(String(value.get("opcode", "")), value.get("inputs", {}), name)
+		elif typeof(value) == TYPE_ARRAY:
+			strip_sprite_refs(value, name)
+
+
 ## The opcodes the palette offers, grouped for display: an Array of
 ## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. As of M14 **every** kind is listed,
 ## reporters included — a reporter now has a drop target (a value/condition slot), so you can
