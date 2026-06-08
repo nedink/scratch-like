@@ -150,6 +150,10 @@ func rebuild() -> void:
 
 
 func _input(event: InputEvent) -> void:
+	# In Stage mode (M27) the palette is hidden but still receives _input; ignore events unless we're
+	# the visible surface, so a press elsewhere can't start a spawn-drag from a scrolled-off chip.
+	if not is_visible_in_tree():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
 			var opcode := _chip_at(event.position)

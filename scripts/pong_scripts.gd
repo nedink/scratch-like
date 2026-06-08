@@ -13,7 +13,8 @@ extends RefCounted
 ## and fire `stop "all"`. M7 replaces M4/M5's clone-built pip grids with a live
 ## numeric HUD — each player's score `say`n through the bitmap font every tick.
 ##
-## Layout assumptions (matched in stage.gd, 480x360 window):
+## Layout assumptions (matched in stage.gd, 480x352 window). These are the *script* (go_to) targets
+## that drive the runtime — distinct from the grid-aligned model starting positions in sprites():
 ##   * paddles are 16x96, so their center y is clamped to [48, 312];
 ##   * left paddle rides x = 24, right paddle rides x = 456;
 ##   * the ball is 16x16 and serves from the center (240, 180).
@@ -60,6 +61,16 @@ static func variables() -> Array:
 	]
 
 
+## The project's stage background colour (Milestone 27): a single stage-level setting — the
+## colour the stage view draws behind the sprites and the game paints its viewport with at RUN.
+## A **hex string** like the sprite colours, so it serialises straight to JSON for SAVE/OPEN (the
+## editor stores it under a top-level "background" key); the editor seeds its working copy from
+## here and the Stage falls back to it when launched directly (no editor). The stock value matches
+## the dark stage-view backdrop the editor has always drawn, so stock Pong's look is unchanged.
+static func background() -> String:
+	return "#0c0c12"
+
+
 ## The project's sprite model (Milestone 24): the single declaration of every sprite's name,
 ## starting geometry (placeholder rectangle), and script — the sprite counterpart of variables(),
 ## and the one source both the runtime and the editor read.
@@ -68,9 +79,10 @@ static func variables() -> Array:
 ## calls), the last pillar of the project model not yet data-owned. Stage._ready now loops this
 ## (build each placeholder from x/y/w/h/color, then run its script); the editor seeds its working
 ## _scripts from it and hands the edited model back at RUN (Stage.project_sprites). Geometry values
-## are exactly what stage.gd hardcoded (480x360 window): the paddles 16x96 on their rails, the ball
-## 16x16 at center, the two HUDs and the announcer 1x1 transparent placeholders (`say` supplies
-## their costume each tick / on the win).
+## are aligned to the editor's 16px grid (480x352 stage): the paddles 16x96 on their rails, the ball
+## 16x16 near center, the two HUDs and the announcer 16x16 transparent placeholders (`say` supplies
+## their costume each tick / on the win — the placeholder size is invisible, snapped to one grid cell
+## so it sits cleanly on the grid in the stage view).
 ##
 ## `color` is a **hex string** (not a Color) so the model serialises straight to JSON for SAVE/OPEN
 ## (M22); Stage converts it with Color(hex). Each entry carries its `script` from the builders below —
@@ -79,12 +91,12 @@ static func variables() -> Array:
 ## position itself with a `go_to` block rather than needing a UI to move it.
 static func sprites() -> Array:
 	return [
-		{"name": "LeftPaddle", "x": 24, "y": 180, "w": 16, "h": 96, "color": "#e6e6f2", "script": left_paddle()},
-		{"name": "RightPaddle", "x": 456, "y": 180, "w": 16, "h": 96, "color": "#e6e6f2", "script": right_paddle()},
-		{"name": "Ball", "x": 240, "y": 180, "w": 16, "h": 16, "color": "#ffcc40", "script": ball()},
-		{"name": "P1Hud", "x": 36, "y": 24, "w": 1, "h": 1, "color": "#ffffff00", "script": p1_hud()},
-		{"name": "P2Hud", "x": 444, "y": 24, "w": 1, "h": 1, "color": "#ffffff00", "script": p2_hud()},
-		{"name": "Announcer", "x": -400, "y": -400, "w": 1, "h": 1, "color": "#ffffff00", "script": announcer()},
+		{"name": "LeftPaddle", "x": 32, "y": 176, "w": 16, "h": 96, "color": "#e6e6f2", "script": left_paddle()},
+		{"name": "RightPaddle", "x": 448, "y": 176, "w": 16, "h": 96, "color": "#e6e6f2", "script": right_paddle()},
+		{"name": "Ball", "x": 240, "y": 176, "w": 16, "h": 16, "color": "#ffcc40", "script": ball()},
+		{"name": "P1Hud", "x": 32, "y": 32, "w": 16, "h": 16, "color": "#ffffff00", "script": p1_hud()},
+		{"name": "P2Hud", "x": 448, "y": 32, "w": 16, "h": 16, "color": "#ffffff00", "script": p2_hud()},
+		{"name": "Announcer", "x": -400, "y": -400, "w": 16, "h": 16, "color": "#ffffff00", "script": announcer()},
 	]
 
 

@@ -27,7 +27,7 @@ extends Control
 const _GAME_SCENE := "res://main.tscn"
 
 ## The editor's logical resolution (M26) — the coordinate space its chrome lays out in, independent
-## of the runtime's fixed 480x360. Larger than 480x360 (more workspace) but smaller than a typical
+## of the runtime's fixed 480x352. Larger than 480x352 (more workspace) but smaller than a typical
 ## screen's raw pixels (so blocks/text scale up to a readable size rather than shrinking). On a
 ## 1920x1080 screen this is a 2x upscale. Bump it for more room (smaller blocks) or shrink it for
 ## bigger blocks (less room) — it is the one knob for the editor's zoom. See _ready.
@@ -68,6 +68,43 @@ var _current: int = -1
 ## The top-bar widgets we wire in _ready: the sprite selector (populated from _scripts) and RUN.
 @onready var _selector: OptionButton = %SpriteSelector
 @onready var _run_button: Button = %RunButton
+
+## The stage (scene) editor chrome (M27): a top-bar toggle that swaps the workspace between Blocks
+## (palette | canvas) and Stage (the stage view + inspector), the stage view itself, and the
+## inspector's per-sprite geometry/colour widgets. The stage view edits a sprite's placeholder
+## geometry directly; the canvas scroll is hidden while it is up (Scratch's Code/Costumes tabs).
+@onready var _view_toggle: Button = %ViewToggle
+@onready var _canvas_scroll: ScrollContainer = %CanvasScroll
+@onready var _stage_container: HBoxContainer = %StageContainer
+@onready var _stage_view: StageView = %StageView
+@onready var _insp_name: Label = %InspName
+@onready var _insp_x: SpinBox = %InspX
+@onready var _insp_y: SpinBox = %InspY
+@onready var _insp_w: SpinBox = %InspW
+@onready var _insp_h: SpinBox = %InspH
+@onready var _insp_color: ColorPickerButton = %InspColor
+
+## Stage-level settings in the inspector (M27): the project's background colour, plus the grid's
+## show / snap toggles and colour. Background is a real project property (seeded from
+## PongScripts.background(), persisted in the .json, applied to the running game at RUN); the grid
+## settings are editor authoring aids — session state on the stage view, not saved.
+@onready var _bg_color: ColorPickerButton = %BgColor
+@onready var _grid_show: CheckBox = %GridShow
+@onready var _grid_snap: CheckBox = %GridSnap
+@onready var _grid_color: ColorPickerButton = %GridColor
+
+## The project's stage background colour as a hex string (M27) — a real project property, the
+## stage-level counterpart of _scripts / _variables. Seeded from PongScripts.background(), edited via
+## the inspector's Background picker (_on_insp_bg_color), saved under a top-level "background" key, and
+## handed to the Stage at RUN (project_background). _read_project defaults it for a pre-M27 save.
+var _background: String = ""
+
+## True while the Stage view is showing (vs the block canvas). The toggle flips it.
+var _stage_mode: bool = false
+
+## Set while _sync_inspector is loading the spin boxes / colour picker from the model, so their
+## value_changed/color_changed signals don't fire back and re-write the model with what we just read.
+var _loading_inspector: bool = false
 
 ## Project persistence chrome (M22): the title (rewritten to show the open project's name), the
 ## NEW / OPEN / SAVE buttons, and the shared FileDialog the latter two pop. NEW reloads the
@@ -143,11 +180,11 @@ const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 24, "h": 24, "color": "#ccccc
 
 func _ready() -> void:
 	# Lay the editor chrome out against its own logical resolution (M26) — bigger than the runtime's
-	# fixed 480x360 (so the workspace has room) but well under the raw window pixels (so blocks/text
+	# fixed 480x352 (so the workspace has room) but well under the raw window pixels (so blocks/text
 	# don't shrink to nothing on a large screen). We keep VIEWPORT mode (the same stretch the canvas's
 	# manual global-coordinate hit-testing was written against) at _EDITOR_SIZE, with EXPAND so the
 	# chrome fills the whole window (no letterbox) and FRACTIONAL stretch so it scales smoothly to any
-	# screen. This also *resets* the window after a RUN: stage.gd flips it to a 480x360 INTEGER viewport
+	# screen. This also *resets* the window after a RUN: stage.gd flips it to a 480x352 INTEGER viewport
 	# for the game, and ESC returns here, so we restore the editor's policy every time _ready runs.
 	var win := get_window()
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
@@ -183,6 +220,29 @@ func _ready() -> void:
 	_palette._on_rename_variable = _rename_variable
 	_palette._on_delete_variable = _delete_variable
 	_canvas._trash = _palette_scroll
+
+	# Stage (scene) editor (M27): the toggle swaps Blocks <-> Stage; the stage view reports a clicked
+	# sprite (on_pick, routed through the normal selection flow) and live geometry changes during a
+	# drag (on_geometry_changed, so the inspector tracks); the inspector writes geometry/colour back.
+	_view_toggle.pressed.connect(_toggle_view)
+	_stage_view.on_pick = _on_stage_pick
+	_stage_view.on_geometry_changed = _on_stage_geometry_changed
+	_insp_x.value_changed.connect(_on_insp_x)
+	_insp_y.value_changed.connect(_on_insp_y)
+	_insp_w.value_changed.connect(_on_insp_w)
+	_insp_h.value_changed.connect(_on_insp_h)
+	_insp_color.color_changed.connect(_on_insp_color)
+
+	# Stage-level settings (M27): the background picker writes the project property; the grid toggles /
+	# colour drive the stage view's authoring aids directly. Push the inspector's default grid state to
+	# the view up front (the background is synced per project in _load_project_into_ui).
+	_bg_color.color_changed.connect(_on_insp_bg_color)
+	_grid_show.toggled.connect(_stage_view.set_grid_show)
+	_grid_snap.toggled.connect(_stage_view.set_grid_snap)
+	_grid_color.color_changed.connect(_stage_view.set_grid_color)
+	_stage_view.set_grid_show(_grid_show.button_pressed)
+	_stage_view.set_grid_snap(_grid_snap.button_pressed)
+	_stage_view.set_grid_color(_grid_color.color)
 
 	# Wire the scene's dialogs: their confirmed signal to the handler, and Enter in the text
 	# field to confirm (register_text_enter, matching Scratch's quick flow). The delete dialog
@@ -234,6 +294,7 @@ func _seed_demo() -> void:
 	# variable unification). Deep-copied so editing never mutates the shared PongScripts builders.
 	_scripts = PongScripts.sprites().duplicate(true)
 	_variables = PongScripts.variables().duplicate(true)
+	_background = PongScripts.background()
 
 
 ## Bring the current `_scripts` / `_variables` up in the UI (M22) — the shared path used on launch
@@ -252,9 +313,15 @@ func _load_project_into_ui(select_index := 0) -> void:
 		_selector.add_item(entry["name"])
 	BlockView.project_sprites = _sprite_names()
 	_update_title()
+	_sync_background()  # NEW/OPEN may have changed the project's background; push it to the view + picker
 	var index: int = clampi(select_index, 0, _scripts.size() - 1)
 	_selector.select(index)
 	_show(index)
+	# NEW / OPEN replace _scripts with a fresh array, so re-point the stage view at it (set_selected
+	# in _show only re-rendered the stale reference). A no-op in Blocks mode (re-pulled on toggle).
+	if _stage_mode:
+		_stage_view.set_model(_scripts, index)
+		_sync_inspector()
 
 
 ## Load the script at `index` into the canvas, first persisting the outgoing sprite's
@@ -270,10 +337,123 @@ func _show(index: int) -> void:
 	BlockView.project_variables = _variables_in_scope(_scripts[index]["name"])
 	_palette.rebuild()
 	_canvas.load_script(_scripts[index]["script"])
+	# Keep the stage view's highlight + the inspector on the loaded sprite while Stage mode is up
+	# (M27). The model reference is unchanged here, so set_selected (not set_model) suffices.
+	if _stage_mode:
+		_stage_view.set_selected(index)
+		_sync_inspector()
 
 
 func _on_select(index: int) -> void:
 	_show(index)
+
+
+# --- Stage (scene) editor (M27) --------------------------------------------
+
+## Swap the workspace between Blocks (palette | canvas) and Stage (stage view + inspector). An
+## HBoxContainer skips visible == false children, so hiding one mode lets the other fill the width.
+## Entering Stage mode (re)points the stage view at the live model — it may have changed via the
+## block side or an Add/Delete/Rename since we were last here — and loads the inspector.
+func _toggle_view() -> void:
+	_stage_mode = not _stage_mode
+	_palette_scroll.visible = not _stage_mode
+	_canvas_scroll.visible = not _stage_mode
+	_stage_container.visible = _stage_mode
+	_view_toggle.text = "Blocks" if _stage_mode else "Stage"
+	if _stage_mode:
+		_persist_current()  # fold any in-progress canvas edits back before we leave the canvas
+		_stage_view.set_model(_scripts, _current)
+		_sync_inspector()
+
+
+## A sprite was clicked on the stage: select it through the normal flow (the selector + _show, which
+## persists the outgoing canvas and loads the new sprite — correct even while the canvas is hidden),
+## so Blocks mode shows the right sprite when we switch back. _show re-points the highlight + inspector.
+func _on_stage_pick(index: int) -> void:
+	if index != _current:
+		_selector.select(index)
+		_show(index)
+	else:
+		_stage_view.set_selected(index)
+		_sync_inspector()
+
+
+## A drag changed the dragged sprite's geometry; mirror it into the inspector if it's the selected
+## one, so the x/y/w/h read-outs track live. The model write happened in the stage view itself.
+func _on_stage_geometry_changed(index: int) -> void:
+	if index == _current:
+		_sync_inspector()
+
+
+## Load the inspector widgets from the selected sprite's model entry. Guarded by _loading_inspector
+## so setting the values doesn't fire the value_changed/color_changed writers back at the model.
+func _sync_inspector() -> void:
+	if _current < 0 or _current >= _scripts.size():
+		return
+	var entry: Dictionary = _scripts[_current]
+	_loading_inspector = true
+	_insp_name.text = "Sprite: %s" % entry["name"]
+	_insp_x.value = float(entry.get("x", 0))
+	_insp_y.value = float(entry.get("y", 0))
+	_insp_w.value = float(entry.get("w", 1))
+	_insp_h.value = float(entry.get("h", 1))
+	_insp_color.color = Color(String(entry.get("color", "#cccccc")))
+	_loading_inspector = false
+
+
+## Write a geometry field into the selected sprite's entry (rounded to int, the model's shape) and
+## re-render the stage. Skipped while the inspector is being loaded (so a read can't echo back).
+func _write_geom(key: String, value: int) -> void:
+	if _loading_inspector or _current < 0 or _current >= _scripts.size():
+		return
+	_scripts[_current][key] = value
+	_stage_view.refresh()
+
+
+func _on_insp_x(value: float) -> void:
+	_write_geom("x", roundi(value))
+
+
+func _on_insp_y(value: float) -> void:
+	_write_geom("y", roundi(value))
+
+
+func _on_insp_w(value: float) -> void:
+	_write_geom("w", roundi(value))
+
+
+func _on_insp_h(value: float) -> void:
+	_write_geom("h", roundi(value))
+
+
+## Write the colour picker's value back as the model's hex-string colour (M24's JSON-clean format),
+## with alpha, then re-render. Skipped while loading (setting the picker mustn't echo back).
+func _on_insp_color(color: Color) -> void:
+	if _loading_inspector or _current < 0 or _current >= _scripts.size():
+		return
+	_scripts[_current]["color"] = "#" + color.to_html(true)
+	_stage_view.refresh()
+
+
+## Load the Background picker from the project's `_background` and apply it to the stage view (M27).
+## Guarded by _loading_inspector so setting the picker can't echo back through _on_insp_bg_color. Run
+## on every project load (launch / NEW / OPEN) — the background is a project property, unlike the grid
+## settings, which are session aids that keep their value across projects.
+func _sync_background() -> void:
+	_loading_inspector = true
+	_bg_color.color = Color(_background)
+	_loading_inspector = false
+	_stage_view.set_background(Color(_background))
+
+
+## Write the Background picker's value into the project setting (M27, hex with alpha — the JSON-clean
+## format the sprite colours use) and recolour the stage view. It rides _write_project / _on_run like
+## any project data. Skipped while the picker is being loaded (so a read can't echo back).
+func _on_insp_bg_color(color: Color) -> void:
+	if _loading_inspector:
+		return
+	_background = "#" + color.to_html(true)
+	_stage_view.set_background(color)
 
 
 ## The project's sprite names (M17), the sprites half of the project model — the targets a
@@ -428,6 +608,8 @@ func _on_rename_sprite_confirmed() -> void:
 	BlockView.project_variables = _variables_in_scope(new_name)
 	_palette.rebuild()
 	_canvas.refresh()  # after re-pointing project_sprites, so the new name is an in-scope option
+	if _stage_mode:
+		_sync_inspector()  # the inspector's "Sprite: <name>" label tracks the rename
 
 
 ## Fill any missing placeholder geometry on a sprite entry with the defaults (M24) — used to upgrade a
@@ -680,7 +862,7 @@ func _on_file_selected(path: String) -> void:
 ## this is a near-direct JSON.stringify (tab-indented for a human-readable file). Binds the project
 ## to this file so the title shows its name and a later SAVE overwrites it.
 func _write_project(path: String) -> void:
-	var data := {"scripts": _scripts, "variables": _variables}
+	var data := {"scripts": _scripts, "variables": _variables, "background": _background}
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		push_warning("Editor: could not write project to '%s'" % path)
@@ -716,6 +898,9 @@ func _read_project(path: String) -> void:
 	for entry in _scripts:
 		_normalize_sprite(entry)
 	_variables = data["variables"]
+	# Background is a top-level project property (M27); default it for a project saved before M27 (or
+	# any file without the key) so an older save still opens.
+	_background = String(data.get("background", PongScripts.background()))
 	_current_path = path
 	_load_project_into_ui()
 
@@ -743,4 +928,6 @@ func _on_run() -> void:
 	Stage.project_sprites = _scripts.duplicate(true)
 	# Hand over the variable model too (M20), so a variable made in the editor is seeded at RUN.
 	Stage.project_variables = _variables.duplicate(true)
+	# Hand over the stage background (M27), so the game paints the colour the editor showed.
+	Stage.project_background = _background
 	get_tree().change_scene_to_file(_GAME_SCENE)

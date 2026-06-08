@@ -3,6 +3,7 @@
 [ext_resource type="Script" uid="uid://c02x7i7846g6w" path="res://scripts/editor.gd" id="1_editor"]
 [ext_resource type="Script" uid="uid://vfyg3fbmcnyo" path="res://scripts/block_palette.gd" id="2_palette"]
 [ext_resource type="Script" uid="uid://btx44p6nb4eos" path="res://scripts/block_canvas.gd" id="3_canvas"]
+[ext_resource type="Script" path="res://scripts/stage_view.gd" id="4_stage"]
 
 [sub_resource type="Theme" id="Theme_ui"]
 default_font_size = 11
@@ -63,6 +64,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "Rename Sprite"
 
+[node name="ViewToggle" type="Button" parent="Page/Bar" unique_id=1458511913]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Stage"
+
 [node name="Spacer" type="Control" parent="Page/Bar" unique_id=1330330019]
 layout_mode = 2
 size_flags_horizontal = 3
@@ -105,6 +111,7 @@ layout_mode = 2
 script = ExtResource("2_palette")
 
 [node name="CanvasScroll" type="ScrollContainer" parent="Page/Workspace" unique_id=566786302]
+unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
@@ -114,6 +121,97 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(1200, 1200)
 layout_mode = 2
 script = ExtResource("3_canvas")
+
+[node name="StageContainer" type="HBoxContainer" parent="Page/Workspace" unique_id=566786303]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="StageView" type="Control" parent="Page/Workspace/StageContainer" unique_id=566786304]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("4_stage")
+
+[node name="Inspector" type="VBoxContainer" parent="Page/Workspace/StageContainer" unique_id=566786305]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="InspName" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786306]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Sprite:"
+
+[node name="InspX" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786307]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -2000.0
+max_value = 2000.0
+prefix = "x"
+
+[node name="InspY" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786308]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = -2000.0
+max_value = 2000.0
+prefix = "y"
+
+[node name="InspW" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786309]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 2000.0
+prefix = "w"
+
+[node name="InspH" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786310]
+unique_name_in_owner = true
+layout_mode = 2
+min_value = 1.0
+max_value = 2000.0
+prefix = "h"
+
+[node name="InspColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786311]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Colour"
+
+[node name="StageSep" type="HSeparator" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786312]
+layout_mode = 2
+
+[node name="StageSettingsLabel" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786313]
+layout_mode = 2
+text = "Stage"
+
+[node name="BgColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786314]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Background"
+
+[node name="GridShow" type="CheckBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786315]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Show grid"
+
+[node name="GridSnap" type="CheckBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786316]
+unique_name_in_owner = true
+layout_mode = 2
+button_pressed = true
+text = "Snap to grid"
+
+[node name="GridColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786317]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+text = "Grid colour"
+color = Color(0.529, 0.808, 0.98, 0.35)
 
 [node name="VarDialog" type="ConfirmationDialog" parent="." unique_id=300687861]
 unique_name_in_owner = true

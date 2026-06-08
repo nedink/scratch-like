@@ -19,8 +19,8 @@ const _EDITOR_SCENE := "res://editor.tscn"
 
 ## The runtime's fixed logical resolution (M26). The window is sized for the editor now, so the
 ## game re-imposes this on itself (see _apply_game_scaling). go_to coordinates, edge detection,
-## and the pixel-art costumes are all authored against it — it must stay 480x360.
-const _GAME_SIZE := Vector2i(480, 360)
+## and the pixel-art costumes are all authored against it — it must stay 480x352.
+const _GAME_SIZE := Vector2i(480, 352)
 
 ## name (String) -> Target. The single source of truth for "who is on stage".
 var _targets: Dictionary = {}
@@ -63,16 +63,33 @@ static var project_sprites: Array = []
 ## (no editor) still seeds stock Pong's variables, exactly like _sprite_model / project_sprites.
 static var project_variables: Array = []
 
+## The stage background colour to paint behind the sprites (M27): a hex string the editor hands over
+## right before launching the game, the stage-level counterpart of project_sprites / project_variables.
+## Static (survives change_scene_to_file) and falls back to PongScripts.background() when empty — so a
+## direct launch (no editor) still uses stock Pong's backdrop.
+static var project_background: String = ""
+
 
 func _ready() -> void:
 	# Re-impose the runtime's fixed logical resolution (M26). The project window is now sized for
 	# the *editor* (a large window, stretch "disabled"), so the game has to opt back into the
-	# 480x360 logical viewport it has always assumed: go_to coordinates, edge detection via
+	# 480x352 logical viewport it has always assumed: go_to coordinates, edge detection via
 	# get_viewport_rect(), and the integer-upscaled pixel-art costumes all depend on it. Setting
-	# content_scale_size keeps get_viewport_rect() reporting 480x360 — so no runtime logic changes —
+	# content_scale_size keeps get_viewport_rect() reporting 480x352 — so no runtime logic changes —
 	# while content_scale_factor forces a *whole-number* upscale (crisp glyphs, the old look) and
 	# ASPECT_KEEP centers + letterboxes the slack. editor.gd._ready resets this on the ESC return.
 	_apply_game_scaling()
+
+	# Paint the stage background (M27): a full-viewport ColorRect added *first* so it draws behind
+	# every sprite (2D child order is draw order). Its colour is the editor's project setting when one
+	# was handed over (project_background), else stock Pong's (see _background_hex). The 480x352 logical
+	# viewport (just imposed above) is the space sprite coordinates live in, so size it to _GAME_SIZE.
+	var background := ColorRect.new()
+	background.color = Color(_background_hex())
+	background.position = Vector2.ZERO
+	background.size = Vector2(_GAME_SIZE)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(background)
 
 	_font = PixelFont.new()
 
@@ -80,10 +97,10 @@ func _ready() -> void:
 	# when it handed one over (Stage.project_sprites, which may include sprites *added in the UI*),
 	# else PongScripts.sprites() so a direct launch still builds stock Pong (see _sprite_model).
 	# Each entry carries the placeholder geometry stage.gd used to hardcode plus the sprite's script:
-	#   * the paddles 16x96 on their rails and the ball 16x16 at center (the playfield);
-	#   * the two HUDs (top corners) and the Announcer (parked off-screen) as 1x1 transparent
+	#   * the paddles 16x96 on their rails and the ball 16x16 near center (the playfield);
+	#   * the two HUDs (top corners) and the Announcer (parked off-screen) as 16x16 transparent
 	#     placeholders — they carry no costume of their own, `say` supplies one each tick / on the
-	#     win, drawn at the sprite's native scale 1 (the 480x360 window is integer-upscaled, so even
+	#     win, drawn at the sprite's native scale 1 (the 480x352 window is integer-upscaled, so even
 	#     the native "large" glyph reads cleanly). See pong_scripts.gd for why each script exists.
 	# `color` is a hex string in the model (JSON-friendly for SAVE/OPEN); Color() parses it here.
 	# We build *all* sprites first so the registry is fully populated before variable seeding, which
@@ -138,8 +155,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().change_scene_to_file(_EDITOR_SCENE)
 
 
-## Lock the window into the fixed 480x360 logical viewport with a strict integer upscale (M26).
-## content_scale_size = _GAME_SIZE makes get_viewport_rect() report 480x360 (so every bit of
+## Lock the window into the fixed 480x352 logical viewport with a strict integer upscale (M26).
+## content_scale_size = _GAME_SIZE makes get_viewport_rect() report 480x352 (so every bit of
 ## edge/position logic is untouched); VIEWPORT mode renders the whole 2D world into that small
 ## viewport and blits it up to fill the window. ASPECT_KEEP preserves the 4:3 ratio (letterboxing
 ## the slack), and STRETCH_INTEGER snaps the fit to a whole-number scale so the pixel-art / `say`
@@ -170,6 +187,12 @@ func _sprite_model() -> Array:
 ## seeds stock Pong's variables.
 func _variable_model() -> Array:
 	return project_variables if not project_variables.is_empty() else PongScripts.variables()
+
+
+## The stage background colour hex (M27): the editor's setting when one was handed over, else stock
+## Pong's. The stage-level counterpart of _sprite_model / _variable_model.
+func _background_hex() -> String:
+	return project_background if project_background != "" else PongScripts.background()
 
 
 ## Look up another target by the name it was registered under. Returns null if

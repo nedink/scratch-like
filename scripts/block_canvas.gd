@@ -283,6 +283,10 @@ func _commit_literal(field: LineEdit) -> void:
 ## event when we actually act on it; a press that misses every block falls through to
 ## the ScrollContainer / buttons untouched.
 func _input(event: InputEvent) -> void:
+	# In Stage mode (M27) the canvas is hidden but still receives _input; ignore events unless we're
+	# the visible surface, so a press on the stage view can't grab a stale (scrolled-off) block here.
+	if not is_visible_in_tree():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
 			# A ScrollContainer only clips *rendering*: a block scrolled above the viewport keeps a
