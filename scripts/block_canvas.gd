@@ -153,6 +153,19 @@ func export_script() -> Array:
 	return out
 
 
+## Add a freshly-created top-level block as a new free-floating stack and re-render (M30). The
+## editor calls this when "Make a Block" mints a `define {name}` hat, so the new procedure appears
+## on the canvas immediately (it then rides export_script() → persistence/RUN like any block). It is
+## placed below the existing stacks; the user drags it wherever they like, exactly as for a hat
+## dropped from the palette. `block` must be freshly made (BlockView.make_block) so it owns its data.
+func add_definition(block: Dictionary) -> void:
+	var y := 12.0
+	for stack in _stacks:
+		y = maxf(y, stack["pos"].y + 120.0)
+	_stacks.append({"blocks": [block], "pos": Vector2(12, y)})
+	_render()
+
+
 ## Re-render every stack from the current data without otherwise touching it. The editor
 ## calls this after minting a new variable (M20) so any already-rendered `{name}` dropdown
 ## picks up the new option. Positions live in _stacks (untouched here), so blocks stay put;

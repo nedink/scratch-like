@@ -38,7 +38,9 @@ extends RefCounted
 ## Hats are stack *roots*, not C-blocks: their body flows directly beneath the header
 ## at the same indent (Scratch hats have no "C" wrap). The canvas also uses this to
 ## forbid snapping a hat into the middle of a stack — a hat-led drag only repositions.
-const HAT_OPCODES := ["when_flag_clicked", "when_i_start_as_a_clone"]
+## `define` (M30, a custom-block definition) is a hat too: it sits at the root and runs only
+## when a `call` invokes it (never on the green flag).
+const HAT_OPCODES := ["when_flag_clicked", "when_i_start_as_a_clone", "define"]
 
 ## C-blocks wrap their body in an indented "C". (The interpreter treats both the same
 ## way — a nested body Array — so this is purely a drawing distinction.)
@@ -55,6 +57,7 @@ static var _CATEGORY_COLORS := {
 	"sensing": Color("#5cb1d6"),
 	"variables": Color("ff731aff"),
 	"operators": Color("#59c059"),
+	"custom": Color("#ff6680"),
 	"unknown": Color("#7f7f7f"),
 }
 
@@ -73,8 +76,16 @@ static var _CATEGORY_COLORS := {
 ## scoping is the editor choosing *which* names. `project_sprites` is not scoped (every sprite is a
 ## valid `touching` target). The runtime model (PongScripts.variables(), M18) feeds both this and
 ## the Stage's seeding; the editor maps it to names, filtering by scope.
+##
+## `project_custom_blocks` (M30) is the sibling for **custom blocks** (Scratch's "My Blocks"): the
+## names of the `define` hats in the sprite being edited. The editor re-derives it per sprite (it
+## scans the sprite's script for `define` blocks), so a `call {name}` slot lists that sprite's real
+## procedures — the custom-block twin of `project_variables`. Like a variable, a custom block is
+## **per-sprite** (a `define` lives in one sprite's script and `call` resolves it there), so this is
+## not global.
 static var project_variables: Array = []
 static var project_sprites: Array = []
+static var project_custom_blocks: Array = []
 
 ## opcode -> {category, template, kind, defaults}. The editor's counterpart to the
 ## interpreter's `_register_handlers`. `template` is a label string with `{input_name}`
@@ -118,6 +129,13 @@ static var project_sprites: Array = []
 ##     build_input stamps each widget's expected kind as `slot_type` meta, and the canvas's
 ##     _nearest_slot only offers a reporter the slots whose `slot_type` matches its `output`
 ##     — so a boolean can't land in `move`'s `steps` nor a value in an `if` condition.
+##
+## M30 added one optional field:
+##   * `palette` — default true. When false (the custom-block `define`/`call`), palette_groups
+##     does not list it as a generic draggable chip; the palette renders the My-Blocks group
+##     specially instead (a "Make a Block" button + one pre-named `call` chip per defined block),
+##     the same way the variables group is rendered specially. make_block() still mints it (the
+##     editor uses it for the `define` a "Make a Block" creates).
 const _OPCODES := {
 	# events (hats)
 	"when_flag_clicked": {"category": "events", "kind": "hat", "template": "when flag clicked", "defaults": {"body": []}},
@@ -157,6 +175,14 @@ const _OPCODES := {
 	"or": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "{a} or {b}", "defaults": {"a": false, "b": false}, "bool_inputs": ["a", "b"]},
 	"not": {"category": "operators", "kind": "reporter", "output": "boolean", "template": "not {a}", "defaults": {"a": false}, "bool_inputs": ["a"]},
 	"random": {"category": "operators", "kind": "reporter", "template": "pick random {from} to {to}", "defaults": {"from": 1, "to": 10}},
+	# custom blocks — "My Blocks" (M30). `define {name}` is the procedure hat (its body is the function);
+	# `call {name}` invokes it. Both carry `palette: false` so palette_groups doesn't list them as generic
+	# chips: a `define` is created via the palette's "Make a Block" button, and `call` is offered as one
+	# pre-named chip per defined block (see BlockPalette) — the My-Blocks twin of the variables group's
+	# Make button + rows. `call`'s `name` is a data-scoped dropdown of the sprite's own custom blocks
+	# (data_enums "custom_blocks" -> project_custom_blocks), the custom-block sibling of touching_sprite?.
+	"define": {"category": "custom", "kind": "hat", "palette": false, "template": "define {name}", "defaults": {"name": "block", "body": []}},
+	"call": {"category": "custom", "kind": "statement", "palette": false, "template": "call {name}", "defaults": {"name": "block"}, "data_enums": {"name": "custom_blocks"}},
 }
 
 ## Category display order for the palette (operators are all reporters, so that group is
@@ -528,7 +554,7 @@ static func palette_groups() -> Array:
 	for category in PALETTE_CATEGORY_ORDER:
 		var opcodes: Array = []
 		for opcode in _OPCODES:
-			if _OPCODES[opcode].get("category") == category:
+			if _OPCODES[opcode].get("category") == category and _OPCODES[opcode].get("palette", true):
 				opcodes.append(opcode)
 		if not opcodes.is_empty():
 			groups.append({"category": category, "opcodes": opcodes})
@@ -568,6 +594,7 @@ static func _options_for(info: Dictionary, key: String) -> Array:
 	match String(info.get("data_enums", {}).get(key, "")):
 		"variables": return project_variables
 		"sprites": return project_sprites
+		"custom_blocks": return project_custom_blocks
 		_: return []
 
 

@@ -341,6 +341,27 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
+[node name="BlockDialog" type="ConfirmationDialog" parent="." unique_id=163454554]
+unique_name_in_owner = true
+title = "Make a Block"
+
+[node name="VBox" type="VBoxContainer" parent="BlockDialog" unique_id=915086463]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="BlockDialog/VBox" unique_id=1356016725]
+layout_mode = 2
+text = "Block name:"
+
+[node name="BlockNameEdit" type="LineEdit" parent="BlockDialog/VBox" unique_id=1792226485]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true
 title = "Save Project"

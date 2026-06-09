@@ -46,9 +46,16 @@ var _on_make_variable: Callable
 var _on_rename_variable: Callable
 var _on_delete_variable: Callable
 
+## Called when the "Make a Block" button atop the My-Blocks group is pressed (M30). Set by the
+## editor, which pops the name dialog and mints a `define` hat on the canvas. Left unset by a
+## non-editor caller, in which case the My-Blocks group (button + call chips) isn't drawn.
+var _on_make_block: Callable
+
 var _state: int = _IDLE
 var _press_pos: Vector2
-var _pending_opcode: String = ""
+## The chip pressed, held through the PENDING window so the motion handler can read its opcode and
+## (for a pre-named `call` chip, M30) its `palette_name` when it mints the dragged block.
+var _pending_chip: Control
 
 
 func _ready() -> void:
@@ -93,6 +100,32 @@ func _build() -> void:
 			# slot; everything stackable keeps the statement/hat shape (build_block).
 			var chip := BlockView.build_reporter(block) if BlockView.is_reporter(opcode) else BlockView.build_block(block)
 			chip.set_meta("palette_opcode", opcode)
+			_passthrough(chip)
+			add_child(chip)
+	# The "My Blocks" (custom blocks) group, rendered specially like the variables group (M30): a
+	# "Make a Block" button atop, then one draggable `call` chip per custom block the sprite defines
+	# (BlockView.project_custom_blocks, re-derived per sprite by the editor — the custom-block twin of
+	# the per-variable rows). `define`/`call` carry palette:false, so palette_groups never lists them as
+	# generic chips; this is the only place they enter the palette. Left undrawn when the editor hasn't
+	# wired the Make callback (a non-editor caller).
+	if _on_make_block.is_valid():
+		var header := Label.new()
+		header.text = "MY BLOCKS"
+		header.add_theme_color_override("font_color", BlockView.category_color("custom"))
+		header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(header)
+		var make_btn := Button.new()
+		make_btn.text = "Make a Block"
+		make_btn.pressed.connect(_on_make_block)
+		add_child(make_btn)
+		for block_name in BlockView.project_custom_blocks:
+			# A `call` chip pre-set to this procedure's name — its own palette block, as in Scratch.
+			# `palette_name` carries the name through the drag so the minted block calls it (see _input).
+			var block := BlockView.make_block("call")
+			block["inputs"]["name"] = String(block_name)
+			var chip := BlockView.build_block(block)
+			chip.set_meta("palette_opcode", "call")
+			chip.set_meta("palette_name", String(block_name))
 			_passthrough(chip)
 			add_child(chip)
 
@@ -156,43 +189,48 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
-			var opcode := _chip_at(event.position)
-			if opcode != "":
+			var chip := _chip_at(event.position)
+			if chip != null:
 				_state = _PENDING
 				_press_pos = event.position
-				_pending_opcode = opcode
+				_pending_chip = chip
 				get_viewport().set_input_as_handled()
 		elif not event.pressed and _state == _PENDING:
 			# A plain click on a chip, never dragged — spawn nothing.
 			_reset()
 	elif event is InputEventMouseMotion and _state == _PENDING:
 		if event.position.distance_to(_press_pos) > DRAG_THRESHOLD:
-			var blocks := [BlockView.make_block(_pending_opcode)]
+			var block := BlockView.make_block(String(_pending_chip.get_meta("palette_opcode")))
+			# A pre-named chip (a `call`, M30) carries its target's name so the minted block calls it;
+			# every other chip uses its opcode's defaults verbatim.
+			if _pending_chip.has_meta("palette_name"):
+				block["inputs"]["name"] = String(_pending_chip.get_meta("palette_name"))
 			_reset()
 			if _canvas != null:
-				_canvas.begin_spawn_drag(blocks, event.position)
+				_canvas.begin_spawn_drag([block], event.position)
 			get_viewport().set_input_as_handled()
 
 
 func _reset() -> void:
 	_state = _IDLE
-	_pending_opcode = ""
+	_pending_chip = null
 
 
-## The opcode of the chip under a global point (the deepest tagged node containing it), or
-## "" if the point misses every chip. Smallest-area wins, mirroring BlockCanvas._block_at,
-## though chips don't nest so it rarely matters.
+## The chip under a global point (the deepest tagged node containing it), or null if the point
+## misses every chip. Smallest-area wins, mirroring BlockCanvas._block_at, though chips don't nest
+## so it rarely matters. Returns the Control (not just its opcode) so the caller can also read a
+## pre-named chip's `palette_name` (M30) when minting the dragged block.
 ##
 ## A ScrollContainer only *clips rendering*; a chip scrolled above the viewport keeps a global
 ## rect that overlaps the chrome above the palette (the top bar's sprite selector). So we first
 ## reject any point outside the visible palette region (our parent ScrollContainer's rect) — else
 ## a press on the selector would hit a scrolled-up chip here, go PENDING, and get swallowed by
 ## set_input_as_handled() instead of opening the dropdown.
-func _chip_at(global_point: Vector2) -> String:
+func _chip_at(global_point: Vector2) -> Control:
 	var view := get_parent() as Control
 	if view != null and not view.get_global_rect().has_point(global_point):
-		return ""
-	var best := ""
+		return null
+	var best: Control = null
 	var best_area := INF
 	for chip in _chips(self):
 		var rect: Rect2 = (chip as Control).get_global_rect()
@@ -200,7 +238,7 @@ func _chip_at(global_point: Vector2) -> String:
 			var area := rect.size.x * rect.size.y
 			if area < best_area:
 				best_area = area
-				best = String(chip.get_meta("palette_opcode"))
+				best = chip
 	return best
 
 

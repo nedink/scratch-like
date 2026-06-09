@@ -191,6 +191,14 @@ var _deleting_sprite: String = ""
 @onready var _rename_sprite_edit: LineEdit = %RenameSpriteEdit
 var _renaming_sprite: String = ""
 
+## Make a Block chrome (M30): the palette's "Make a Block" button pops this name dialog; on confirm
+## a `define {name}` hat is added to the canvas and the sprite's custom-block list re-derived. The
+## dialog is declared in editor.tscn and reused, like the variable/sprite name dialogs. Custom blocks
+## are derived from the sprite's script (the `define` hats), not a separate model — so there is no
+## stored list to mutate, only the canvas to add to.
+@onready var _block_dialog: ConfirmationDialog = %BlockDialog
+@onready var _block_name_edit: LineEdit = %BlockNameEdit
+
 ## A freshly added sprite's placeholder geometry (M24): a small grey square at the stage center. It is
 ## just a starting placeholder — real positioning is blocks (a `go_to` in the sprite's script, as the
 ## ball does), so there is no UI yet to move/resize/recolour it (M25 added rename but left geometry
@@ -239,6 +247,8 @@ func _ready() -> void:
 	# Each in-scope variable's palette row (M21) calls back here to rename or delete it.
 	_palette._on_rename_variable = _rename_variable
 	_palette._on_delete_variable = _delete_variable
+	# The palette's "Make a Block" button (M30) calls back here to mint a custom block (a `define` hat).
+	_palette._on_make_block = _make_block
 	_canvas._trash = _palette_scroll
 
 	# Stage (scene) editor (M27): the toggle swaps Blocks <-> Stage; the stage view reports a clicked
@@ -282,6 +292,9 @@ func _ready() -> void:
 	_rename_sprite_button.pressed.connect(_rename_sprite_pressed)
 	_rename_sprite_dialog.confirmed.connect(_on_rename_sprite_confirmed)
 	_rename_sprite_dialog.register_text_enter(_rename_sprite_edit)
+	# Make a Block (M30): the name dialog confirms on Enter (like the variable/sprite name dialogs).
+	_block_dialog.confirmed.connect(_on_new_block_confirmed)
+	_block_dialog.register_text_enter(_block_name_edit)
 
 	# Populate the selector + canvas from the seeded project and show its first sprite.
 	_load_project_into_ui()
@@ -381,6 +394,11 @@ func _show(index: int) -> void:
 	# project_variables, so update it and rebuild the palette before the canvas renders — that
 	# way editing the Ball shows `speed` in every menu and editing a paddle hides it.
 	BlockView.project_variables = _variables_in_scope(_scripts[index]["name"])
+	# Re-derive the sprite's custom blocks (M30) — the `define` hats in its script — so the palette's
+	# `call` chips and any `call {name}` dropdown list this sprite's procedures (the per-sprite
+	# custom-block twin of project_variables). Derived from the script being loaded, the same way the
+	# variable list is scoped per sprite.
+	BlockView.project_custom_blocks = _custom_blocks_in(_scripts[index]["script"])
 	_palette.rebuild()
 	_canvas.load_script(_scripts[index]["script"])
 	# Keep the stage view's highlight + the inspector on the loaded sprite while Stage mode is up
@@ -766,6 +784,50 @@ func _on_new_variable_confirmed() -> void:
 	# list, rebuild the palette's variable chips, and re-render the canvas so any open `{name}`
 	# dropdown lists it too.
 	BlockView.project_variables = _variables_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
+
+
+# --- Make a Block / custom blocks (M30) ------------------------------------
+
+## The custom-block (My Blocks) names a script defines — the `name` of every top-level `define`
+## hat. Custom blocks live in the data (the `define` hats), not a separate model, so this derives
+## them on demand the way _sprite_names derives sprite names from _scripts. A `call {name}` slot
+## lists these (data_enums "custom_blocks" → BlockView.project_custom_blocks). `define`s are always
+## stack roots, so scanning the top level suffices.
+func _custom_blocks_in(script: Array) -> Array:
+	var names: Array = []
+	for block in script:
+		if typeof(block) == TYPE_DICTIONARY and String(block.get("opcode", "")) == "define":
+			var n := String(block.get("inputs", {}).get("name", ""))
+			if n != "" and n not in names:
+				names.append(n)
+	return names
+
+
+## Pop the Make a Block name prompt (the palette button's callback). The dialog is declared in
+## editor.tscn and reused; Enter-to-confirm is wired in _ready.
+func _make_block() -> void:
+	_block_name_edit.text = ""
+	_block_dialog.popup_centered(Vector2i(280, 130))
+	_block_name_edit.grab_focus()
+
+
+## Mint a custom block: add a `define {name}` hat to the canvas (so the new procedure appears
+## immediately and rides export_script() → persistence/RUN like any block), then re-derive this
+## sprite's custom blocks from the live canvas and rebuild the palette + canvas so the new name
+## shows up as a `call` chip and in every `call {name}` dropdown. A blank or already-defined name
+## is rejected silently (a sprite's custom-block names must stay unique — `call` resolves by name).
+func _on_new_block_confirmed() -> void:
+	var block_name := _block_name_edit.text.strip_edges()
+	if block_name == "" or block_name in _custom_blocks_in(_canvas.export_script()):
+		return
+	var define := BlockView.make_block("define")
+	define["inputs"]["name"] = block_name
+	_canvas.add_definition(define)
+	# Re-derive from the live canvas (the new define isn't in _scripts until the next persist), then
+	# refresh the dependent UI — the same trio Make a Variable uses to surface a new name.
+	BlockView.project_custom_blocks = _custom_blocks_in(_canvas.export_script())
 	_palette.rebuild()
 	_canvas.refresh()
 

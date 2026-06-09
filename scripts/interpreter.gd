@@ -93,6 +93,8 @@ func _register_handlers() -> void:
 		"create_clone": _on_create_clone,
 		"when_i_start_as_a_clone": _on_when_i_start_as_a_clone,
 		"delete_this_clone": _on_delete_this_clone,
+		"define": _on_define,
+		"call": _on_call,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
@@ -443,6 +445,35 @@ func _on_delete_this_clone(_block: Dictionary) -> void:
 		return
 	_alive = false
 	_stage.remove_clone(self, _target)
+
+
+# --- Custom blocks ("My Blocks", Milestone 30) -----------------------------
+
+## define: the hat of a custom block (a procedure). As a nested statement it just runs its body
+## — but a define is never started by run()/run_as_clone() (those launch only the green-flag /
+## clone hats), so a define's body executes only when a `call` invokes it. The `name` input is the
+## procedure's name, which `call` resolves against.
+func _on_define(block: Dictionary) -> void:
+	await _run_stack(_body(block))
+
+
+## call: invoke the custom block named by this block's `name` input. We look the procedure up in
+## this target's own script (_script, retained by run()/run_as_clone()) — custom blocks are
+## per-sprite, like locals — and `await` its body, so the blocks after the call run only once the
+## procedure returns (Scratch's sequential semantics). An unknown name warns and is a no-op.
+##
+## The body runs in the same coroutine, so a recursive call without an intervening `wait`/`forever`
+## would loop synchronously (as it would in Scratch); a call whose body never returns — e.g. one
+## containing `forever` — never yields back to the caller, by design. No parameter passing yet
+## (see CLAUDE.md): a custom block is a name + a body, the plain Scratch custom block.
+func _on_call(block: Dictionary) -> void:
+	var proc_name := String(_value(block, "name"))
+	for b in _script:
+		if typeof(b) == TYPE_DICTIONARY and _opcode(b) == "define" \
+				and String(b.get("inputs", {}).get("name", "")) == proc_name:
+			await _run_stack(_body(b))
+			return
+	push_warning("Interpreter: call to undefined custom block '%s'" % proc_name)
 
 
 # --- Helpers ---------------------------------------------------------------
