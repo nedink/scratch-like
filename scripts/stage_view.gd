@@ -22,10 +22,13 @@ extends Control
 ## changes during a drag call back (on_geometry_changed) so the editor's inspector tracks live.
 ##
 ## Resize anchors the top-left corner by default (the sprite grows right/down), or about the centre
-## while Alt is held — both with independent w/h.
+## while Alt is held. Independent w/h by default; **holding Shift locks the aspect ratio** to the
+## sprite's proportions at the start of the drag (M28) — composing with Alt, so Shift+Alt is an
+## aspect-locked resize about the centre. The two modifiers follow the same chrome-less, polled-each-
+## frame idiom (no UI toggle), mirroring Alt-for-centre.
 ##
 ## What it deliberately leaves out (deferred): a live embedded *run* of the game (that needs the
-## runtime in a SubViewport, a larger restructure), and uniform / aspect-locked resize.
+## runtime in a SubViewport, a larger restructure).
 
 ## Pixels the cursor must travel after pressing before a click becomes a drag, so a plain click
 ## selects a sprite rather than nudging it. Matches block_canvas / block_palette.
@@ -135,6 +138,8 @@ var _pending: Dictionary = {}      # {index, mode, corner?} of the sprite/handle
 var _drag_mode: String = ""        # "move" or "resize"
 var _drag_index: int = -1          # the sprite being dragged
 var _grab_offset_model: Vector2    # (move) sprite centre minus the press point, in model space
+var _resize_w0: float = 0.0        # (resize) the sprite's w/h at the start of the drag — the aspect
+var _resize_h0: float = 0.0        #   ratio Shift locks to (captured once so int-rounding can't drift it)
 
 
 func _ready() -> void:
@@ -403,14 +408,22 @@ func _begin_drag() -> void:
 		var entry: Dictionary = _sprites[_drag_index]
 		var centre := Vector2(float(entry["x"]), float(entry["y"]))
 		_grab_offset_model = centre - _global_to_model(_press_pos)
+	else:
+		# Resize: capture the starting w/h so Shift-lock keeps the aspect of the *original* sprite for
+		# the whole drag — recomputing the ratio from the (live-mutated, int-rounded) entry each frame
+		# would let it drift. Guarded to >=1 so a 1x1 HUD still has a usable ratio.
+		var entry: Dictionary = _sprites[_drag_index]
+		_resize_w0 = maxf(1.0, float(entry["w"]))
+		_resize_h0 = maxf(1.0, float(entry["h"]))
 	_state = _DRAGGING
 
 
 ## Apply the drag to the model and re-render. A move shifts the entry's x/y; a resize moves only the
 ## right/bottom edges, keeping the **top-left corner anchored** (the sprite grows right and downward) —
-## unless **Alt** is held, which resizes about the fixed centre (growing in all directions). Both go
-## through _snap_model, which snaps the dragged corner to the grid when Snap is on (else rounds to the
-## nearest whole pixel) — so the model stays the int shape PongScripts uses and Stage reads with
+## unless **Alt** is held, which resizes about the fixed centre (growing in all directions). Either
+## resize locks to the sprite's starting aspect ratio while **Shift** is held (via _lock_aspect, M28).
+## Both go through _snap_model, which snaps the dragged corner to the grid when Snap is on (else rounds
+## to the nearest whole pixel) — so the model stays the int shape PongScripts uses and Stage reads with
 ## int(...). The editor's inspector tracks via the on_geometry_changed callback.
 func _update_drag(global_point: Vector2) -> void:
 	if _drag_index < 0 or _drag_index >= _sprites.size():
@@ -427,16 +440,18 @@ func _update_drag(global_point: Vector2) -> void:
 		# centre (doubled), so the sprite grows symmetrically and the position never moves.
 		var cx := float(entry["x"])
 		var cy := float(entry["y"])
-		entry["w"] = maxi(_MIN_DIM, roundi(absf(_snap_model(m.x) - cx) * 2.0))
-		entry["h"] = maxi(_MIN_DIM, roundi(absf(_snap_model(m.y) - cy) * 2.0))
+		var dims := _lock_aspect(absf(_snap_model(m.x) - cx) * 2.0, absf(_snap_model(m.y) - cy) * 2.0)
+		entry["w"] = maxi(_MIN_DIM, roundi(dims.x))
+		entry["h"] = maxi(_MIN_DIM, roundi(dims.y))
 	else:
 		# Default: anchor the top-left corner and move only the right/bottom edges, so the sprite is
 		# resized rightward/downward. The model stores x/y as the *centre*, so as w/h grow the centre
 		# shifts to keep the top-left fixed.
 		var left := float(entry["x"]) - float(entry["w"]) * 0.5
 		var top := float(entry["y"]) - float(entry["h"]) * 0.5
-		var new_w := maxi(_MIN_DIM, roundi(_snap_model(m.x) - left))
-		var new_h := maxi(_MIN_DIM, roundi(_snap_model(m.y) - top))
+		var dims := _lock_aspect(_snap_model(m.x) - left, _snap_model(m.y) - top)
+		var new_w := maxi(_MIN_DIM, roundi(dims.x))
+		var new_h := maxi(_MIN_DIM, roundi(dims.y))
 		entry["w"] = new_w
 		entry["h"] = new_h
 		entry["x"] = roundi(left + new_w * 0.5)
@@ -459,6 +474,19 @@ func _end_drag() -> void:
 func _global_to_model(global_point: Vector2) -> Vector2:
 	var local := global_point - _stage_area.get_global_rect().position
 	return local / _DISPLAY_SCALE
+
+
+## Constrain a proposed (w, h) to the sprite's starting aspect ratio while **Shift** is held (M28),
+## else pass it through unchanged. We scale the original w0/h0 by whichever proposed axis grew more
+## (max of the two ratios), so the dragged corner leads — the image-editor convention. The driving
+## axis stays grid-snapped (its value came through _snap_model); the derived axis follows the ratio
+## and so may land off-grid — the aspect constraint deliberately wins over snap. Returns floats; the
+## caller rounds + clamps to _MIN_DIM, exactly as the unlocked path does.
+func _lock_aspect(w: float, h: float) -> Vector2:
+	if not Input.is_key_pressed(KEY_SHIFT) or _resize_w0 <= 0.0 or _resize_h0 <= 0.0:
+		return Vector2(w, h)
+	var s := maxf(w / _resize_w0, h / _resize_h0)
+	return Vector2(_resize_w0 * s, _resize_h0 * s)
 
 
 ## Round a model coordinate to the grid when snap is on (nearest multiple of _grid_step), else to the

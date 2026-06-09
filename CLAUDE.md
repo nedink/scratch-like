@@ -5,49 +5,45 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 27 — a static stage (scene) editor
+## Current state: Milestone 28 — aspect-locked resize on the stage
 
-**Goal of this milestone:** give the editor a **stage (scene) view** — a panel that draws each sprite's
-placeholder rectangle at its model position/size/colour and lets you **select, drag, resize, and
-recolour** sprites directly, plus an **inspector** for exact numeric/colour edits. It is the *scene*
-counterpart of the block canvas: the canvas edits a sprite's *script*, the stage view edits a sprite's
-*geometry*. The sprite set has been a data-owned model since M24 ([`PongScripts.sprites()`](scripts/pong_scripts.gd)
-— `{name, x, y, w, h, color, script}` per sprite) and the runtime already **builds each sprite at its
-model `x/y` with its model `w/h/color`** ([`Stage._add_sprite`](scripts/stage.gd)), so M27 is a pure
-**editor-side view over existing data** — **no new opcode, no block-data-shape change, no
-runtime-logic change**: a drag mutates an entry's `x/y/w/h` in place (the M9 data-is-canonical idiom),
-and RUN reads those fields / SAVE serialises them with no new plumbing.
+**Goal of this milestone:** pay off M27's last deferral — **uniform / aspect-locked resize** in the
+stage view. Through M27 a resize set `w` and `h` **independently** from the dragged corner (top-left-
+anchored by default, centre-anchored with `Alt`), so you couldn't grow a sprite while keeping its shape.
+M28 adds Scratch's/image-editors' aspect lock: **hold `Shift` while dragging a resize handle** and the
+sprite scales to the **aspect ratio it had at the start of the drag**, so its proportions are preserved.
+It is a tiny, self-contained follow-on — a pure **editor-side view** change in
+[`StageView`](scripts/stage_view.gd) only: **no new opcode, no block-data-shape change, no
+runtime-logic change, no new chrome.**
 
-A top-bar **Stage ⇄ Blocks toggle** ([`BlockEditor._toggle_view`](scripts/editor.gd)) swaps the
-workspace between **Blocks** (palette | canvas, as before) and **Stage** (the full-width stage view +
-inspector) — Scratch's Code/Costumes-tab idea. An `HBoxContainer` skips `visible == false` children, so
-hiding one mode lets the other fill the width. The two surfaces share the OS window and both drive from
-`_input`, so the hidden one now guards on `is_visible_in_tree()` (added to
-[`BlockCanvas`](scripts/block_canvas.gd) / [`BlockPalette`](scripts/block_palette.gd) too) to stay out
-of the other's way.
-
-[`StageView`](scripts/stage_view.gd) reuses [`BlockCanvas`](scripts/block_canvas.gd)'s spine verbatim:
-`_input`-driven manual **global-coordinate hit-testing** (the M26 viewport-stretch transform it was
-written against), an `IDLE → PENDING → DRAGGING` state machine with a 4px threshold (a click *selects*,
-a drag *moves/resizes*), and clear-and-rebuild `_render()`. It holds a **reference to `editor._scripts`**;
-a sprite is drawn **centred on its model position** (the runtime's collision convention), scaled by the
-single `_DISPLAY_SCALE` knob into a 480×360 bordered region (`clip_contents`, so an off-stage sprite — the
-Announcer at `-400,-400` — is clipped, not bled). Selection routes back through the editor's normal
-selector/`_show` path (`on_pick`), and a drag reports live geometry (`on_geometry_changed`) so the
-inspector's x/y/w/h track. **Resize anchors the top-left corner** by default — only the right/bottom
-edges move, so the sprite grows rightward/downward — and sets w/h from the dragged corner (independent
-w/h, clamped to a min); **holding Alt resizes about the fixed centre** instead (the symmetric, grow-in-
-all-directions behaviour).
-
-One semantic worth stating: a sprite whose script has a `go_to` (the ball, the paddles) is repositioned
-by that block at RUN, so dragging it on the stage doesn't change where it *ends up* in the demo — the
-block wins, as in Scratch. Model `x/y` is the **starting** position; it visibly matters for a sprite with
-no `go_to` (a fresh **+ Sprite**).
+`Shift` follows the **same chrome-less, polled-each-frame modifier idiom as M27's `Alt`-for-centre** —
+no UI toggle, no `editor.gd`/`editor.tscn` change — and the two **compose**: `Shift+Alt` is an
+aspect-locked resize about the fixed centre. The implementation is small because M27 already routed both
+resize branches through the model: M28 captures the sprite's starting `w/h` once at
+[`_begin_drag`](scripts/stage_view.gd) (so int-rounding over the drag can't drift the ratio) and runs
+both branches' proposed `(w, h)` through one new helper, [`_lock_aspect`](scripts/stage_view.gd), which —
+while `Shift` is held — scales the captured `w0/h0` by whichever proposed axis grew more (the dragged
+corner leads). The driving axis stays grid-snapped; the **derived** axis follows the ratio and so may
+land off-grid — the aspect constraint deliberately wins over snap. The geometry write *is* the edit
+(the M9 data-is-canonical idiom), so RUN/SAVE carry it untouched, exactly as a plain resize does.
 
 What this leaves deferred: **embedding a live *run* of the game** inside the editor (a `SubViewport`
 stage panel beside the canvas — the larger restructure M26 named, since the current RUN/ESC is a full
-scene swap); and **uniform / aspect-locked resize** (the stage view resizes with independent w/h —
-top-left-anchored by default, centre-anchored with Alt).
+scene swap).
+
+---
+
+For context, the M27 mechanics this builds on:
+
+**A static stage (scene) editor (M27).** A top-bar **Stage ⇄ Blocks toggle** swaps the workspace to a
+**stage view** ([`StageView`](scripts/stage_view.gd)) that draws each sprite's placeholder rectangle at
+its model `x/y/w/h/color` and lets you **select, drag, resize, and recolour** sprites directly, plus an
+**inspector** (x/y/w/h spin boxes + a Colour picker, and the stage-level **Background** + alignment-grid
+**show/snap/colour/step** settings) for exact values. It is the *scene* counterpart of the block canvas
+(the canvas edits a sprite's *script*, the stage view its *geometry*) and a pure **editor-side view** over
+the data-owned sprite model (M24), reusing [`BlockCanvas`](scripts/block_canvas.gd)'s `_input`-driven
+hit-testing + `IDLE→PENDING→DRAGGING` spine. M28 changes only how a *resize* derives `w/h` — see
+[The stage (scene) editor (M27)](#the-stage-scene-editor-m27).
 
 ---
 
@@ -275,7 +271,9 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    and the yellow ball; the tiny HUDs read as faint outlines, the Announcer is off-stage). **Click** a
    sprite to select it (the top-bar selector follows, and vice-versa); **drag** it to move it; drag the
    **bottom-right handle** to resize it — by default it grows rightward/downward (the top-left corner
-   stays put), or **hold Alt** to resize about the centre; and use the **inspector** on the right — x /
+   stays put), or **hold Alt** to resize about the centre, or **hold Shift** to keep the sprite's
+   proportions (its aspect ratio is locked to where the drag started; Shift+Alt does both); and use the
+   **inspector** on the right — x /
    y / w / h spin boxes and a **Colour** picker — for exact values. The inspector also holds the
    **stage-level settings**: a **Background** colour, and the alignment grid's **Show grid** / **Snap to
    grid** toggles, **Grid colour**, and **Grid step** (spacing, in stage pixels — default 8). Edits write
@@ -1350,8 +1348,9 @@ sprite at its model geometry ([`Stage._add_sprite`](scripts/stage.gd)) and SAVE 
 
 The `go_to` caveat is real and Scratch-faithful: a sprite whose script repositions itself (the ball,
 the paddles) ignores its model `x/y` at RUN — the block wins. The model position is the **starting**
-state; it visibly drives a sprite with no `go_to`. Still deferred: a **live embedded run** (a
-`SubViewport` stage panel — the M26 restructure) and **uniform / aspect-locked resize**.
+state; it visibly drives a sprite with no `go_to`. Still deferred at M27: a **live embedded run** (a
+`SubViewport` stage panel — the M26 restructure) and **uniform / aspect-locked resize** —
+**M28 (above) delivered the latter** (`Shift` locks the resize to the sprite's starting proportions).
 
 **Stage-view refinements (within M27).** Three follow-on tweaks to the stage editor, all editor-side
 over the same model:
@@ -1391,9 +1390,51 @@ over the same model:
   snaps the dragged corner (the handle) — so flipping the Snap toggle never re-snaps the existing
   sprites, it only governs the user's next change.
 
+### Aspect-locked resize (M28)
+
+The deferral M27 left open and its docs named: *uniform / aspect-locked resize*. Through M27 a resize in
+the stage view set `w` and `h` **independently** from the dragged corner, so there was no way to grow a
+sprite while keeping its proportions. M28 adds it: **holding `Shift` while resizing locks the sprite to
+the aspect ratio it had at the start of the drag.** Like M27 it is a pure editor-side view change — **no
+new opcode, no block-data-shape change, no runtime-logic change** — and, like M24/M25, it only changes
+how a drag *derives* the model geometry; the write *is* the edit, so RUN/SAVE carry it untouched.
+
+- **The modifier idiom, reused.** `Shift` is polled each frame with
+  [`Input.is_key_pressed(KEY_SHIFT)`](scripts/stage_view.gd) — the **same chrome-less convention as M27's
+  `Alt`-for-centre**, so there is no UI toggle and no `editor.gd`/`editor.tscn` change (the change lives
+  entirely in [`stage_view.gd`](scripts/stage_view.gd)). The two **compose**: `Alt` chooses the anchor
+  (top-left vs centre), `Shift` constrains the proportions, so `Shift+Alt` is an aspect-locked resize
+  about the fixed centre.
+- **Capture the ratio once, at drag start.** [`_begin_drag`](scripts/stage_view.gd) now records the
+  sprite's `w/h` into `_resize_w0` / `_resize_h0` for a resize (the move branch still records its grab
+  offset). Capturing **once** is load-bearing: the model is mutated live each frame and rounded to int,
+  so recomputing the ratio from the current entry would let it drift over a long drag — the start ratio
+  is the stable reference. Guarded to `>= 1` so a 1×1 HUD still has a usable ratio.
+- **One helper gates both branches.** [`_lock_aspect(w, h)`](scripts/stage_view.gd) passes the proposed
+  `(w, h)` through unchanged unless `Shift` is held, in which case it scales the captured `w0/h0` by
+  `max(w / w0, h / h0)` — whichever axis the cursor pushed proportionally further wins, so the **dragged
+  corner leads** (the image-editor convention; the handle stays at-or-beyond the cursor). Both
+  [`_update_drag`](scripts/stage_view.gd) resize branches — the default top-left-anchored one and the
+  `Alt`-centre one — now route their proposed size through it before the existing `roundi` + `_MIN_DIM`
+  clamp, so the lock applies identically to either anchor.
+- **Snap interaction, stated.** The proposed size still comes from `_snap_model` (the M27 grid snap), so
+  the **driving** axis stays grid-aligned; the **derived** axis is `w0/h0`-scaled and so may land
+  off-grid. That is deliberate — when both Snap and aspect-lock are on, the aspect constraint wins, since
+  a sprite can't satisfy a fixed ratio *and* land both corners on the grid in general.
+
+What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)): the
+**live embedded *run*** of the game inside the editor (a `SubViewport` stage panel — the M26 restructure,
+the current RUN/ESC being a full scene swap). The **scripts** remain shared-seed in spirit (editor and
+Stage both read `PongScripts.sprites()` / `variables()`), as since M18/M24.
+
 ## Opcodes implemented
 
-**M27 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24/M25/M26) — M27 is a
+**M28 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24/M25/M26/M27) — M28
+is a pure **editor-side view** change (aspect-locked resize on the stage: `Shift` constrains a resize to
+the sprite's starting proportions), touching neither the block language nor the runtime logic; the note
+below is kept as written for earlier milestones.
+
+**M27 added no opcodes** — M27 is a
 pure **editor-side view** change (a stage/scene editor that makes a sprite's existing `x/y/w/h/color`
 geometry directly editable), touching neither the block language nor the runtime logic; the note below
 is kept as written for earlier milestones.
@@ -1463,7 +1504,7 @@ icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27)
-  stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it
+  stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites (M17, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
@@ -1521,7 +1562,7 @@ CLAUDE.md                  This file
   from and the Stage falls back to (`color` a hex string; `script` from a builder). Don't build a
   sprite inline in `stage.gd`; that is exactly the duplication M24 removed (the sprite sibling of M18).
   A sprite's geometry here is its **starting** placeholder — editable from the UI via the **Stage**
-  view (M27: select / drag / resize / recolour, or the inspector's x/y/w/h/colour fields) — but a
+  view (M27: select / drag / resize — Alt about the centre, Shift to lock aspect (M28) — / recolour, or the inspector's x/y/w/h/colour fields) — but a
   `go_to` block in the script still wins at RUN (behaviour is blocks), so the model position matters
   most for a sprite with no `go_to`.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
@@ -1584,16 +1625,22 @@ CLAUDE.md                  This file
 - **Editing a sprite's starting geometry from the UI** — **M27 delivered this.** A top-bar **Stage**
   toggle swaps the workspace to a **stage view** ([`StageView`](scripts/stage_view.gd)) that draws each
   sprite at its model `x/y/w/h/color` and lets you **select, drag, resize** (top-left-anchored, growing
-  right/down — or about the centre with **Alt** held), and **recolour** sprites directly, with an
+  right/down — or about the centre with **Alt** held, or locked to the sprite's starting aspect ratio
+  with **Shift** held — **M28**), and **recolour** sprites directly, with an
   **inspector** (x/y/w/h spin boxes + a Colour picker, plus the stage-level **Background** and grid
   **show / snap / colour / step** settings) for exact values — all writing straight into the same
   `_scripts` model RUN/SAVE read, and the background + grid into the project's stage-level properties
   ([`PongScripts.background()`](scripts/pong_scripts.gd) / [`grid()`](scripts/pong_scripts.gd), both
   saved in the `.json`) — no new opcode, no block-data-shape change, no runtime change. A `go_to` in a
   sprite's script still wins at RUN (the model position is the *starting* state — Scratch's model).
-  What's *still* deferred: a **live embedded *run*** of the game inside the editor (a `SubViewport`
+- **Uniform / aspect-locked resize** — **M28 delivered this.** Holding **`Shift`** while dragging a
+  resize handle in the stage view ([`StageView._lock_aspect`](scripts/stage_view.gd)) constrains the
+  sprite to the **aspect ratio it had at the start of the drag**, scaling the captured `w0/h0` by
+  whichever axis grew more — composing with `Alt` (so `Shift+Alt` locks the ratio about the centre).
+  Editor-side only — no opcode, no data-shape, no runtime change. What's *still* deferred from the
+  stage editor: a **live embedded *run*** of the game inside the editor (a `SubViewport`
   stage panel beside the canvas — the larger restructure M26 named, the current RUN/ESC being a full
-  scene swap), and **uniform / aspect-locked resize** (the stage view resizes with independent w/h).
+  scene swap).
 - **Canvas panning / auto-scroll while dragging** — the canvas sits in a
   `ScrollContainer` (wheel/scrollbar scroll a tall script), but there's no click-drag
   panning of empty canvas and no auto-scroll when a drag reaches the viewport edge.
