@@ -60,9 +60,9 @@ const _DEFAULT_GRID_STEP := 8
 ## over the dark stage rather than a wash. The user can recolour it from the inspector.
 const _DEFAULT_GRID_COLOR := Color(0.529, 0.808, 0.980, 0.35)
 
-## The starting stage background — the dark backdrop the editor has always drawn (kept here so the
-## look is unchanged until the user recolours it; the editor seeds the real value from the project).
-const _DEFAULT_BACKGROUND := Color("#0c0c12")
+## The starting stage background — opaque black (the editor seeds the real value from the project,
+## so this is only the value shown before that injection).
+const _DEFAULT_BACKGROUND := Color("#000000ff")
 
 
 ## A thin custom-draw layer that paints the alignment grid behind the sprites, clipped to the stage
@@ -422,8 +422,9 @@ func _begin_drag() -> void:
 ## right/bottom edges, keeping the **top-left corner anchored** (the sprite grows right and downward) —
 ## unless **Alt** is held, which resizes about the fixed centre (growing in all directions). Either
 ## resize locks to the sprite's starting aspect ratio while **Shift** is held (via _lock_aspect, M28).
-## Both go through _snap_model, which snaps the dragged corner to the grid when Snap is on (else rounds
-## to the nearest whole pixel) — so the model stays the int shape PongScripts uses and Stage reads with
+## Both go through _snap_model, which snaps a corner to the grid when Snap is on (a move snaps the
+## sprite's top-left corner, a resize the dragged corner; else rounds to the nearest whole pixel) — so
+## the model stays the int shape PongScripts uses and Stage reads with
 ## int(...). The editor's inspector tracks via the on_geometry_changed callback.
 func _update_drag(global_point: Vector2) -> void:
 	if _drag_index < 0 or _drag_index >= _sprites.size():
@@ -431,10 +432,15 @@ func _update_drag(global_point: Vector2) -> void:
 	var entry: Dictionary = _sprites[_drag_index]
 	var m := _global_to_model(global_point)
 	if _drag_mode == "move":
-		# Snap the sprite's centre (its position) to the grid so the position lands on a grid line.
+		# Snap the sprite's **top-left corner** to the grid (not its centre) so its visible edges land on
+		# grid lines — the tile/image-editor convention, and consistent with how a resize snaps the
+		# dragged corner. Snapping the centre only aligns the edges when w/h are even multiples of the
+		# step. The model stores x/y as the centre, so we snap the corner then derive the centre back.
 		var centre := m + _grab_offset_model
-		entry["x"] = _snap_model(centre.x)
-		entry["y"] = _snap_model(centre.y)
+		var left := _snap_model(centre.x - float(entry["w"]) * 0.5)
+		var top := _snap_model(centre.y - float(entry["h"]) * 0.5)
+		entry["x"] = roundi(left + float(entry["w"]) * 0.5)
+		entry["y"] = roundi(top + float(entry["h"]) * 0.5)
 	elif Input.is_key_pressed(KEY_ALT):
 		# Alt: resize about the fixed centre — derive w/h from the dragged corner's distance to the
 		# centre (doubled), so the sprite grows symmetrically and the position never moves.

@@ -118,7 +118,6 @@ size_flags_vertical = 3
 
 [node name="Canvas" type="Control" parent="Page/Workspace/CanvasScroll" unique_id=1712130241]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(1200, 1200)
 layout_mode = 2
 script = ExtResource("3_canvas")
 

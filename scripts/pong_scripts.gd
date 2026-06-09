@@ -65,10 +65,10 @@ static func variables() -> Array:
 ## colour the stage view draws behind the sprites and the game paints its viewport with at RUN.
 ## A **hex string** like the sprite colours, so it serialises straight to JSON for SAVE/OPEN (the
 ## editor stores it under a top-level "background" key); the editor seeds its working copy from
-## here and the Stage falls back to it when launched directly (no editor). The stock value matches
-## the dark stage-view backdrop the editor has always drawn, so stock Pong's look is unchanged.
+## here and the Stage falls back to it when launched directly (no editor). The stock value is
+## opaque black (`#000000ff`).
 static func background() -> String:
-	return "#0c0c12"
+	return "#000000ff"
 
 
 ## The project's stage-editor grid settings (Milestone 27): the alignment grid's visibility, snap

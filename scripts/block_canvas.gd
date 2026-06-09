@@ -205,6 +205,7 @@ func rename_sprite(old_name: String, new_name: String) -> void:
 func _render() -> void:
 	for child in _layer.get_children():
 		child.queue_free()
+	var extent := Vector2.ZERO
 	for stack in _stacks:
 		var ctrl := BlockView.build_stack(stack["blocks"])
 		_passthrough(ctrl, true)
@@ -212,6 +213,22 @@ func _render() -> void:
 		_layer.add_child(ctrl)
 		ctrl.position = stack["pos"]
 		ctrl.size = ctrl.get_combined_minimum_size()
+		extent = extent.max(ctrl.position + ctrl.size)
+	_fit_to_content(extent)
+
+
+## Grow the canvas's minimum size to cover every stack (plus a margin), so the enclosing
+## ScrollContainer can always scroll to the end of the longest / lowest script — and never
+## smaller than the visible viewport, so it still fills the panel when scripts are short.
+## Without this the canvas kept a fixed minimum (editor.tscn), capping how far you could
+## scroll once a script flowed past it.
+const _CONTENT_MARGIN := 80.0
+func _fit_to_content(extent: Vector2) -> void:
+	var floor_size := Vector2.ZERO
+	var view := get_parent() as Control
+	if view != null:
+		floor_size = view.size
+	custom_minimum_size = (extent + Vector2(_CONTENT_MARGIN, _CONTENT_MARGIN)).max(floor_size)
 
 
 ## Make a rendered subtree transparent to mouse picking, so this canvas's _input sees

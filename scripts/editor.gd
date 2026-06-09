@@ -33,6 +33,18 @@ const _GAME_SCENE := "res://main.tscn"
 ## bigger blocks (less room) — it is the one knob for the editor's zoom. See _ready.
 const _EDITOR_SIZE := Vector2i(960, 540)
 
+## User zoom (pinch / Ctrl+scroll). The window's `content_scale_factor` multiplies *on top of*
+## the M26 `_EDITOR_SIZE` fit (1.0 = the default layout); lowering it zooms the whole editor
+## **out** — smaller blocks, more workspace visible — which is what a crowded canvas wants. We
+## only allow zooming out from the default (cap at 1.0) "a few stops" down to `_ZOOM_MIN`. Changing
+## the factor is hit-test-safe: the engine transforms GUI event positions into the same canvas
+## space the Controls lay out in, so `BlockCanvas`'s event.position-vs-get_global_rect() tests
+## (and the palette's / stage view's) stay consistent whatever the factor. See _input.
+const _ZOOM_MIN := 0.5
+const _ZOOM_MAX := 1.0
+const _ZOOM_STEP := 0.1
+var _zoom := 1.0
+
 ## The starting folder the SAVE/OPEN browser opens in when no project is bound yet (M22) — the project
 ## directory, a sensible, findable default. We deliberately impose *no* dedicated saves folder: the
 ## file browser uses full filesystem access, so the user picks where a project lives (the repo, the
@@ -273,6 +285,32 @@ func _ready() -> void:
 
 	# Populate the selector + canvas from the seeded project and show its first sprite.
 	_load_project_into_ui()
+
+
+## Editor zoom (M28-follow-on): pinch (trackpad magnify) or Ctrl+scroll zooms the whole editor
+## out a few stops and back. `_input` (not `_unhandled_input`) so we get the wheel before the
+## ScrollContainer would consume a plain scroll — but only with Ctrl held, so an unmodified wheel
+## still scrolls the canvas/palette as before. A magnify gesture (no chord) zooms directly. We act
+## only on these two events — never on a press/motion — so the canvas's / palette's own `_input`
+## drag spine is untouched whatever the tree order.
+func _input(event: InputEvent) -> void:
+	if event is InputEventMagnifyGesture:
+		_apply_zoom(_zoom * event.factor)
+		get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.pressed and event.ctrl_pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_apply_zoom(_zoom + _ZOOM_STEP)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_apply_zoom(_zoom - _ZOOM_STEP)
+			get_viewport().set_input_as_handled()
+
+
+## Clamp the requested zoom to the allowed stops and push it to the shared window. Lower factor =
+## zoomed out (smaller content, more room); 1.0 is the default fit. We cap at 1.0 (out-only).
+func _apply_zoom(target: float) -> void:
+	_zoom = clampf(target, _ZOOM_MIN, _ZOOM_MAX)
+	get_window().content_scale_factor = _zoom
 
 
 ## ESC quits the program (in-game ESC instead drops back here — see Stage._unhandled_input).

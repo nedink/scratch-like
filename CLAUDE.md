@@ -5,9 +5,39 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 28 — aspect-locked resize on the stage
+## Current state: Milestone 29 — evaluate arithmetic in a numeric slot
 
-**Goal of this milestone:** pay off M27's last deferral — **uniform / aspect-locked resize** in the
+**Goal of this milestone:** make a **numeric** literal field do math. Through M28 a numeric slot accepted
+only a single number (`coerce_literal`'s `is_valid_float()` fast path) and anything else fell back to a
+string. M29 lets you type an **arithmetic expression** into a numeric (oval) field — `2+3`, `90*2`,
+`(5-1)/2` — and on **commit (Enter or focus-out)** the field stores and shows the **result** (`5`, `180`,
+`2`). It is a tiny, self-contained change to literal coercion in [`BlockView`](scripts/block_view.gd)
+only: **no new opcode, no block-data-shape change, no runtime change, no new chrome.**
+
+The implementation is small because M12's commit pipeline already does everything but the math:
+[`BlockCanvas._commit_literal`](scripts/block_canvas.gd) (fired on both `text_submitted` and
+`focus_exited`) calls [`coerce_literal`](scripts/block_view.gd), writes the result into the live `inputs`
+dict, and re-`_stringify`s the field — so an expression that coerces to `5` displays as `5` with **no
+change to the canvas or commit code**. M29 only extends `coerce_literal`'s `TYPE_INT/TYPE_FLOAT` branch:
+after the plain-number fast path it tries [`_eval_arithmetic`](scripts/block_view.gd), and on a finite
+numeric result returns it (int when whole — the slot's existing int-vs-float rule, factored into the new
+[`_as_number`](scripts/block_view.gd) helper); otherwise it falls through to the existing string fallback,
+so `"bounce"` and other non-numeric sentinels are untouched. `_eval_arithmetic` **whitelists** the text to
+digits/whitespace/operators (`+ - * / % ( )`) *before* parsing, so Godot's [`Expression`](scripts/block_view.gd)
+can never resolve an identifier or call (`OS`, `randi`, …); a parse failure or a ÷0 → inf/nan result
+returns `null` → the raw text is kept rather than turned into a bogus number. Only **numeric** slots
+evaluate — a string slot keeps `"2+3"` verbatim (coercion is keyed by the slot's type), and Enter and
+focus-out behave identically since both route through `_commit_literal`.
+
+What this leaves deferred: **embedding a live *run* of the game** inside the editor (the M26/M28
+`SubViewport` restructure), and arithmetic over **variable reporters** in a literal field (you compose
+those with operator blocks; the field only evaluates a self-contained numeric string).
+
+---
+
+For context, the M28 mechanics this builds on:
+
+**Aspect-locked resize on the stage (M28).** Pay off M27's last deferral — **uniform / aspect-locked resize** in the
 stage view. Through M27 a resize set `w` and `h` **independently** from the dragged corner (top-left-
 anchored by default, centre-anchored with `Alt`), so you couldn't grow a sprite while keeping its shape.
 M28 adds Scratch's/image-editors' aspect lock: **hold `Shift` while dragging a resize handle** and the
@@ -212,6 +242,9 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    **Click a white input field** (M12) to edit its value — type a new number/word and
    press Enter (or click away) to commit it into the block; e.g. change `move {10}` to
    `move {8}`. (Clicking the field edits it; grab the coloured part of a block to drag it.)
+   **Type arithmetic into a numeric field** (M29) — `2+3`, `90*2`, `(5-1)/2` — and committing
+   evaluates it to the result (`5`, `180`, `2`); a value that isn't a self-contained number/expression
+   (e.g. `point_in_direction`'s `bounce`) is kept as typed.
    **Numeric slots are oval, text slots rectangular** (M13), so a number field and a word
    field read apart at a glance. A slot that is really a **fixed choice** (`stop {mode}`,
    `say … in {size}`, `create clone of {target}`, `touching {side} edge?`) is a **dropdown**
@@ -1427,9 +1460,41 @@ What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to
 the current RUN/ESC being a full scene swap). The **scripts** remain shared-seed in spirit (editor and
 Stage both read `PongScripts.sprites()` / `variables()`), as since M18/M24.
 
+### Arithmetic in a numeric slot (M29)
+
+A numeric literal field now evaluates an **arithmetic expression** on commit. Through M28 a numeric slot
+took a single number and nothing else; M29 lets you type `2+3` / `90*2` / `(5-1)/2` and stores/shows the
+**result**. It is small because M12's commit pipeline already writes-and-re-stringifies whatever
+[`coerce_literal`](scripts/block_view.gd) returns — so the change is confined to that one function.
+**No new opcode, no block-data-shape change, no runtime change.**
+
+- **One coercion branch, extended.** [`coerce_literal`](scripts/block_view.gd)'s `TYPE_INT/TYPE_FLOAT`
+  case keeps its `is_valid_float()` fast path, then — for text that isn't a plain number — tries
+  [`_eval_arithmetic`](scripts/block_view.gd) and returns its finite numeric result, falling through to
+  the **existing string fallback** otherwise (so `point_in_direction`'s `"bounce"` and any other
+  non-numeric text stay strings, exactly as before). The int-when-whole normalization both paths share is
+  factored into [`_as_number`](scripts/block_view.gd).
+- **Safe evaluation.** [`_eval_arithmetic`](scripts/block_view.gd) **whitelists** the text against
+  `_ARITHMETIC_RE` (digits, whitespace, and `+ - * / % ( )` only) *before* parsing, so Godot's
+  `Expression` can never resolve an identifier or method call (`OS`, `randi`, …). It returns `null` on a
+  whitelist miss, a parse error, a non-numeric result, or a non-finite one (a ÷0 → inf/nan) — in every
+  such case `coerce_literal` keeps the raw text rather than inventing a number.
+- **Numeric slots only; Enter == focus-out.** Coercion is keyed by the slot's previous type, so a
+  **string** slot keeps `"2+3"` verbatim — only oval/numeric fields do math. Both
+  [`text_submitted` and `focus_exited`](scripts/block_canvas.gd) route through
+  [`_commit_literal`](scripts/block_canvas.gd), so pressing Enter and clicking away evaluate identically.
+
+Still deferred: arithmetic referencing **variable reporters** inside a literal field — compose those with
+operator blocks (`+`, `variable`); the field only evaluates a self-contained numeric string.
+
 ## Opcodes implemented
 
-**M28 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24/M25/M26/M27) — M28
+**M29 added no opcodes** (nor did M8/M9/M10/M11/M12/M13/M14/M15/M16/M17/M18/M19/M20/M21/M22/M23/M24/M25/M26/M27/M28) —
+M29 is a pure **editor-side coercion** change (a numeric literal field evaluates an arithmetic expression
+on commit), touching neither the block language nor the runtime logic; the note below is kept as written
+for earlier milestones.
+
+**M28 added no opcodes** — M28
 is a pure **editor-side view** change (aspect-locked resize on the stage: `Shift` constrains a resize to
 the sprite's starting proportions), touching neither the block language nor the runtime logic; the note
 below is kept as written for earlier milestones.

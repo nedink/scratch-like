@@ -285,20 +285,60 @@ static func build_input(inputs: Dictionary, key: String, options: Array = [], de
 ## `String()`s text ones). A numeric slot keeps a number (int when whole); a bool slot
 ## maps true/false; anything else stays a String — including non-numeric text typed into
 ## a numeric slot, which keeps sentinels like point_in_direction's "bounce" expressible.
+## A numeric slot also evaluates an arithmetic expression (M29): "2+3" commits as 5, so
+## the field shows the result once _commit_literal re-stringifies it.
 static func coerce_literal(text: String, prev: Variant) -> Variant:
 	var t := text.strip_edges()
 	match typeof(prev):
 		TYPE_INT, TYPE_FLOAT:
 			if t.is_valid_float():
-				var f := t.to_float()
-				if is_finite(f) and f == floor(f):
-					return int(f)
-				return f
+				return _as_number(t.to_float())
+			var computed: Variant = _eval_arithmetic(t)
+			if computed != null:
+				return computed
 			return t
 		TYPE_BOOL:
 			return t.to_lower() == "true"
 		_:
 			return t
+
+
+## Normalize a float to the numeric-slot convention: int when whole (the interpreter
+## `float()`s it regardless), else the float.
+static func _as_number(f: float) -> Variant:
+	if is_finite(f) and f == floor(f):
+		return int(f)
+	return f
+
+
+# Only digits, whitespace, and arithmetic operators/parens — anything with a letter or
+# other symbol is rejected before parsing, so Expression can never resolve an identifier
+# or call (OS, randi, …); such text falls back to being kept as a string.
+const _ARITHMETIC_RE := r"^[0-9.+\-*/%() \t]+$"
+
+
+## Evaluate `text` as an arithmetic expression via Godot's Expression (M29). Returns a
+## finite number (int when whole) or null when the text isn't safe/evaluable arithmetic —
+## a name (the "bounce" sentinel), a parse failure, or a ÷0 → inf/nan result — so the
+## caller falls back to keeping the raw string.
+static func _eval_arithmetic(text: String) -> Variant:
+	if text.is_empty():
+		return null
+	var re := RegEx.create_from_string(_ARITHMETIC_RE)
+	if re.search(text) == null:
+		return null
+	var expr := Expression.new()
+	if expr.parse(text) != OK:
+		return null
+	var result: Variant = expr.execute([], null, false)
+	if expr.has_execute_failed():
+		return null
+	if not (result is int or result is float):
+		return null
+	var f := float(result)
+	if not is_finite(f):
+		return null
+	return _as_number(f)
 
 
 # --- Palette (M11) ---------------------------------------------------------
