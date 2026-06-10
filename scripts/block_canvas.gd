@@ -103,6 +103,12 @@ var _spawn_scope_body: Variant = null  # (M31) when dragging a `param`, the defi
 ## releasing **deletes** it (Scratch's own gesture, M16). Left null when unset (no trash).
 var _trash: Control
 
+## Editor hook (M32): called (no args) after an in-place rename of a `define`'s name has cascaded to
+## this sprite's `call`s, so the editor can re-derive its custom-block name list and rebuild the
+## palette + canvas (which is also where the re-render happens). Left unset for non-editor callers,
+## in which case the canvas re-renders itself.
+var on_custom_block_renamed := Callable()
+
 
 func _ready() -> void:
 	clip_contents = true
@@ -301,11 +307,55 @@ func _on_enum_selected(index: int, dd: OptionButton) -> void:
 func _commit_literal(field: LineEdit) -> void:
 	var inputs: Dictionary = field.get_meta("lit_inputs")
 	var key := String(field.get_meta("lit_key"))
-	var coerced: Variant = BlockView.coerce_literal(field.text, inputs.get(key))
+	var old_value: Variant = inputs.get(key)
+	var coerced: Variant = BlockView.coerce_literal(field.text, old_value)
+	# Renaming a `define`'s name in place (M32): cascade the new name to this sprite's `call`s. A
+	# custom block's name must stay unique within the sprite (`call` resolves by name) and non-blank,
+	# so a blank or colliding rename is rejected — the field reverts to the old name, nothing cascades.
+	if field.has_meta("define_name"):
+		var old_name := String(old_value)
+		var new_name := String(coerced)
+		if new_name == "" or (new_name != old_name and _other_define_named(inputs, new_name)):
+			field.text = BlockView._stringify(old_value)
+			return
+		inputs[key] = coerced
+		field.text = BlockView._stringify(coerced)
+		if new_name != old_name:
+			# Defer the cascade + re-render: _render() frees this very field, which we must not do
+			# from inside its own commit signal.
+			_rename_custom_block_deferred.call_deferred(old_name, new_name)
+		return
 	inputs[key] = coerced
 	var normalized := BlockView._stringify(coerced)
 	if field.text != normalized:
 		field.text = normalized
+
+
+## True if some *other* `define` hat in the working stacks already carries `name` (M32) — the
+## collision guard for an in-place rename. `self_inputs` is the renamed define's own inputs dict;
+## we exclude it by reference (is_same, since two distinct defines can hold equal-by-value dicts).
+func _other_define_named(self_inputs: Dictionary, name: String) -> bool:
+	for stack in _stacks:
+		for block in stack["blocks"]:
+			if typeof(block) != TYPE_DICTIONARY or String(block.get("opcode", "")) != "define":
+				continue
+			var bi: Dictionary = block.get("inputs", {})
+			if not is_same(bi, self_inputs) and String(bi.get("name", "")) == name:
+				return true
+	return false
+
+
+## Cascade a `define` rename across the working stacks (M32), deferred from _commit_literal so we
+## don't free the committing field mid-signal. The define's own name is already updated (in
+## _commit_literal); this rewrites the matching `call`s. Then the editor re-derives its custom-block
+## name list and rebuilds/refreshes (which re-renders); with no editor hook we re-render ourselves.
+func _rename_custom_block_deferred(old_name: String, new_name: String) -> void:
+	for stack in _stacks:
+		BlockView.rewrite_custom_block_refs(stack["blocks"], old_name, new_name)
+	if on_custom_block_renamed.is_valid():
+		on_custom_block_renamed.call()
+	else:
+		_render()
 
 
 # --- Input -----------------------------------------------------------------

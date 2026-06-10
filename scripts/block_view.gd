@@ -565,6 +565,36 @@ static func _strip_sprite_input_refs(opcode: String, inputs: Dictionary, name: S
 			strip_sprite_refs(value, name)
 
 
+## The opcodes whose `{name}` input names a custom block (M32) — the targets a custom-block rename
+## cascade walks. `define` is the definition (its own name) and `call` invokes it by name, so renaming
+## the block rewrites both. (`param` names a *parameter*, not the block, so it is untouched by a name
+## rename — and its sibling `args` keys likewise.) Custom blocks are per-sprite, so the cascade runs
+## within one sprite's script only, unlike the globally-unique sprite cascade (M25).
+const _CUSTOM_BLOCK_OPCODES := ["define", "call"]
+
+
+## Rewrite every reference to the custom block `old_name` in `blocks` to `new_name` (M32), in place —
+## the custom-block counterpart of rewrite_sprite_refs. A `_CUSTOM_BLOCK_OPCODES` block's `inputs.name`
+## is reassigned; nested reporter inputs / `body` substacks recurse (a `call` may sit inside an `if`
+## body, the `define`'s body holds the procedure). A `call`'s `args` sub-dict and a `param`'s name are
+## *not* rewritten — they bind to parameters, not the block name. (`blocks` and the dicts within are
+## references, so this mutates the live script the caller holds.)
+static func rewrite_custom_block_refs(blocks: Array, old_name: String, new_name: String) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _CUSTOM_BLOCK_OPCODES and String(inputs.get("name", "")) == old_name:
+			inputs["name"] = new_name
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				rewrite_custom_block_refs([value], old_name, new_name)
+			elif typeof(value) == TYPE_ARRAY:
+				rewrite_custom_block_refs(value, old_name, new_name)
+
+
 ## The opcodes the palette offers, grouped for display: an Array of
 ## {category, opcodes:[...]} in PALETTE_CATEGORY_ORDER. As of M14 **every** kind is listed,
 ## reporters included — a reporter now has a drop target (a value/condition slot), so you can
@@ -664,7 +694,11 @@ static func _define_header(block: Dictionary) -> HBoxContainer:
 	row.add_theme_constant_override("separation", 4)
 	var inputs: Dictionary = block.get("inputs", {})
 	_push_label(row, "define")
-	row.add_child(build_input(inputs, "name", [], inputs.get("name")))
+	# Stamp the name field so the canvas can recognise an in-place rename of the procedure and cascade
+	# it to this sprite's `call`s (M32) — without this marker it would commit like any other literal.
+	var name_field := build_input(inputs, "name", [], inputs.get("name"))
+	name_field.set_meta("define_name", true)
+	row.add_child(name_field)
 	for p in inputs.get("params", []):
 		row.add_child(_spawn_param_pill(String(p)))
 	return row

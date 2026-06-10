@@ -253,6 +253,9 @@ func _ready() -> void:
 	_palette._on_delete_variable = _delete_variable
 	# The palette's "Make a Block" button (M30) calls back here to mint a custom block (a `define` hat).
 	_palette._on_make_block = _make_block
+	# Renaming a `define` in place (M32) cascades to its `call`s in the canvas; this hook lets us then
+	# re-derive the sprite's custom-block names so the palette chips and `call` dropdowns track the rename.
+	_canvas.on_custom_block_renamed = _on_custom_block_renamed
 	_canvas._trash = _palette_scroll
 
 	# Stage (scene) editor (M27): the toggle swaps Blocks <-> Stage; the stage view reports a clicked
@@ -870,6 +873,19 @@ func _parse_params(text: String) -> Array:
 		if n != "" and n not in names:
 			names.append(n)
 	return names
+
+
+## After an in-place `define` rename has cascaded to this sprite's `call`s in the canvas (M32 —
+## BlockCanvas calls this back), re-derive the sprite's custom-block names + params from the live
+## canvas, then refresh the dependent UI — the same trio Make a Block uses. The canvas already
+## rewrote the matching `call` names; re-pointing project_custom_blocks before _canvas.refresh()
+## makes the new name a known option, so a renamed `call`'s dropdown shows it cleanly. Custom blocks
+## are per-sprite, so only the current sprite is affected — no cross-script cascade (unlike M25).
+func _on_custom_block_renamed() -> void:
+	BlockView.project_custom_blocks = _custom_blocks_in(_canvas.export_script())
+	BlockView.project_custom_block_params = _custom_block_params_in(_canvas.export_script())
+	_palette.rebuild()
+	_canvas.refresh()
 
 
 # --- Rename / delete a variable (M21) --------------------------------------

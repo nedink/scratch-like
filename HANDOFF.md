@@ -12,25 +12,30 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M31 — custom block **parameters** (value/number-text only): `define`
-  declares `params`, `call` carries `args`, a new `param` reporter reads a per-call parameter frame.
-  A `param` pill's drops are **confined to its own define's body** (`BlockCanvas._nearest_slot` →
-  `_scoped_slots`/`_enclosing_define_body`) — you can't drop a parameter into a block outside the
-  function that declares it; releasing it elsewhere discards it.
-- **Git:** last commit is `85ecdff M30`. **M31 is implemented but NOT yet committed** — working
-  tree has uncommitted changes to `CLAUDE.md`, `HANDOFF.md`, `editor.tscn`, and `scripts/{block_canvas,
-  block_palette,block_view,editor,interpreter}.gd`.
-- **Immediate next action:** verify M31 works (F5 — manual; see [testing](#testing)), then commit
-  + push it as `M31: custom block parameters`.
+- **Milestone in flight:** M32 — custom block **rename cascade**. Editing a `define`'s name field in
+  place on the canvas now rewrites this sprite's `call`s to match (the custom-block analog of M21's
+  variable rename / M25's sprite rename, scoped per-sprite since custom blocks are per-sprite). The
+  walk is `BlockView.rewrite_custom_block_refs` (define + call by `inputs.name`); the trigger is the
+  in-place name commit — `_define_header` stamps the name field `define_name`, `BlockCanvas._commit_literal`
+  catches it, validates uniqueness (`_other_define_named`, blank/duplicate → revert), and defers
+  (`call_deferred`, so it doesn't free the committing field) `_rename_custom_block_deferred`, which
+  rewrites the calls and fires `on_custom_block_renamed` → `editor._on_custom_block_renamed` (re-derive
+  the sprite's block names + params, rebuild palette, refresh canvas). **`param` reporters and `call`
+  `args` keys are untouched** — they bind to parameters, not the block name.
+- **Git:** last commit is `5b776ee M31`. **M32 is implemented but NOT yet committed** — working tree
+  has uncommitted changes to `CLAUDE.md`, `HANDOFF.md`, and `scripts/{block_view,block_canvas,editor}.gd`.
+- **Immediate next action:** verify M32 works (F5 — manual; see [testing](#testing)), then commit
+  + push it as `M32: custom block rename cascade`.
 
 ## Next up (candidate milestones)
 
 Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay scoped.
 
-- **Custom-block rename/sync cascade.** Editing a `define`'s name *or its params* should rewrite the
-  `call`s/`param`s that target it (today they keep stale arg keys / dangle → runtime warning). M21
-  (variable rename) / M25 (sprite rename) are the exact template — walk `define`/`call`/`param` the
-  way they walk `set_var`/`touching_sprite?`.
+- **Custom-block *parameter* rename/sync + delete.** M32 did the *name* cascade; editing a `define`'s
+  *params* should rewrite its `call`s' `args` keys and its body's `param`s — but first needs a **params-
+  editing UI** (no way to edit params after the Make-a-Block dialog today) plus a rename-vs-add/remove
+  heuristic (params are name-keyed, no stable ids). Also: **delete** a custom block from the UI (remove
+  the `define` + strip its `call`s — the My-Blocks twin of M21's variable delete).
 - **Boolean custom-block parameters / return value** — M31 did value params; a boolean param needs a
   boolean `param` output + boolean arg slot + a dialog way to mark it; a return value would make a
   custom block usable as a reporter (Scratch keeps them statements).
@@ -43,7 +48,8 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
-- _M31 — custom block parameters (`define` params + `call` args + `param` reporter). **Pending commit.**_
+- _M32 — custom block rename cascade (renaming a `define` rewrites its `call`s). **Pending commit.**_
+- M31 — custom block parameters (`define` params + `call` args + `param` reporter).
 - M30 — custom blocks (`define`/`call`, "My Blocks").
 - M29 — arithmetic evaluated in a numeric slot (`2+3` → `5`).
 - M28 — aspect-locked resize on the stage (Shift to lock proportions).
