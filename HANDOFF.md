@@ -22,10 +22,9 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   rewrites the calls and fires `on_custom_block_renamed` → `editor._on_custom_block_renamed` (re-derive
   the sprite's block names + params, rebuild palette, refresh canvas). **`param` reporters and `call`
   `args` keys are untouched** — they bind to parameters, not the block name.
-- **Git:** last commit is `5b776ee M31`. **M32 is implemented but NOT yet committed** — working tree
-  has uncommitted changes to `CLAUDE.md`, `HANDOFF.md`, and `scripts/{block_view,block_canvas,editor}.gd`.
-- **Immediate next action:** verify M32 works (F5 — manual; see [testing](#testing)), then commit
-  + push it as `M32: custom block rename cascade`.
+- **Git:** last commit is `f592341 M32: custom block rename cascade` (committed + pushed to `main`).
+- **Immediate next action:** F5-verify M32 (see [testing](#testing)) if not already done; then pick
+  the next milestone from [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
@@ -48,7 +47,7 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
-- _M32 — custom block rename cascade (renaming a `define` rewrites its `call`s). **Pending commit.**_
+- M32 — custom block rename cascade (renaming a `define` rewrites its `call`s).
 - M31 — custom block parameters (`define` params + `call` args + `param` reporter).
 - M30 — custom blocks (`define`/`call`, "My Blocks").
 - M29 — arithmetic evaluated in a numeric slot (`2+3` → `5`).
