@@ -59,6 +59,14 @@ var _script: Array = []
 ## `stop "this script"` and `delete_this_clone` work by clearing it.
 var _alive: bool = true
 
+## Custom-block parameter frames (M31): a stack of `{param_name: value}` dicts, one per active
+## `call`. `_on_call` evaluates a call's arguments in the *current* frame, pushes a new frame, runs
+## the procedure body, then pops it; the `param` reporter reads the top frame. A stack (not a single
+## dict) so a custom block can call another — or itself — each binding its own arguments, and the
+## inner frame shadows the outer for the duration of the nested body. Per-interpreter, so each sprite
+## (and clone) keeps its own frames.
+var _frames: Array = []
+
 ## opcode (String) -> Callable for blocks that *do* something (statements).
 var _statement_handlers: Dictionary = {}
 
@@ -113,6 +121,7 @@ func _register_handlers() -> void:
 		"or": _on_or,
 		"not": _on_not,
 		"random": _on_random,
+		"param": _on_param,
 	}
 
 
@@ -462,18 +471,45 @@ func _on_define(block: Dictionary) -> void:
 ## per-sprite, like locals — and `await` its body, so the blocks after the call run only once the
 ## procedure returns (Scratch's sequential semantics). An unknown name warns and is a no-op.
 ##
+## Parameters (M31): the matching `define` declares an ordered `params` list; this block carries an
+## `args` dict keyed by parameter name. We evaluate each argument **in the current frame** (before
+## pushing — so a `param` used as an argument refers to the caller's binding, Scratch's semantics),
+## push the resulting `{param: value}` frame, run the body, then pop it. The body's `param` reporters
+## read the top frame. A missing arg evaluates to 0; extra args not in `params` are ignored.
+##
 ## The body runs in the same coroutine, so a recursive call without an intervening `wait`/`forever`
 ## would loop synchronously (as it would in Scratch); a call whose body never returns — e.g. one
-## containing `forever` — never yields back to the caller, by design. No parameter passing yet
-## (see CLAUDE.md): a custom block is a name + a body, the plain Scratch custom block.
+## containing `forever` — never yields back to the caller (and never pops its frame), by design.
 func _on_call(block: Dictionary) -> void:
 	var proc_name := String(_value(block, "name"))
 	for b in _script:
 		if typeof(b) == TYPE_DICTIONARY and _opcode(b) == "define" \
 				and String(b.get("inputs", {}).get("name", "")) == proc_name:
+			var params: Array = b.get("inputs", {}).get("params", [])
+			var args: Dictionary = block.get("inputs", {}).get("args", {})
+			var frame := {}
+			for p in params:
+				frame[String(p)] = _evaluate(args.get(p, 0))  # evaluated in the *caller's* frame
+			_frames.push_back(frame)
 			await _run_stack(_body(b))
+			if not _frames.is_empty():
+				_frames.pop_back()
 			return
 	push_warning("Interpreter: call to undefined custom block '%s'" % proc_name)
+
+
+## param: read the value bound to a custom-block parameter (M31). Resolves against the top frame —
+## the one `_on_call` pushed for the procedure currently running — by the parameter's `name` (a fixed
+## label, read directly, not evaluated). Read outside any custom block, or for an unknown parameter,
+## yields 0 with a warning (so a stray `param` reporter can't crash a script).
+func _on_param(block: Dictionary) -> Variant:
+	var pname := String(block.get("inputs", {}).get("name", ""))
+	if not _frames.is_empty():
+		var frame: Dictionary = _frames.back()
+		if frame.has(pname):
+			return frame[pname]
+	push_warning("Interpreter: read of parameter '%s' outside its custom block" % pname)
+	return 0
 
 
 # --- Helpers ---------------------------------------------------------------

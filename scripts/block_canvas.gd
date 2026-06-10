@@ -95,7 +95,9 @@ var _grabbed: Array = []         # the detached blocks riding the cursor
 var _snap: Dictionary = {}       # current snap target (a stack gap or a value slot) or empty
 var _dragging_reporter := false  # the drag is a single reporter pill -> targets slots, not gaps
 var _pending_reporter := false   # the pending press was on an on-canvas reporter pill (M15)
+var _pending_spawn := false      # the pending press was on a spawnable prototype pill (M31) -> mint a copy
 var _trashing := false           # the ghost is currently over the palette -> a drop deletes it (M16)
+var _spawn_scope_body: Variant = null  # (M31) when dragging a `param`, the define body Array its drops are confined to; null otherwise
 
 ## The palette region, set by the editor (editor.gd) — dragging a block back over it and
 ## releasing **deletes** it (Scratch's own gesture, M16). Left null when unset (no trash).
@@ -332,6 +334,17 @@ func _input(event: InputEvent) -> void:
 				return
 			# Grabbing anything else commits whatever field was being edited.
 			get_viewport().gui_release_focus()
+			# A press on a define hat's prototype parameter pill (M31) spawns a *fresh copy* of
+			# that `param` reporter (Scratch's "drag a copy of the argument out"), checked before
+			# _reporter_at / _block_at so it wins over the hat it sits in.
+			var spawn := _spawn_at(event.position)
+			if not spawn.is_empty():
+				_state = _PENDING
+				_press_pos = event.position
+				_pending = spawn
+				_pending_spawn = true
+				get_viewport().set_input_as_handled()
+				return
 			# A press on a reporter pill grabs *that reporter* out of its slot (M15), checked
 			# before _block_at so the pill wins over the statement it sits in; otherwise grab
 			# the statement block under the cursor (M9).
@@ -437,7 +450,57 @@ func _reporter_at(global_point: Vector2) -> Dictionary:
 	if best == null:
 		return {}
 	return {"inputs": best.get_meta("slot_inputs"), "key": String(best.get_meta("slot_key")),
-		"default": best.get_meta("slot_default"), "origin": best.get_global_rect().position}
+		"default": best.get_meta("slot_default"), "origin": best.get_global_rect().position, "control": best}
+
+
+## The deepest spawnable prototype pill under a global point (M31) — a define hat's parameter pill,
+## tagged by BlockView with `spawn_opcode` + `spawn_name`. Smallest-area wins (cf. _block_at). Returns
+## {spawn_opcode, spawn_name} so _begin_drag can mint a fresh copy, or {} if none is under the point.
+## Checked before _reporter_at / _block_at so pressing a prototype pill spawns a copy rather than
+## grabbing the hat it sits in.
+func _spawn_at(global_point: Vector2) -> Dictionary:
+	var best: Control = null
+	var best_area := INF
+	for pill in _spawnables(_layer):
+		var rect: Rect2 = (pill as Control).get_global_rect()
+		if rect.has_point(global_point):
+			var area := rect.size.x * rect.size.y
+			if area < best_area:
+				best_area = area
+				best = pill
+	if best == null:
+		return {}
+	# Record the define body this prototype belongs to (M31), so the minted `param` can drop only
+	# into slots inside that function — a parameter is meaningful only within its own define's body.
+	return {"spawn_opcode": String(best.get_meta("spawn_opcode")), "spawn_name": String(best.get_meta("spawn_name")),
+		"scope_body": _enclosing_define_body(best)}
+
+
+func _spawnables(node: Node, out: Array = []) -> Array:
+	if node is Control and node.has_meta("spawn_opcode"):
+		out.append(node)
+	for child in node.get_children():
+		_spawnables(child, out)
+	return out
+
+
+## The body Array of the `define` whose rendered subtree contains `node` (M31), or null if `node`
+## is not inside a define stack. A `param` reporter is bound to the function that declares it, so its
+## drops are confined to slots in this body (see _nearest_slot). The Array reference is the live data,
+## stable across re-renders — so it survives the _render() a reporter pickup triggers and matches back
+## to the freshly-built body column by is_same. Walks up to the top-level stack column (a direct child
+## of _layer); its body_array is the stack's blocks, and a define stack is [define_dict].
+func _enclosing_define_body(node: Node) -> Variant:
+	var n: Node = node
+	while n != null:
+		if n is Control and n.get_parent() == _layer:
+			var arr: Array = (n as Control).get_meta("body_array", [])
+			if not arr.is_empty() and typeof(arr[0]) == TYPE_DICTIONARY \
+					and String((arr[0] as Dictionary).get("opcode", "")) == "define":
+				return (arr[0] as Dictionary).get("inputs", {}).get("body")
+			return null
+		n = n.get_parent()
+	return null
 
 
 # --- Drag lifecycle --------------------------------------------------------
@@ -466,6 +529,18 @@ func begin_spawn_drag(blocks: Array, global_point: Vector2) -> void:
 ## the stack comes with you") and start them floating as a ghost. A reporter pickup (M15)
 ## takes a different path — it detaches a single reporter dict out of one slot.
 func _begin_drag() -> void:
+	if _pending_spawn:
+		# A prototype parameter pill (M31): mint a fresh `param` reporter of that name and hand it to
+		# the normal spawn-drag flow (it then targets value slots / discards off-slot like any reporter).
+		# Confine its drops to slots inside the define it came from — set after begin_spawn_drag, which
+		# clears drag state. The motion handler re-runs _update_drag right after, so the scope applies
+		# from the first frame.
+		var scope: Variant = _pending.get("scope_body")
+		var blk := BlockView.make_block(String(_pending["spawn_opcode"]))
+		blk["inputs"]["name"] = String(_pending["spawn_name"])
+		begin_spawn_drag([blk], _press_pos)
+		_spawn_scope_body = scope
+		return
 	if _pending_reporter:
 		_begin_reporter_drag()
 		return
@@ -503,6 +578,12 @@ func _begin_reporter_drag() -> void:
 	var inputs: Dictionary = _pending["inputs"]
 	var key: String = _pending["key"]
 	var reporter: Variant = inputs.get(key)
+
+	# A `param` reporter (M31) is bound to its define — moving it stays confined to that function's
+	# body. Computed from the source slot's subtree *before* _render() frees it; the body Array is the
+	# live data, so it stays valid across the re-render (and matches the rebuilt column by is_same).
+	if typeof(reporter) == TYPE_DICTIONARY and String((reporter as Dictionary).get("opcode", "")) == "param":
+		_spawn_scope_body = _enclosing_define_body(_pending.get("control"))
 
 	# Anchor the ghost so the grabbed pill sits exactly where it was on press.
 	_grab_offset = _press_pos - _pending["origin"]
@@ -590,7 +671,9 @@ func _clear_drag_overlays() -> void:
 	_snap = {}
 	_dragging_reporter = false
 	_pending_reporter = false
+	_pending_spawn = false
 	_trashing = false
+	_spawn_scope_body = null
 	_state = _IDLE
 	_pending = {}
 
@@ -667,10 +750,13 @@ func _columns(node: Node, out: Array = []) -> Array:
 func _nearest_slot() -> Dictionary:
 	var anchor := global_position + _ghost.position  # ghost top-left, in global space
 	var drag_type := BlockView.reporter_output_type(String(_grabbed[0].get("opcode", "")))
+	# A `param` drag (M31) is confined to slots inside its own define's body; any other reporter
+	# may land in any slot on the canvas.
+	var candidates: Array = _scoped_slots() if _spawn_scope_body != null else _slots(_layer)
 	var best := {}
 	var best_dist := SNAP_DISTANCE
 	var best_area := INF
-	for slot in _slots(_layer):
+	for slot in candidates:
 		if String(slot.get_meta("slot_type", "value")) != drag_type:
 			continue  # boolean ⇄ value mismatch: not a legal drop target
 		var r: Rect2 = (slot as Control).get_global_rect()
@@ -692,6 +778,17 @@ func _slots(node: Node, out: Array = []) -> Array:
 	for child in node.get_children():
 		_slots(child, out)
 	return out
+
+
+## The slots inside the define body a `param` drag is confined to (M31) — every input widget in the
+## subtree of the rendered body column whose body_array is_same `_spawn_scope_body`. The Array is the
+## live data, so it matches the current column even after a pickup's re-render. Empty if no such column
+## (so the param finds no legal target outside its function, and a release there discards it).
+func _scoped_slots() -> Array:
+	for column in _columns(_layer):
+		if is_same((column as Control).get_meta("body_array", []), _spawn_scope_body):
+			return _slots(column)
+	return []
 
 
 ## Distance from a point to a rectangle: 0 inside, else the gap to the nearest edge/corner.

@@ -198,6 +198,10 @@ var _renaming_sprite: String = ""
 ## stored list to mutate, only the canvas to add to.
 @onready var _block_dialog: ConfirmationDialog = %BlockDialog
 @onready var _block_name_edit: LineEdit = %BlockNameEdit
+## The custom block's parameters (M31): a space/comma-separated list typed here becomes the `define`'s
+## ordered `params`. Empty = a no-parameter custom block (the M30 case). The arg slots on a `call`, and
+## the draggable parameter pills in the define hat, both derive from this list.
+@onready var _block_params_edit: LineEdit = %BlockParamsEdit
 
 ## A freshly added sprite's placeholder geometry (M24): a small grey square at the stage center. It is
 ## just a starting placeholder — real positioning is blocks (a `go_to` in the sprite's script, as the
@@ -399,6 +403,9 @@ func _show(index: int) -> void:
 	# custom-block twin of project_variables). Derived from the script being loaded, the same way the
 	# variable list is scoped per sprite.
 	BlockView.project_custom_blocks = _custom_blocks_in(_scripts[index]["script"])
+	# Parameters (M31): the params each of this sprite's custom blocks declares, so a `call` chip
+	# shows one argument slot per parameter (the custom-block params twin of project_custom_blocks).
+	BlockView.project_custom_block_params = _custom_block_params_in(_scripts[index]["script"])
 	_palette.rebuild()
 	_canvas.load_script(_scripts[index]["script"])
 	# Keep the stage view's highlight + the inspector on the loaded sprite while Stage mode is up
@@ -805,11 +812,27 @@ func _custom_blocks_in(script: Array) -> Array:
 	return names
 
 
+## The params each custom block in `script` declares (M31) — `{block_name: [param_names]}`, read from
+## the `define` hats' `params`. The params sibling of _custom_blocks_in: the palette uses it to give a
+## `call` chip one argument slot per parameter. Derived on demand from the data (no separate model),
+## like _custom_blocks_in / _sprite_names.
+func _custom_block_params_in(script: Array) -> Dictionary:
+	var out := {}
+	for block in script:
+		if typeof(block) == TYPE_DICTIONARY and String(block.get("opcode", "")) == "define":
+			var n := String(block.get("inputs", {}).get("name", ""))
+			if n != "":
+				out[n] = block.get("inputs", {}).get("params", [])
+	return out
+
+
 ## Pop the Make a Block name prompt (the palette button's callback). The dialog is declared in
-## editor.tscn and reused; Enter-to-confirm is wired in _ready.
+## editor.tscn and reused; Enter-to-confirm is wired in _ready. Clears both the name and the
+## parameters field (M31).
 func _make_block() -> void:
 	_block_name_edit.text = ""
-	_block_dialog.popup_centered(Vector2i(280, 130))
+	_block_params_edit.text = ""
+	_block_dialog.popup_centered(Vector2i(300, 180))
 	_block_name_edit.grab_focus()
 
 
@@ -824,12 +847,29 @@ func _on_new_block_confirmed() -> void:
 		return
 	var define := BlockView.make_block("define")
 	define["inputs"]["name"] = block_name
+	# Parameters (M31): split the params field on commas/whitespace, dropping blanks and duplicates, so
+	# the define declares its ordered parameter list. An empty field = a no-parameter block (M30).
+	define["inputs"]["params"] = _parse_params(_block_params_edit.text)
 	_canvas.add_definition(define)
 	# Re-derive from the live canvas (the new define isn't in _scripts until the next persist), then
-	# refresh the dependent UI — the same trio Make a Variable uses to surface a new name.
+	# refresh the dependent UI — the same trio Make a Variable uses to surface a new name. Re-derive
+	# the params map too (M31), so the new block's `call` chip shows its argument slots.
 	BlockView.project_custom_blocks = _custom_blocks_in(_canvas.export_script())
+	BlockView.project_custom_block_params = _custom_block_params_in(_canvas.export_script())
 	_palette.rebuild()
 	_canvas.refresh()
+
+
+## Parse a custom block's parameter list (M31) from the dialog's free text: split on commas and any
+## whitespace, strip each, drop blanks and duplicates (a parameter name must be unique within a
+## procedure — `param` resolves by name). Returns the ordered list of names.
+func _parse_params(text: String) -> Array:
+	var names: Array = []
+	for raw in text.replace(",", " ").split(" ", false):
+		var n := raw.strip_edges()
+		if n != "" and n not in names:
+			names.append(n)
+	return names
 
 
 # --- Rename / delete a variable (M21) --------------------------------------

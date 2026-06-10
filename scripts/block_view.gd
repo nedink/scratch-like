@@ -87,6 +87,13 @@ static var project_variables: Array = []
 static var project_sprites: Array = []
 static var project_custom_blocks: Array = []
 
+## `project_custom_block_params` (M31) is the parameter sibling of `project_custom_blocks`: a map of
+## custom-block name -> its ordered parameter-name list, for the sprite being edited. The editor
+## re-derives it per sprite (from the `define` hats' `params`) alongside `project_custom_blocks`, and
+## the palette reads it to build each `call` chip with one `args` slot per parameter (see
+## BlockPalette). Empty (no editor) -> call chips have no parameter slots, exactly as an M30 call.
+static var project_custom_block_params: Dictionary = {}
+
 ## opcode -> {category, template, kind, defaults}. The editor's counterpart to the
 ## interpreter's `_register_handlers`. `template` is a label string with `{input_name}`
 ## placeholders; each placeholder is replaced by that input's rendered widget (a
@@ -181,8 +188,16 @@ const _OPCODES := {
 	# pre-named chip per defined block (see BlockPalette) — the My-Blocks twin of the variables group's
 	# Make button + rows. `call`'s `name` is a data-scoped dropdown of the sprite's own custom blocks
 	# (data_enums "custom_blocks" -> project_custom_blocks), the custom-block sibling of touching_sprite?.
-	"define": {"category": "custom", "kind": "hat", "palette": false, "template": "define {name}", "defaults": {"name": "block", "body": []}},
-	"call": {"category": "custom", "kind": "statement", "palette": false, "template": "call {name}", "defaults": {"name": "block"}, "data_enums": {"name": "custom_blocks"}},
+	# Parameters (M31): a `define` carries an ordered `params` list (the procedure's parameter names),
+	# a `call` an `args` dict keyed by those names (one value/reporter per parameter), and `param` is
+	# the reporter that reads a parameter inside the body. `define`/`call` headers are rendered
+	# **dynamically** from this data (their shape depends on the params, which a fixed template can't
+	# express) — see _define_header / _call_header. `param` carries palette:false like define/call (it
+	# enters scripts only by dragging a copy out of the define hat's prototype, never as a generic
+	# chip) and renders as a read-only name pill (build_reporter special-cases it).
+	"define": {"category": "custom", "kind": "hat", "palette": false, "template": "define {name}", "defaults": {"name": "block", "params": [], "body": []}},
+	"call": {"category": "custom", "kind": "statement", "palette": false, "template": "call {name}", "defaults": {"name": "block", "args": {}}, "data_enums": {"name": "custom_blocks"}},
+	"param": {"category": "custom", "kind": "reporter", "output": "value", "palette": false, "template": "{name}", "defaults": {"name": "param"}},
 }
 
 ## Category display order for the palette (operators are all reporters, so that group is
@@ -254,6 +269,12 @@ static func build_block(block: Dictionary) -> Control:
 ## literal slots (true hexagon geometry is still deferred).
 static func build_reporter(block: Dictionary) -> Control:
 	var opcode := String(block.get("opcode", ""))
+	# A custom-block parameter reporter (M31) shows its parameter name as read-only text — there is no
+	# editable field (its name binds it to the define's parameter, not a value you type). build_input
+	# stamps the slot meta on this pill when it sits in a slot, so it's still grabbable-out / droppable
+	# -over like any reporter.
+	if opcode == "param":
+		return _param_pill(String(block.get("inputs", {}).get("name", "")))
 	var info: Dictionary = _OPCODES.get(opcode, {})
 	var category := String(info.get("category", "operators"))
 	var template := String(info.get("template", opcode))
@@ -601,10 +622,19 @@ static func _options_for(info: Dictionary, key: String) -> Array:
 ## Split a template on `{name}` placeholders, emitting a Label for each literal span
 ## and the rendered input widget for each placeholder, packed left-to-right.
 static func _header_from_template(template: String, block: Dictionary) -> HBoxContainer:
+	# Custom blocks (M31) have a data-driven shape — a define shows one parameter pill per declared
+	# parameter, a call one argument slot per parameter — that a fixed template can't express, so they
+	# build their header from the block's own data instead of the template.
+	var opcode := String(block.get("opcode", ""))
+	if opcode == "define":
+		return _define_header(block)
+	if opcode == "call":
+		return _call_header(block)
+
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	var inputs: Dictionary = block.get("inputs", {})
-	var info: Dictionary = _OPCODES.get(String(block.get("opcode", "")), {})
+	var info: Dictionary = _OPCODES.get(opcode, {})
 
 	var literal := ""
 	var i := 0
@@ -622,6 +652,69 @@ static func _header_from_template(template: String, block: Dictionary) -> HBoxCo
 			i += 1
 	_push_label(row, literal)
 	return row
+
+
+## The header of a `define` hat (M31): "define" + an editable name field + one **spawnable** parameter
+## pill per declared parameter. The pills are the procedure's prototype — dragging a copy of one out
+## (the canvas's _spawn_at / begin_spawn_drag path) is how a parameter reporter gets into the body, so
+## each is stamped via _spawn_param_pill. The name field is an ordinary editable literal (the
+## procedure's name). `params` is absent on an M30 define, which simply yields no pills.
+static func _define_header(block: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	var inputs: Dictionary = block.get("inputs", {})
+	_push_label(row, "define")
+	row.add_child(build_input(inputs, "name", [], inputs.get("name")))
+	for p in inputs.get("params", []):
+		row.add_child(_spawn_param_pill(String(p)))
+	return row
+
+
+## The header of a `call` block (M31): "call" + a name dropdown (the sprite's custom blocks, via the
+## existing `custom_blocks` data-enum) + one argument slot per parameter. The arg slots are built
+## against the **`args` sub-dict** (not the block's top-level inputs), so each widget's stamped
+## `slot_inputs`/`lit_inputs` reference points into `args` — the canvas's commit / drop / grab code
+## then writes straight into `args[param]` with no special-casing (it relies only on the dict
+## reference + key). A parameter's label precedes its slot so a multi-arg call reads `call f a: _ b: _`.
+## `args` is absent on an M30 call, which yields just the name dropdown.
+static func _call_header(block: Dictionary) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 4)
+	var inputs: Dictionary = block.get("inputs", {})
+	var info: Dictionary = _OPCODES.get("call", {})
+	_push_label(row, "call")
+	row.add_child(build_input(inputs, "name", _options_for(info, "name"), info.get("defaults", {}).get("name")))
+	var args: Dictionary = inputs.get("args", {})
+	for p in args:
+		_push_label(row, String(p) + ":")
+		row.add_child(build_input(args, String(p), [], 0))
+	return row
+
+
+## A custom-block parameter pill (M31): a small custom-pink reporter pill whose only content is the
+## parameter's name as read-only white text. Used both as the value rendered when a `param` reporter
+## sits in a slot (build_reporter) and, stamped by _spawn_param_pill, as the prototype pill in a
+## define hat.
+static func _param_pill(name: String) -> Control:
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS["custom"], 10))
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var label := Label.new()
+	label.text = name
+	label.add_theme_color_override("font_color", Color.WHITE)
+	panel.add_child(label)
+	return panel
+
+
+## A parameter pill for the define hat's prototype (M31), stamped so the canvas treats a press-and-drag
+## on it as *spawning a fresh `param` reporter of this name* (begin_spawn_drag), rather than grabbing
+## the hat — Scratch's "drag a copy of the argument out of the definition" gesture.
+static func _spawn_param_pill(name: String) -> Control:
+	var pill := _param_pill(name)
+	pill.set_meta("spawn_opcode", "param")
+	pill.set_meta("spawn_name", name)
+	return pill
 
 
 ## Add a white text label for a literal span, skipping spans that are only spacing

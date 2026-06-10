@@ -121,13 +121,29 @@ func _build() -> void:
 		for block_name in BlockView.project_custom_blocks:
 			# A `call` chip pre-set to this procedure's name — its own palette block, as in Scratch.
 			# `palette_name` carries the name through the drag so the minted block calls it (see _input).
+			# Parameters (M31): give the chip one `args` slot per the block's declared parameters
+			# (project_custom_block_params), so the chip shows its argument slots, and stamp
+			# `palette_params` so the drag mints a matching `args` dict. Each arg defaults to 0.
+			var params: Array = BlockView.project_custom_block_params.get(String(block_name), [])
 			var block := BlockView.make_block("call")
 			block["inputs"]["name"] = String(block_name)
+			block["inputs"]["args"] = _args_for(params)
 			var chip := BlockView.build_block(block)
 			chip.set_meta("palette_opcode", "call")
 			chip.set_meta("palette_name", String(block_name))
+			chip.set_meta("palette_params", params)
 			_passthrough(chip)
 			add_child(chip)
+
+
+## A fresh `args` dict for a `call` block (M31): one entry per parameter name, each defaulting to 0
+## (a value parameter). Keyed by name in parameter order, so the rendered slots read left-to-right in
+## the order the procedure declares them.
+func _args_for(params: Array) -> Dictionary:
+	var args := {}
+	for p in params:
+		args[String(p)] = 0
+	return args
 
 
 ## Make a rendered chip transparent to mouse picking (cf. BlockCanvas._passthrough): our
@@ -202,9 +218,13 @@ func _input(event: InputEvent) -> void:
 		if event.position.distance_to(_press_pos) > DRAG_THRESHOLD:
 			var block := BlockView.make_block(String(_pending_chip.get_meta("palette_opcode")))
 			# A pre-named chip (a `call`, M30) carries its target's name so the minted block calls it;
-			# every other chip uses its opcode's defaults verbatim.
+			# every other chip uses its opcode's defaults verbatim. A parameterized call (M31) also
+			# rebuilds its `args` dict fresh from the chip's `palette_params`, so the dragged block owns
+			# its own args (no shared reference with the chip).
 			if _pending_chip.has_meta("palette_name"):
 				block["inputs"]["name"] = String(_pending_chip.get_meta("palette_name"))
+			if _pending_chip.has_meta("palette_params"):
+				block["inputs"]["args"] = _args_for(_pending_chip.get_meta("palette_params"))
 			_reset()
 			if _canvas != null:
 				_canvas.begin_spawn_drag([block], event.position)

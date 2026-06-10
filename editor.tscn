@@ -362,6 +362,15 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
+[node name="ParamsLabel" type="Label" parent="BlockDialog/VBox" unique_id=1356016726]
+layout_mode = 2
+text = "Parameters (space-separated):"
+
+[node name="BlockParamsEdit" type="LineEdit" parent="BlockDialog/VBox" unique_id=1792226486]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true
 title = "Save Project"

@@ -5,9 +5,67 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 30 — custom blocks (define + call, Scratch's "My Blocks")
+## Current state: Milestone 31 — custom block parameters
 
-**Goal of this milestone:** let you **create a custom function** — a named procedure of blocks you define
+**Goal of this milestone:** give custom blocks **parameters** — pass arguments to a procedure. M30
+added the custom block itself (`define {name}` + `call {name}`) but a procedure took no inputs; M31
+lets a `define` declare named parameters, a `call` supply one argument value per parameter, and a new
+**`param`** reporter read a parameter's value inside the body. Per the milestone's scope this is
+**value (number/text) parameters only** (boolean params deferred), and a parameter is placed into the
+body by **dragging a copy out of the define hat's prototype** — Scratch's "drag the argument
+reporter out of the definition" gesture, reusing the palette's existing spawn-drag machinery.
+
+This **adds one opcode** (`param`, the first since M30's two) and extends the *data shape* of
+`define`/`call` — but the additions are the usual one-`_OPCODES`-entry + (for `param`) one-handler
+step, and the shape extension is backward-compatible: a `define` gains an ordered `params: [names]`
+list (absent ⇒ the M30 no-param define), a `call` gains an `args: {name: value}` dict (absent ⇒ the
+M30 no-arg call), and `param` is a plain `{opcode, inputs:{name}}` reporter — so persistence (M22) and
+RUN (M10) carry it untouched, and an M30 project still opens and runs.
+
+The runtime change is a **parameter frame** in [`Interpreter`](scripts/interpreter.gd): a stack of
+`{param: value}` dicts (`_frames`). [`_on_call`](scripts/interpreter.gd) evaluates a call's arguments
+**in the caller's frame** (so a `param` used as an argument resolves to the caller's binding), pushes
+a frame, `await`s the body, then pops it; [`_on_param`](scripts/interpreter.gd) reads the top frame
+(0 + a warning if read outside any custom block). The stack supports nesting/recursion — an inner
+call's frame shadows the outer for the duration of its body. Per-interpreter, so each sprite (and
+clone) has its own frames.
+
+The editor change is **data-driven rendering** of `define`/`call` (their shape now depends on the
+data, which the static template couldn't express): [`BlockView._define_header`](scripts/block_view.gd)
+draws "define" + the name field + one **spawnable parameter pill** per `params` entry (stamped
+`spawn_opcode`/`spawn_name` so [`BlockCanvas._spawn_at`](scripts/block_canvas.gd) mints a fresh `param`
+copy on drag — the prototype-to-body gesture), and [`_call_header`](scripts/block_view.gd) draws
+"call" + the name dropdown + one argument slot per parameter, **built against the call's `args`
+sub-dict** so the canvas's existing commit/drop/grab code writes straight into `args[param]` (it only
+ever relies on a stamped dict reference + key). A `param` reporter renders as a read-only name pill
+([`_param_pill`](scripts/block_view.gd)). A `param` drag is **confined to its own function's body**:
+since a parameter is meaningful only inside the `define` that declares it,
+[`BlockCanvas._nearest_slot`](scripts/block_canvas.gd) restricts a `param` drag (whether freshly
+spawned from a prototype pill or an already-placed pill grabbed back out) to the slots inside that
+define's body — [`_scoped_slots`](scripts/block_canvas.gd) keeps only the slots descending from the
+body column whose `body_array` matches the stored define-body `Array`. That `Array` (the live data, so
+stable across the re-render a pickup triggers) is captured by
+[`_enclosing_define_body`](scripts/block_canvas.gd) at drag start; a `param` released anywhere outside
+its body finds no legal slot and is discarded (reusing M14's off-slot path). The **"Make a Block"** dialog gains a parameters field
+([`editor._parse_params`](scripts/editor.gd) splits it on commas/whitespace), and the palette's `call`
+chips carry one `args` slot per the block's declared parameters (re-derived per sprite into the static
+[`BlockView.project_custom_block_params`](scripts/block_view.gd), the params twin of
+`project_custom_blocks`).
+
+What this leaves deferred: **boolean parameters** (value-only this milestone — a boolean param would
+need a boolean `param` output, a boolean arg slot, and a way to mark a param boolean in the dialog), a
+**return value** (Scratch custom blocks are statements, as here), and the **rename/sync cascade** for a
+custom block's name *and* its parameters (editing a `define`'s name or params doesn't rewrite the
+`call`s/`param`s that target it — a newly-dragged `call` chip always reflects current params, but
+existing calls keep their stale arg keys; M21/M25's cascades are the template). Binding is by **name**
+(`args[param]`), so display order is cosmetic, a missing/stale arg evaluates to 0, and extra args not
+in `params` are ignored.
+
+---
+
+For context, the M30 mechanics this builds on:
+
+**Custom blocks — "My Blocks" (M30).** let you **create a custom function** — a named procedure of blocks you define
 once and invoke many times. Through M29 the block language had no way to factor out a reusable routine;
 M30 adds Scratch's "My Blocks": a **`define {name}`** hat (the procedure's definition — its body *is* the
 function) and a **`call {name}`** statement (which runs that procedure). A `call` resolves its target by
@@ -1575,6 +1633,11 @@ the template).
 
 ## Opcodes implemented
 
+**M31 added one opcode** — `param` (the custom-block parameter reporter), and extended the data shape of
+`define` (an ordered `params` list) and `call` (an `args` dict), backward-compatibly. The `param`
+addition is the usual one-`_OPCODES`-entry + one-interpreter-handler step; the runtime gained a
+parameter-frame stack (`_on_call` binds args → a frame, `_on_param` reads it).
+
 **M30 added two opcodes** — `define` and `call` (custom blocks / "My Blocks"): the first opcode additions
 since M7. Each is the usual one-`_OPCODES`-entry + one-interpreter-handler step, with no block-data-shape
 change. (M8 through M29 added none — see the per-milestone notes below.)
@@ -1641,8 +1704,9 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `equals` / `greater_than` / `less_than` | reporter | `a`, `b` | numeric comparison → bool |
 | `and` / `or` / `not` | reporter | `a`, `b` (`not`: `a`) | boolean combinators → bool |
 | `random` | reporter | `from`, `to` | uniform float in `[from, to]`; the varied serve angle |
-| `define` | hat | `name`, `body` | custom-block definition (M30); never auto-started — its body runs only when a `call` of the same name invokes it. Per-sprite |
-| `call` | statement | `name` | run the custom block `name` defined in this sprite's script (M30); resolves the `define` and `await`s its body. Unknown name → warn + no-op |
+| `define` | hat | `name`, `params`, `body` | custom-block definition (M30); never auto-started — its body runs only when a `call` of the same name invokes it. Per-sprite. `params` (M31) is the ordered parameter-name list; its prototype pills drag copies of `param` into the body |
+| `call` | statement | `name`, `args` | run the custom block `name` defined in this sprite's script (M30); resolves the `define` and `await`s its body. Unknown name → warn + no-op. `args` (M31) is a `{param: value}` dict — one argument per parameter, bound into a frame for the body |
+| `param` | reporter | `name` | read a custom-block parameter (M31), resolved against the active `call`'s frame; 0 + a warning if read outside a custom block. Value output |
 
 > Note on `"bounce"`: the reflection math still lives in the runtime as a sentinel
 > input of `point_in_direction` rather than as data. M3 added arithmetic, so this
@@ -1657,18 +1721,18 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); initial window 1280x720 fullscreen (M26) — the per-scene content-scale overrides in editor.gd/stage.gd take over from there (editor 960x540 logical, game a fixed 480x360 integer-snapped viewport)
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.)
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures; that dialog also takes **parameters** (M31, _parse_params splits on commas/whitespace → the define's params list), and _custom_block_params_in re-derives each sprite's block→params map into BlockView.project_custom_block_params, so a call chip gets one arg slot per parameter and a param reporter can be dragged out of the define hat's prototype
   stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it
-  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); export_script() serializes edits back (M10)
-  block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); _spawn_at/_pending_spawn spawn a fresh param-reporter copy when a define hat's prototype parameter pill is dragged (M31), confined to slots inside that function's body (_nearest_slot/_scoped_slots/_enclosing_define_body — also for an already-placed param grabbed out); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); export_script() serializes edits back (M10)
+  block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette; a call chip carries one args slot per the block's declared parameters (M31, project_custom_block_params), the drag re-minting the args dict from the chip's palette_params
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds sprites + runs their scripts from the one sprite model (the editor's via static project_sprites — which may include UI-added sprites — else PongScripts.sprites(), M24; each entry carries geometry + script, so M10's separate project_scripts/_script_for are retired), owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); ESC returns to the editor (the inverse of editor.gd's RUN)
-  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started)
+  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter)
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
   pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed; and the seed stage-level settings — background() (the backdrop hex) and grid() ({show,snap,color,step}, the stage editor's alignment grid), each a project property the editor seeds from here and persists in the .json (M27)
@@ -1701,12 +1765,16 @@ CLAUDE.md                  This file
   appear in the palette as a generic draggable chip (the custom-block `define`/`call`, M30, which the
   palette's My-Blocks group renders specially), give it `palette: false` so `palette_groups` skips it
   (`make_block` still mints it). An opcode with no entry still renders, as a grey box.
-- New custom block (a function)? **From the UI** (M30): click **Make a Block** atop the palette's My
-  Blocks group, name it — a `define {name}` hat appears on the canvas; build its body, then drag a
-  `call {name}` chip wherever you want to run it. Custom blocks are **per-sprite** (the `define` lives in
-  that sprite's script). There's no separate model — the names are derived from the `define` hats — so a
-  stock custom block is just a `define` hat in a sprite's script in
-  [`PongScripts`](scripts/pong_scripts.gd). No parameters yet (see Deliberately deferred).
+- New custom block (a function)? **From the UI** (M30/M31): click **Make a Block** atop the palette's My
+  Blocks group, name it, and (M31) optionally type **parameters** (space/comma-separated) — a
+  `define {name}` hat appears on the canvas with one draggable **parameter pill** per parameter. Build
+  its body — drag a parameter pill into a value slot to use that argument (it mints a `param` reporter)
+  — then drag a `call {name}` chip (which now shows one argument slot per parameter) wherever you want to
+  run it, and fill its argument slots. Custom blocks are **per-sprite** (the `define` lives in that
+  sprite's script). There's no separate model — the names + params are derived from the `define` hats —
+  so a stock custom block is just a `define` hat (with a `params` list) in a sprite's script in
+  [`PongScripts`](scripts/pong_scripts.gd). Value parameters only; boolean params, a return value, and a
+  rename/sync cascade are still deferred (see Deliberately deferred).
 - New variable? Two ways. **From the UI** (M20): click **Make a Variable** atop the palette's
   variables group, name it, pick global/local — it is appended to the editor's working model and
   seeded at RUN. It survives relaunch only if you **SAVE** the project (M22); otherwise it resets to
@@ -1745,16 +1813,21 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
-- **Custom block parameters / return value / rename cascade** — **M30 delivered the custom block itself**
-  (`define {name}` + `call {name}`, Scratch's "My Blocks"): a per-sprite named procedure you make from the
-  palette's **Make a Block** button and invoke with a `call` chip. What's deferred: **parameters** (a
-  custom block takes no inputs — the body reads the caller's variables directly; arguments need a
-  parameter frame in [`interpreter.gd`](scripts/interpreter.gd) and procedure-scoped parameter reporters
-  in the editor, a milestone of its own); a **return value** (Scratch custom blocks are statements, not
-  reporters — same here); and a **rename/delete cascade** for a custom block's name (editing a `define`'s
-  name field doesn't rewrite the `call`s that target it — they resolve to nothing → a runtime warning,
-  until fixed by hand; M21's variable cascade and M25's sprite cascade are the template, walking
-  `define`/`call` the way they walk `set_var`/`touching_sprite?`).
+- **Custom block parameters / return value / rename cascade** — **M30 delivered the custom block** and
+  **M31 delivered parameters.** M30 added the procedure (`define {name}` + `call {name}`, Scratch's "My
+  Blocks") — a per-sprite named routine you make from the palette's **Make a Block** button and invoke
+  with a `call` chip. M31 added **value (number/text) parameters**: a `define` declares an ordered
+  `params` list (its prototype shows draggable parameter pills), a `call` carries an `args` dict (one
+  slot per parameter), and a new **`param`** reporter reads a parameter via a per-call **parameter
+  frame** ([`_on_call`](scripts/interpreter.gd)/[`_on_param`](scripts/interpreter.gd) — the
+  parameter-frame milestone the earlier note named). What's *still* deferred: **boolean parameters**
+  (value-only — a boolean param needs a boolean `param` output, a boolean arg slot, and a dialog way to
+  mark a param boolean); a **return value** (Scratch custom blocks are statements, not reporters — same
+  here); and a **rename/sync cascade** for a custom block's name *and its parameters* (editing a
+  `define`'s name or `params` doesn't rewrite the `call`s/`param`s that target it — a newly-dragged
+  `call` chip reflects current params, but an existing call keeps its stale arg keys until fixed by hand;
+  M21's variable cascade and M25's sprite cascade are the template, walking `define`/`call`/`param` the
+  way they walk `set_var`/`touching_sprite?`).
 - **Editing a variable's model entry from the UI** — **M20 delivered "make a variable"** and **M21
   delivered rename + delete** (each in-scope variable's palette row carries a Rename/Delete menu), so
   the model is fully editable: you can mint, rename, and remove a global or sprite-local from the
