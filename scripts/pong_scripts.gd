@@ -86,6 +86,27 @@ static func grid() -> Dictionary:
 	}
 
 
+## The project's scene model (Milestone 33): the list of **stages / scenes (levels)** a project holds.
+## A scene is the M27/M24/M18 project pieces — sprites + variables + background + grid — bundled and
+## named, so a project can carry several independent stages and switch the active one at edit time.
+## The stock project is a single scene wrapping today's Pong: `scenes()` composes the existing
+## content builders (sprites / variables / background / grid), each of which stays the per-scene
+## content declaration. The editor seeds its working `_scenes` from this and (per scene) keeps editing
+## the same sprites/variables/background/grid model it always has; the Stage is handed one scene's
+## worth of data at RUN exactly as before, so the runtime is unchanged. Scenes are **fully independent**
+## (each owns its own variables); runtime navigation between scenes is deferred (see CLAUDE.md).
+static func scenes() -> Array:
+	return [
+		{
+			"name": "Scene 1",
+			"sprites": sprites(),
+			"variables": variables(),
+			"background": background(),
+			"grid": grid(),
+		},
+	]
+
+
 ## The project's sprite model (Milestone 24): the single declaration of every sprite's name,
 ## starting geometry (placeholder rectangle), and script — the sprite counterpart of variables(),
 ## and the one source both the runtime and the editor read.

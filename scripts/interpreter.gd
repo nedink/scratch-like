@@ -103,6 +103,8 @@ func _register_handlers() -> void:
 		"delete_this_clone": _on_delete_this_clone,
 		"define": _on_define,
 		"call": _on_call,
+		"switch_scene": _on_switch_scene,
+		"next_scene": _on_next_scene,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
@@ -510,6 +512,22 @@ func _on_param(block: Dictionary) -> Variant:
 			return frame[pname]
 	push_warning("Interpreter: read of parameter '%s' outside its custom block" % pname)
 	return 0
+
+
+# --- Runtime scene navigation (Milestone 34) -------------------------------
+
+## switch_scene: change the running game to the scene named by this block's `name` input. The Stage
+## owns the resolve + reload (go_to_scene_by_name) — it knows the whole scene list and re-launches the
+## game on the target. An unknown name is a no-op there (warns). The reload tears down this script with
+## the rest of the scene, so blocks after `switch_scene` don't run — a scene change ends the scene.
+func _on_switch_scene(block: Dictionary) -> void:
+	_stage.go_to_scene_by_name(String(_value(block, "name")))
+
+
+## next_scene: advance to the next scene in the project's list (wrapping past the last to the first).
+## Like switch_scene, the Stage carries it out (go_to_next_scene) by reloading the game on that scene.
+func _on_next_scene(_block: Dictionary) -> void:
+	_stage.go_to_next_scene()
 
 
 # --- Helpers ---------------------------------------------------------------

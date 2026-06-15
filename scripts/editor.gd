@@ -66,6 +66,18 @@ var _scripts: Array = []
 ## before switching away. -1 until the first script loads.
 var _current: int = -1
 
+## The project's **scene (stage / level) model** (M33) — the list of independent stages a project
+## holds, each a {name, sprites, variables, background, grid} dict. `_scenes` is the whole list;
+## `_scene` is the active index. The editor's working state (`_scripts` / `_variables` / `_background`
+## / `_grid_settings`) is the **live editing surface for the active scene**, so every existing
+## per-sprite / per-variable code path is unchanged — switching scenes just persists those working
+## vars back into `_scenes[_scene]` and loads the chosen scene's into them (the _show /
+## _load_project_into_ui pattern, lifted one level). Scenes are fully self-contained — each owns its
+## own variables — so sprite-name uniqueness is per-scene (the existing checks run against `_scripts`).
+## RUN plays the active scene; runtime navigation between scenes is deferred (see CLAUDE.md).
+var _scenes: Array = []
+var _scene: int = 0
+
 ## The interactive block canvas (M9): drag/snap lives here. Reloaded on selection.
 ## A scene node (editor.tscn), grabbed by unique name.
 @onready var _canvas: BlockCanvas = %Canvas
@@ -191,6 +203,21 @@ var _deleting_sprite: String = ""
 @onready var _rename_sprite_edit: LineEdit = %RenameSpriteEdit
 var _renaming_sprite: String = ""
 
+## Scene (stage / level) chrome (M33), the project-level counterpart of the sprite chrome above: the
+## top-bar scene selector and Add / Delete / Rename Scene buttons, plus the two dialogs (declared in
+## editor.tscn, reused). One name dialog serves Add and Rename — `_scene_dialog_mode` records which is
+## in flight (the same "state var carries what the confirmed signal doesn't" idiom the sprite dialogs
+## use). The delete dialog's label is rewritten per-invocation with what the delete removes.
+@onready var _scene_selector: OptionButton = %SceneSelector
+@onready var _add_scene_button: Button = %AddSceneButton
+@onready var _del_scene_button: Button = %DelSceneButton
+@onready var _rename_scene_button: Button = %RenameSceneButton
+@onready var _scene_dialog: ConfirmationDialog = %SceneDialog
+@onready var _scene_name_edit: LineEdit = %SceneNameEdit
+@onready var _del_scene_dialog: ConfirmationDialog = %DelSceneDialog
+@onready var _del_scene_label: Label = %DelSceneLabel
+var _scene_dialog_mode: String = ""
+
 ## Make a Block chrome (M30): the palette's "Make a Block" button pops this name dialog; on confirm
 ## a `define {name}` hat is added to the canvas and the sprite's custom-block list re-derived. The
 ## dialog is declared in editor.tscn and reused, like the variable/sprite name dialogs. Custom blocks
@@ -303,6 +330,16 @@ func _ready() -> void:
 	_block_dialog.confirmed.connect(_on_new_block_confirmed)
 	_block_dialog.register_text_enter(_block_name_edit)
 
+	# Scenes (M33): the selector switches the active scene; Add / Delete / Rename Scene manage the list.
+	# The name dialog (shared by Add + Rename) confirms on Enter; the delete dialog routes to its handler.
+	_scene_selector.item_selected.connect(_on_scene_selected)
+	_add_scene_button.pressed.connect(_add_scene_pressed)
+	_del_scene_button.pressed.connect(_del_scene_pressed)
+	_rename_scene_button.pressed.connect(_rename_scene_pressed)
+	_scene_dialog.confirmed.connect(_on_scene_dialog_confirmed)
+	_scene_dialog.register_text_enter(_scene_name_edit)
+	_del_scene_dialog.confirmed.connect(_on_del_scene_confirmed)
+
 	# Populate the selector + canvas from the seeded project and show its first sprite.
 	_load_project_into_ui()
 
@@ -352,14 +389,26 @@ func _unhandled_input(event: InputEvent) -> void:
 ## editor keeps its own copy to append to); _on_run hands it back to the Stage. Both are deep copies
 ## so editing never mutates the shared PongScripts builders.
 func _seed_demo() -> void:
-	# Each entry is now a full sprite def — name + placeholder geometry + script (M24) — sourced from
-	# the one sprite model PongScripts.sprites(), the same declaration the Stage builds from, so the
-	# editor and runtime can no longer drift on the sprite set (the sprite counterpart of M18's
-	# variable unification). Deep-copied so editing never mutates the shared PongScripts builders.
-	_scripts = PongScripts.sprites().duplicate(true)
-	_variables = PongScripts.variables().duplicate(true)
-	_background = PongScripts.background()
-	_grid_settings = PongScripts.grid()
+	# Seed the scene list from the one declaration the project ships (M33) — a single stock scene
+	# wrapping today's Pong (sprites + variables + background + grid). Deep-copied so editing never
+	# mutates the shared PongScripts builders. The active scene's fields are then lifted into the
+	# working vars below; each `_scenes` entry is a full {name, sprites, variables, background, grid}.
+	_scenes = PongScripts.scenes().duplicate(true)
+	_scene = 0
+	_load_scene_into_working(0)
+
+
+## Lift scene `index`'s fields into the editor's working state (M33): `_scripts` / `_variables` /
+## `_background` / `_grid_settings` become references to (or values of) that scene's data, so every
+## existing per-sprite / per-variable code path edits the active scene in place. The mirror, one level
+## up, of how a sprite switch points the canvas at a sprite's script. Does **not** touch the UI — the
+## caller (_seed_demo / _read_project / _load_scene) follows with _load_project_into_ui.
+func _load_scene_into_working(index: int) -> void:
+	var sc: Dictionary = _scenes[index]
+	_scripts = sc["sprites"]
+	_variables = sc["variables"]
+	_background = String(sc["background"])
+	_grid_settings = sc["grid"]
 
 
 ## Bring the current `_scripts` / `_variables` up in the UI (M22) — the shared path used on launch
@@ -373,10 +422,18 @@ func _seed_demo() -> void:
 ## the new sprite after Add and a surviving neighbour after Delete, so the selector follows the edit.
 func _load_project_into_ui(select_index := 0) -> void:
 	_current = -1
+	# Repopulate the scene selector (M33) — the project may have a different scene list / active index
+	# after NEW / OPEN / a scene add-delete-rename. The sprite selector + canvas below then show the
+	# active scene's sprites, exactly as before scenes existed (this routine "brings a sprite-set up").
+	_scene_selector.clear()
+	for sc in _scenes:
+		_scene_selector.add_item(String(sc["name"]))
+	_scene_selector.select(clampi(_scene, 0, _scenes.size() - 1))
 	_selector.clear()
 	for entry in _scripts:
 		_selector.add_item(entry["name"])
 	BlockView.project_sprites = _sprite_names()
+	BlockView.project_scene_names = _scene_names()  # the switch_scene dropdown's options (M34)
 	_update_title()
 	_sync_background()  # NEW/OPEN may have changed the project's background; push it to the view + picker
 	_sync_grid()        # likewise the grid settings (show/snap/colour/step) — push to the controls + view
@@ -420,6 +477,136 @@ func _show(index: int) -> void:
 
 func _on_select(index: int) -> void:
 	_show(index)
+
+
+# --- Scenes / stages (M33) -------------------------------------------------
+
+## Persist the active scene's working state back into `_scenes[_scene]` (M33) — the scene-level analog
+## of _persist_current. First folds the active sprite's canvas into `_scripts` (_persist_current), then
+## rebinds the scene entry to the current working refs so the scene list always reflects what's on
+## screen. Called before switching scenes, before SAVE, and before RUN.
+func _persist_current_scene() -> void:
+	_persist_current()
+	if _scene >= 0 and _scene < _scenes.size():
+		_scenes[_scene] = {
+			"name": _scenes[_scene]["name"],
+			"sprites": _scripts,
+			"variables": _variables,
+			"background": _background,
+			"grid": _grid_settings,
+		}
+
+
+## Switch the active scene (M33): persist the outgoing scene, lift the chosen one's fields into the
+## working vars, and bring it up in the UI (the sprite selector, palette, canvas, stage view all
+## re-read the working vars). The scene-level counterpart of _show — `_load_project_into_ui` resets
+## `_current` to -1 first, so its `_show(0)` doesn't write the outgoing scene's stale canvas anywhere.
+func _load_scene(index: int) -> void:
+	if index < 0 or index >= _scenes.size() or index == _scene:
+		return
+	_persist_current_scene()
+	_scene = index
+	_load_scene_into_working(_scene)
+	_load_project_into_ui()
+
+
+func _on_scene_selected(index: int) -> void:
+	_load_scene(index)
+
+
+## Pop the Add-Scene name prompt (M33). The dialog (shared with Rename) is declared in editor.tscn;
+## `_scene_dialog_mode` records that an Add is in flight so the confirm handler knows which to do.
+func _add_scene_pressed() -> void:
+	_scene_dialog_mode = "add"
+	_scene_dialog.title = "New Scene"
+	_scene_name_edit.text = ""
+	_scene_dialog.popup_centered(Vector2i(280, 130))
+	_scene_name_edit.grab_focus()
+
+
+## Pop the Rename-Scene prompt (M33), pre-filled with the active scene's name (selected, so the user can
+## type a replacement immediately). Reuses the same name dialog as Add via `_scene_dialog_mode`.
+func _rename_scene_pressed() -> void:
+	_scene_dialog_mode = "rename"
+	_scene_dialog.title = "Rename Scene"
+	_scene_name_edit.text = String(_scenes[_scene]["name"])
+	_scene_dialog.popup_centered(Vector2i(280, 130))
+	_scene_name_edit.grab_focus()
+	_scene_name_edit.select_all()
+
+
+## The shared scene name dialog's confirm (M33): route to Add or Rename by the mode stashed when it was
+## popped. Blank or duplicate names are rejected silently (scene names label the selector; keep them
+## unique and non-empty, mirroring the sprite name guards).
+func _on_scene_dialog_confirmed() -> void:
+	var scene_name := _scene_name_edit.text.strip_edges()
+	if scene_name == "" or scene_name in _scene_names():
+		return
+	if _scene_dialog_mode == "add":
+		_persist_current_scene()  # keep the outgoing scene's edits before the list reloads
+		# A new scene starts with one default placeholder sprite (the +Sprite default) so the sprite
+		# selector is never empty and _show(0) stays safe — and its own empty variable list + the stock
+		# background / grid (each scene is self-contained). Position it with a `go_to` block, as a new
+		# sprite is.
+		var sprite := _DEFAULT_SPRITE.duplicate()
+		sprite["name"] = "Sprite1"
+		sprite["script"] = []
+		_scenes.append({
+			"name": scene_name,
+			"sprites": [sprite],
+			"variables": [],
+			"background": PongScripts.background(),
+			"grid": PongScripts.grid(),
+		})
+		_scene = _scenes.size() - 1
+		_load_scene_into_working(_scene)
+		_load_project_into_ui()
+	elif _scene_dialog_mode == "rename":
+		# A scene rename updates the model entry and the selector in place. There is no *cascade* to
+		# existing `switch to scene {name}` blocks that target the old name (M34 defers that — those keep
+		# the old name and resolve to a runtime warning, the tradeoff M30 made for custom blocks before
+		# M32's cascade). But re-point the scenes dropdown source + refresh so a freshly-dragged
+		# `switch to scene` block, and any open dropdown, show the new name (the Make-a-Variable trio).
+		_scenes[_scene]["name"] = scene_name
+		_scene_selector.set_item_text(_scene, scene_name)
+		BlockView.project_scene_names = _scene_names()
+		_palette.rebuild()
+		_canvas.refresh()
+
+
+## Pop the delete-confirmation dialog for the active scene (M33), reporting what it removes. Refused when
+## only one scene is left (a project always has at least one stage). We persist first so a switch away
+## can't lose edits, and stash nothing — the dialog always acts on the active scene.
+func _del_scene_pressed() -> void:
+	if _scenes.size() <= 1:
+		return
+	_persist_current_scene()
+	var scene_name := String(_scenes[_scene]["name"])
+	_del_scene_label.text = "Delete scene \"%s\"? Its sprites, scripts, variables, and stage settings will be removed." % scene_name
+	_del_scene_dialog.popup_centered(Vector2i(380, 140))
+
+
+## Commit a scene delete (M33): drop the active scene's entry and switch to a surviving neighbour. The
+## index clamps to the new (smaller) bounds, landing on the scene that shifted into this slot (or the
+## new last one if we deleted the tail). Destructive; there is no undo (relaunch / NEW reloads stock).
+func _on_del_scene_confirmed() -> void:
+	if _scenes.size() <= 1:
+		return
+	_scenes.remove_at(_scene)
+	_scene = clampi(_scene, 0, _scenes.size() - 1)
+	_load_scene_into_working(_scene)
+	_load_project_into_ui()
+
+
+## Every scene's name (M33) — the uniqueness set the Add / Rename guards check against, and the selector
+## item list. The scene counterpart of _sprite_names. Also the stages a `switch to scene {name}` slot
+## offers (M34): fed into BlockView.project_scene_names. A scene name is project-global, so (unlike the
+## variable list) it is not scoped per sprite.
+func _scene_names() -> Array:
+	var names: Array = []
+	for sc in _scenes:
+		names.append(String(sc["name"]))
+	return names
 
 
 # --- Stage (scene) editor (M27) --------------------------------------------
@@ -1070,12 +1257,15 @@ func _on_file_selected(path: String) -> void:
 		_read_project(path)
 
 
-## Serialize the project — {scripts, variables} — as JSON to `path` (M22). The block model is
-## already plain dicts / arrays / primitives ("exactly the shape a visual editor would emit"), so
-## this is a near-direct JSON.stringify (tab-indented for a human-readable file). Binds the project
-## to this file so the title shows its name and a later SAVE overwrites it.
+## Serialize the project — {scenes, active} — as JSON to `path` (M22, reshaped for scenes in M33). Each
+## scene carries its own sprites / variables / background / grid; `active` is the scene to reopen on. The
+## block model is already plain dicts / arrays / primitives ("exactly the shape a visual editor would
+## emit"), so this is a near-direct JSON.stringify (tab-indented for a human-readable file). We persist
+## the active scene's edits into the list first. Binds the project to this file so the title shows its
+## name and a later SAVE overwrites it.
 func _write_project(path: String) -> void:
-	var data := {"scripts": _scripts, "variables": _variables, "background": _background, "grid": _grid_settings}
+	_persist_current_scene()
+	var data := {"scenes": _scenes, "active": _scene}
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		push_warning("Editor: could not write project to '%s'" % path)
@@ -1100,30 +1290,62 @@ func _read_project(path: String) -> void:
 	var text := file.get_as_text()
 	file.close()
 	var data: Variant = JSON.parse_string(text)
-	if typeof(data) != TYPE_DICTIONARY or typeof(data.get("scripts")) != TYPE_ARRAY \
-			or typeof(data.get("variables")) != TYPE_ARRAY:
+	if typeof(data) != TYPE_DICTIONARY:
 		push_warning("Editor: '%s' is not a valid project file" % path)
 		return
-	_scripts = data["scripts"]
-	# Fill any missing geometry (M24): a project saved before M24 has entries with only name/script,
-	# so default their placeholder geometry rather than crash when the Stage builds them. New saves
-	# carry x/y/w/h/color; this only matters for older files.
-	for entry in _scripts:
-		_normalize_sprite(entry)
-	_variables = data["variables"]
-	# Background is a top-level project property (M27); default it for a project saved before M27 (or
-	# any file without the key) so an older save still opens.
-	_background = String(data.get("background", PongScripts.background()))
-	# Grid settings are likewise a top-level project property (M27). Start from the stock defaults and
-	# overlay whatever the file carried, so a save written before the grid was persisted — or one
-	# missing individual keys — still opens with sane values rather than a partial dict.
-	_grid_settings = PongScripts.grid()
-	var saved_grid: Variant = data.get("grid")
-	if typeof(saved_grid) == TYPE_DICTIONARY:
-		for key in saved_grid:
-			_grid_settings[key] = saved_grid[key]
+	# Resolve to a scene list (M33). A new save carries a `scenes` array + `active` index; a pre-M33
+	# save carries flat `scripts`/`variables` (+ optional background/grid) — wrap that into a single
+	# "Scene 1" so every existing saved `.json` still opens. Anything else is ignored (keep current).
+	var scenes: Array = []
+	var active := 0
+	if typeof(data.get("scenes")) == TYPE_ARRAY:
+		scenes = data["scenes"]
+		active = int(data.get("active", 0))
+	elif typeof(data.get("scripts")) == TYPE_ARRAY and typeof(data.get("variables")) == TYPE_ARRAY:
+		scenes = [{
+			"name": "Scene 1",
+			"sprites": data["scripts"],
+			"variables": data["variables"],
+			"background": data.get("background", PongScripts.background()),
+			"grid": data.get("grid", {}),
+		}]
+	else:
+		push_warning("Editor: '%s' is not a valid project file" % path)
+		return
+	# Validate + back-fill each scene before adopting any of it, so a malformed file can't half-load.
+	for sc in scenes:
+		if typeof(sc) != TYPE_DICTIONARY or typeof(sc.get("sprites")) != TYPE_ARRAY \
+				or typeof(sc.get("variables")) != TYPE_ARRAY:
+			push_warning("Editor: '%s' is not a valid project file" % path)
+			return
+		_normalize_scene(sc)
+	if scenes.is_empty():
+		push_warning("Editor: '%s' has no scenes" % path)
+		return
+	_scenes = scenes
+	_scene = clampi(active, 0, _scenes.size() - 1)
+	_load_scene_into_working(_scene)
 	_current_path = path
 	_load_project_into_ui()
+
+
+## Back-fill a scene dict loaded from disk (M33) so the rest of the editor can rely on its shape: a name,
+## per-sprite geometry (M24's _normalize_sprite, for sprites saved before geometry was a thing), a
+## background hex (defaulted for a pre-M27 / pre-scenes save), and grid settings overlaid onto the stock
+## defaults (so a partial or absent grid dict still opens with sane values — the per-scene version of
+## M27's grid-overlay).
+func _normalize_scene(sc: Dictionary) -> void:
+	if not sc.has("name"):
+		sc["name"] = "Scene"
+	for entry in sc["sprites"]:
+		_normalize_sprite(entry)
+	sc["background"] = String(sc.get("background", PongScripts.background()))
+	var grid := PongScripts.grid()
+	var saved_grid: Variant = sc.get("grid")
+	if typeof(saved_grid) == TYPE_DICTIONARY:
+		for key in saved_grid:
+			grid[key] = saved_grid[key]
+	sc["grid"] = grid
 
 
 ## Reflect the bound project in the title bar (M22): the file's stem for a saved project, or a
@@ -1141,14 +1363,14 @@ func _update_title() -> void:
 ## any sprite it lacks — so launching main.tscn directly still plays stock Pong. We
 ## deep-duplicate so the running game can't mutate the editor's working data.
 func _on_run() -> void:
-	_persist_current()
-	# Hand the whole sprite model over (M24): each entry's geometry *and* script, including any
-	# sprites added in the UI. This replaces M10's separate name->script Dictionary now that the
-	# script rides inside each sprite entry (Stage builds from project_sprites). Deep-duplicated, so
-	# the running game can't mutate the editor's working copy.
-	Stage.project_sprites = _scripts.duplicate(true)
-	# Hand over the variable model too (M20), so a variable made in the editor is seeded at RUN.
-	Stage.project_variables = _variables.duplicate(true)
-	# Hand over the stage background (M27), so the game paints the colour the editor showed.
-	Stage.project_background = _background
+	# Fold the active scene's edits back into the scene list (M33), so `_scenes` is fully current.
+	_persist_current_scene()
+	# Hand the whole **scene list** over (M34): every stage the project holds, each carrying its own
+	# sprites (geometry + scripts) / variables / background / grid. The runtime now carries all scenes
+	# (not just one) so `switch_scene` / `next_scene` can rebuild for a different one at play time;
+	# project_active tells the Stage which to build first — the one the editor is on. Deep-duplicated,
+	# so the running game can't mutate the editor's working copy. (This replaces M24/M20/M27's three
+	# separate per-scene statics — the Stage reads the per-scene fields off the active scene dict now.)
+	Stage.project_scenes = _scenes.duplicate(true)
+	Stage.project_active = _scene
 	get_tree().change_scene_to_file(_GAME_SCENE)

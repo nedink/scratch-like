@@ -17,6 +17,12 @@ extends Node2D
 ## In-game, ESC drops back into the block editor; in the editor it quits the program.
 const _EDITOR_SCENE := "res://editor.tscn"
 
+## The game scene itself (M34). Runtime scene navigation (`switch_scene` / `next_scene`) re-launches
+## this scene after pointing `project_active` at the target scene — reusing the same scene-swap
+## primitive RUN and ESC already use, so _ready rebuilds from the new active scene with no bespoke
+## teardown. (RUN sets this from editor.gd's _GAME_SCENE; this constant is its in-runtime twin.)
+const _GAME_SCENE := "res://main.tscn"
+
 ## The runtime's fixed logical resolution (M26). The window is sized for the editor now, so the
 ## game re-imposes this on itself (see _apply_game_scaling). go_to coordinates, edge detection,
 ## and the pixel-art costumes are all authored against it — it must stay 480x352.
@@ -44,30 +50,26 @@ var _running: bool = true
 ## resource every sprite reaches, never reloaded per sprite.
 var _font: PixelFont
 
-## The sprite model to build from, the M24 hand-off from the editor: an Array of
-## {name, x, y, w, h, color, script} dicts (color a hex string). It is the editor's whole
-## working project — every sprite's placeholder geometry *and* its (possibly edited) script,
-## including any sprites *added in the UI* — replacing M10's separate name->script Dictionary
-## (project_scripts) now that the script rides inside each sprite entry. The editor sets this
-## *static* (so it survives change_scene_to_file, which can't pass a value) right before launching
-## the game. _ready falls back to PongScripts.sprites() when it is empty, so launching this scene
-## directly (no editor) still builds and plays stock Pong. Static, so it outlives any one Stage
-## instance, exactly like the model it carries.
-static var project_sprites: Array = []
+## The whole project's scene list, the M34 hand-off from the editor: an Array of
+## {name, sprites, variables, background, grid} dicts — every stage (level) the project holds. This
+## replaces M24/M20/M27's three separate per-scene statics (project_sprites / project_variables /
+## project_background): the runtime now carries *all* scenes so `switch_scene` / `next_scene` can
+## rebuild for a different one at play time, not just the one RUN started on. The Stage still builds
+## exactly one scene at a time — the active one (project_active) — so each per-scene field is read off
+## the active scene dict (see _active_scene). The editor sets this *static* (so it survives
+## change_scene_to_file, which can't pass a value) right before launching the game; _ready falls back
+## to PongScripts.scenes() when it is empty, so launching this scene directly (no editor) still builds
+## and plays stock Pong (a single "Scene 1"). Static, so it outlives any one Stage instance.
+static var project_scenes: Array = []
 
-## The variable model to seed from, the M20 counterpart of project_sprites: an Array of
-## {name, value, scope} dicts the editor hands over right before launching the game. It may
-## include variables *made in the UI* ("Make a Variable"), which is why the runtime can no
-## longer just read PongScripts.variables() directly. Static (survives change_scene_to_file)
-## and falls back to PongScripts.variables() when empty — so launching this scene directly
-## (no editor) still seeds stock Pong's variables, exactly like _sprite_model / project_sprites.
-static var project_variables: Array = []
+## Which scene in project_scenes to build (M34). RUN sets it to the editor's active scene; a
+## `switch_scene` / `next_scene` block re-points it and re-launches the game scene (it is static, so
+## the new value survives the change_scene_to_file reload). Clamped into _active in _active_scene.
+static var project_active: int = 0
 
-## The stage background colour to paint behind the sprites (M27): a hex string the editor hands over
-## right before launching the game, the stage-level counterpart of project_sprites / project_variables.
-## Static (survives change_scene_to_file) and falls back to PongScripts.background() when empty — so a
-## direct launch (no editor) still uses stock Pong's backdrop.
-static var project_background: String = ""
+## The index of the scene currently built (M34), tracked so `next_scene` can advance from it.
+## Set by _active_scene during _ready (clamped from project_active).
+var _active: int = 0
 
 
 func _ready() -> void:
@@ -80,12 +82,19 @@ func _ready() -> void:
 	# ASPECT_KEEP centers + letterboxes the slack. editor.gd._ready resets this on the ESC return.
 	_apply_game_scaling()
 
+	# Pick the scene to build (M34): the active one in the project's scene list (project_scenes, the
+	# editor's whole working project — or PongScripts.scenes() on a direct launch). Every per-scene
+	# field below — background, sprites, variables — is read off this one dict, so the Stage still
+	# builds exactly one scene's worth of content; `switch_scene` / `next_scene` re-launch this scene
+	# with a different project_active to build a different one (see go_to_scene_by_name / go_to_next_scene).
+	var scene := _active_scene()
+
 	# Paint the stage background (M27): a full-viewport ColorRect added *first* so it draws behind
-	# every sprite (2D child order is draw order). Its colour is the editor's project setting when one
-	# was handed over (project_background), else stock Pong's (see _background_hex). The 480x352 logical
-	# viewport (just imposed above) is the space sprite coordinates live in, so size it to _GAME_SIZE.
+	# every sprite (2D child order is draw order). Its colour is the active scene's background hex. The
+	# 480x352 logical viewport (just imposed above) is the space sprite coordinates live in, so size it
+	# to _GAME_SIZE.
 	var background := ColorRect.new()
-	background.color = Color(_background_hex())
+	background.color = Color(String(scene["background"]))
 	background.position = Vector2.ZERO
 	background.size = Vector2(_GAME_SIZE)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -93,9 +102,9 @@ func _ready() -> void:
 
 	_font = PixelFont.new()
 
-	# Build every sprite from the one project model (Milestone 24) — the editor's edited model
-	# when it handed one over (Stage.project_sprites, which may include sprites *added in the UI*),
-	# else PongScripts.sprites() so a direct launch still builds stock Pong (see _sprite_model).
+	# Build every sprite from the active scene's sprite model (Milestone 24) — the editor's edited
+	# model when it handed one over (the active scene of Stage.project_scenes, which may include sprites
+	# *added in the UI*), else PongScripts (a direct launch still builds stock Pong — see _scene_list).
 	# Each entry carries the placeholder geometry stage.gd used to hardcode plus the sprite's script:
 	#   * the paddles 16x96 on their rails and the ball 16x16 near center (the playfield);
 	#   * the two HUDs (top corners) and the Announcer (parked off-screen) as 16x16 transparent
@@ -105,7 +114,7 @@ func _ready() -> void:
 	# `color` is a hex string in the model (JSON-friendly for SAVE/OPEN); Color() parses it here.
 	# We build *all* sprites first so the registry is fully populated before variable seeding, which
 	# needs a sprite-scoped local's target to already exist.
-	var model := _sprite_model()
+	var model: Array = scene["sprites"]
 	for s in model:
 		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])))
 
@@ -115,10 +124,10 @@ func _ready() -> void:
 	# locals — e.g. the ball's `speed`, which move_steps reads as a variable, proving the
 	# local store works alongside the globals. As of M20 the model comes from the editor when
 	# it handed one over (so a variable *made in the UI* is seeded too), else PongScripts — see
-	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch.
+	# _scene_list. The scores are global so the ball can drive them and the HUDs can watch.
 	# Every declared variable seeds to 0; non-zero starts (the ball's `speed`) come from `set` blocks
 	# in the scripts, not the seed (Scratch's model — the starting value lives in the editable program).
-	for v in _variable_model():
+	for v in scene["variables"]:
 		if v["scope"] == "global":
 			set_var(v["name"], v["value"])
 		else:
@@ -172,27 +181,53 @@ func _apply_game_scaling() -> void:
 	win.content_scale_factor = 1.0
 
 
-## The sprite model to build from (Milestone 24): the editor's edited model when it handed one
-## over (Stage.project_sprites — including any sprites made in the UI), else the hardcoded
-## PongScripts.sprites(). The sprite counterpart of _variable_model — launching this scene directly
-## (no editor) still builds and plays stock Pong. (Replaces M10's _script_for / project_scripts now
-## that each sprite entry carries its own script.)
-func _sprite_model() -> Array:
-	return project_sprites if not project_sprites.is_empty() else PongScripts.sprites()
+## The project's scene list to build from (M34): the editor's whole working project when it handed
+## one over (Stage.project_scenes — every stage the project holds, including UI-added scenes), else
+## the hardcoded PongScripts.scenes() (a single "Scene 1"). Launching this scene directly (no editor)
+## still builds and plays stock Pong — the fallback the old _sprite_model / _variable_model /
+## _background_hex each provided, now in one place since a scene bundles all three.
+func _scene_list() -> Array:
+	return project_scenes if not project_scenes.is_empty() else PongScripts.scenes()
 
 
-## The variable model to seed from (M20): the editor's edited model when it handed one over
-## (it may carry variables made in the UI), else the hardcoded PongScripts model. The
-## variables counterpart of _script_for — launching this scene directly (no editor) still
-## seeds stock Pong's variables.
-func _variable_model() -> Array:
-	return project_variables if not project_variables.is_empty() else PongScripts.variables()
+## The active scene dict to build (M34): project_active clamped into the scene list, stashed in
+## _active so `next_scene` can advance from it. Each per-scene field (sprites / variables /
+## background) is read off the returned dict in _ready (grid stays editor-only and is ignored here).
+func _active_scene() -> Dictionary:
+	var scenes := _scene_list()
+	_active = clampi(project_active, 0, scenes.size() - 1)
+	return scenes[_active]
 
 
-## The stage background colour hex (M27): the editor's setting when one was handed over, else stock
-## Pong's. The stage-level counterpart of _sprite_model / _variable_model.
-func _background_hex() -> String:
-	return project_background if project_background != "" else PongScripts.background()
+# --- Runtime scene navigation (Milestone 34) -------------------------------
+
+## switch_scene: change to the scene named `target_name` at play time. Resolves the name against the
+## project's scene list and re-launches the game on it; an unknown name warns and is a no-op (the
+## block's data-scoped dropdown lists real scenes, so this only happens for a stale hand-edited name).
+func go_to_scene_by_name(target_name: String) -> void:
+	var scenes := _scene_list()
+	for i in scenes.size():
+		if String(scenes[i].get("name", "")) == target_name:
+			_change_to_scene(i)
+			return
+	push_warning("Stage: switch_scene to unknown scene '%s'" % target_name)
+
+
+## next_scene: advance to the next scene in the list, wrapping past the last back to the first.
+func go_to_next_scene() -> void:
+	var scenes := _scene_list()
+	if not scenes.is_empty():
+		_change_to_scene((_active + 1) % scenes.size())
+
+
+## Carry out a scene change (M34): point project_active at the target (a *static*, so the new value
+## survives the reload), stop every current script so its coroutine unwinds cleanly on its next poll,
+## then re-launch the game scene — _ready rebuilds from the new active scene. This reuses the same
+## change_scene_to_file primitive RUN and ESC already use, so no bespoke node/clone teardown is needed.
+func _change_to_scene(index: int) -> void:
+	project_active = index
+	stop_all()
+	get_tree().change_scene_to_file(_GAME_SCENE)
 
 
 ## Look up another target by the name it was registered under. Returns null if

@@ -5,10 +5,96 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 32 — custom block rename cascade
+## Current state: Milestone 34 — runtime scene navigation (`switch to scene` / `next scene`)
 
-**Goal of this milestone:** close the loose end M30/M31 left — **renaming a custom block now cascades to
-its `call`s**. A `define`'s name is editable in place on the canvas (M30), but through M31 editing it left
+**Goal of this milestone:** pay off the half M33 deferred — **navigating between scenes at *play*
+time**. M33 let a project hold multiple stages switchable in the *editor*, but RUN played only the
+active one and no block could change scene mid-game. M34 adds the two blocks the user asked for —
+**`switch to scene {name}`** (a data-scoped dropdown of the project's scenes — the "set the scene"
+block) and **`next scene`** (advance, wrapping past the last to the first) — plus the runtime
+machinery to carry *all* scenes into the game and rebuild for the target at play time.
+
+**Two new opcodes (`switch_scene`, `next_scene`); no block-data-shape change.** Each is the usual
+one-`_OPCODES`-entry ([`block_view.gd`](scripts/block_view.gd)) + one-interpreter-handler step
+([`_on_switch_scene`](scripts/interpreter.gd) / [`_on_next_scene`](scripts/interpreter.gd)), both plain
+`{opcode, inputs}` statements, so persistence (M22) carries them untouched. They get a new **`scenes`
+category** (slate-blue) and `switch_scene`'s `{name}` is a data-scoped dropdown
+(`data_enums: {name: "scenes"}` → the new static [`BlockView.project_scene_names`](scripts/block_view.gd),
+the scene twin of `project_sprites`), so you pick a real scene rather than risk a typo.
+
+**The mechanism reuses the project's existing scene-swap primitive.** A `switch_scene`/`next_scene`
+doesn't tear sprites down by hand: the interpreter handler calls
+[`Stage.go_to_scene_by_name`](scripts/stage.gd) / [`go_to_next_scene`](scripts/stage.gd), which
+resolve a target index, point the new **static** [`Stage.project_active`](scripts/stage.gd) at it,
+[`stop_all`](scripts/stage.gd) the current scripts (so every coroutine unwinds on its next poll), and
+`get_tree().change_scene_to_file("res://main.tscn")` — exactly the swap RUN and ESC already use. The
+new `Stage._ready` rebuilds from the new active scene with **no bespoke node/clone/coroutine teardown
+code**, sharing the same coroutine-cleanup behaviour the working ESC return relies on.
+
+**The structural change is *which* statics the editor hands the `Stage`.** Through M33 RUN handed one
+scene's worth (`project_sprites`/`project_variables`/`project_background`); M34 **replaces those three
+with one** [`Stage.project_scenes`](scripts/stage.gd) (the whole `{name, sprites, variables, background,
+grid}` list) + `project_active` (the index to build first). The Stage still builds exactly **one** scene
+at a time — it reads each per-scene field off the active scene dict
+([`_active_scene`](scripts/stage.gd)) — so the build loops, [`BlockView`](scripts/block_view.gd),
+[`BlockCanvas`](scripts/block_canvas.gd), and [`StageView`](scripts/stage_view.gd) are unchanged; only
+the *source* moved up a level. A direct `main.tscn` launch still plays stock Pong via the
+[`PongScripts.scenes()`](scripts/pong_scripts.gd) fallback ([`_scene_list`](scripts/stage.gd)). See
+[Multiple stages — runtime scene navigation (M34)](#multiple-stages--runtime-scene-navigation-m34).
+
+What this leaves deferred: a **scene-rename → `switch_scene` cascade** (renaming a scene doesn't rewrite
+existing `switch to scene {name}` blocks naming the old name — they resolve to a runtime warning; the
+live dropdown means freshly-dragged blocks are always correct — the same tradeoff M30 made before M32's
+cascade), and **cross-scene shared state** (a scene change re-seeds variables to the new scene's
+defaults — a "score" resets — since scenes own their variables; a project-global store carried across
+scenes is a separate milestone).
+
+---
+
+For context, the M33 mechanics this builds on:
+
+**Multiple stages (scenes / levels) (M33).** let a project hold **multiple stages (scenes / levels)** —
+several independent stages you switch between at edit time, each with its **own sprites, variables,
+backdrop, and grid**. Through M32 a project was a single flat scene: the editor owned one set of sprites
+(`_scripts`), variables (`_variables`), a background (`_background`), and grid (`_grid_settings`);
+persistence wrote `{scripts, variables, background, grid}`; RUN handed that one set to the `Stage`. M33
+adds a **scene layer above all of that** — `_scenes` (the list) + `_scene` (the active index) — and a
+top-bar **scene selector** + **Add / Delete / Rename Scene** buttons. **RUN plays the active scene.**
+
+**No new opcode, no block-data-shape change, no runtime change.** A scene is just a new container dict
+`{name, sprites, variables, background, grid}` — the M27/M24/M18 project pieces bundled and named — and
+the `Stage` still receives exactly one scene's worth of data (`project_sprites`/`project_variables`/
+`project_background`), so [`Stage`](scripts/stage.gd), [`BlockView`](scripts/block_view.gd),
+[`BlockCanvas`](scripts/block_canvas.gd), and [`StageView`](scripts/stage_view.gd) are untouched — the
+scene layer lives entirely in [`editor.gd`](scripts/editor.gd) (+ its [chrome](editor.tscn) and the
+[`PongScripts.scenes()`](scripts/pong_scripts.gd) seed).
+
+It is small and low-risk because the scene layer is a **structural mirror, one level up, of the
+existing sprite-switch layer**. The editor's working vars (`_scripts`/`_variables`/`_background`/
+`_grid_settings`) stay the **live editing surface for the active scene**
+([`_load_scene_into_working`](scripts/editor.gd) points them at `_scenes[_scene]`'s fields), so every
+existing per-sprite / per-variable code path is unchanged. Switching scenes persists the working vars
+back into `_scenes[_scene]` ([`_persist_current_scene`](scripts/editor.gd) — the scene-level analog of
+`_persist_current`), loads the chosen scene's into them, and rebuilds the UI
+([`_load_scene`](scripts/editor.gd) → [`_load_project_into_ui`](scripts/editor.gd), the routine that
+already "brings a sprite-set up," now reused per scene). Scenes are **fully self-contained** (each owns
+its own variables — the answered design choice), so **sprite-name uniqueness is per-scene**: every name
+check already runs against `_scripts` (the active scene), so two scenes may each have a "Sprite1" with
+no change. Persistence reshaped to `{scenes, active}`, and a **pre-M33 `{scripts, variables, …}` file
+is wrapped into one "Scene 1"** on OPEN so every existing save still opens. See
+[Multiple stages (scenes) (M33)](#multiple-stages-scenes-m33).
+
+What this leaves deferred: **runtime scene navigation** — a `switch_scene` / `next_scene`-style block
+and the `Stage` teardown/rebuild to change scene *at play time* (RUN plays only the active scene) — and
+**cross-scene shared state** (variables are per-scene; a project-global store carried across scenes,
+e.g. a score across levels, is a separate milestone that pairs with runtime navigation).
+
+---
+
+For context, the M32 mechanics this builds on:
+
+**Custom block rename cascade (M32).** It closed the loose end M30/M31 left — **renaming a custom block
+cascades to its `call`s**. A `define`'s name is editable in place on the canvas (M30), but through M31 editing it left
 every `call {name}` resolving the *old* name → a runtime warning. M32 makes the in-place rename rewrite
 this sprite's calls, the custom-block analog of M21's variable rename and M25's sprite rename. It is the
 *reachable* half of M31's deferred "rename/sync cascade": the **name** (the one thing the editor can
@@ -350,6 +436,23 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    editor** opens, showing a **palette of new blocks** down the left, a sprite selector,
    and one sprite's script rendered as a stack of visual blocks (pick another sprite
    from the dropdown to load it).
+   **Switch between stages (scenes / levels)** (M33) with the **scene selector** at the left of the top
+   bar: a project can hold several independent scenes, each with its **own sprites, variables, backdrop,
+   and grid**. Pick one to edit it; **+ Scene** makes a new one (it starts with a single grey placeholder
+   sprite, an empty variable list, and the stock backdrop/grid), **− Scene** deletes the current one (the
+   last scene can't be deleted), and **Rename Scene** renames it. Scenes are self-contained — sprite
+   names need only be unique *within* a scene — and **RUN plays the scene you're currently on**. The
+   scene list (and which one is active) is part of the project, so **SAVE** keeps it and a project saved
+   before M33 opens as a single "Scene 1".
+   **Change scene while the game runs** (M34) with two blocks in the palette's **SCENES** group:
+   **`switch to scene {name}`** jumps to the scene you pick from its dropdown (the project's real
+   scenes), and **`next scene`** advances to the next scene, wrapping past the last back to the first.
+   Wire one into a script (e.g. `when_flag_clicked → forever → if (key {space} pressed?) then → next
+   scene`) and at RUN the game rebuilds on the target scene — its sprites, variables, and backdrop. A
+   scene change **ends the current scene's scripts** and **resets variables** to the new scene's defaults
+   (each scene owns its variables, so a score doesn't carry across — that's a later milestone). Renaming
+   a scene relabels the dropdown but doesn't rewrite `switch to scene` blocks that already name the old
+   scene (they warn at RUN — re-pick the new name).
    **Add or remove a sprite** (M24) with the **+ Sprite** / **− Sprite** buttons beside the selector:
    *+ Sprite* names a new sprite (it starts as a grey square at the stage centre with an empty script —
    give it a `when_flag_clicked` and blocks, and a `go_to` to place it); *− Sprite* deletes the selected
@@ -1675,7 +1778,140 @@ value** (Scratch custom blocks are statements, as here), and a **rename/delete c
 block's name (renaming a `define` doesn't yet rewrite the `call`s that target it — M21/M25's cascades are
 the template).
 
+### Multiple stages (scenes) (M33)
+
+A project goes from a single flat scene to a list of **independent stages (scenes / levels)**. Through
+M32 the editor owned one set of sprites (`_scripts`), variables (`_variables`), a background, and a grid;
+M33 bundles those four pieces into a **scene** dict `{name, sprites, variables, background, grid}` and
+lets a project hold several, switchable from the top bar. It is the editor's last "one of these, made
+many" step — the sprite-set counterpart of M24's "sprites are a list," lifted one level. **No new
+opcode, no block-data-shape change, no runtime change**: a scene is plain dicts/arrays, and the `Stage`
+still receives exactly one scene's worth of data at RUN, so [`stage.gd`](scripts/stage.gd),
+[`block_view.gd`](scripts/block_view.gd), [`block_canvas.gd`](scripts/block_canvas.gd), and
+[`stage_view.gd`](scripts/stage_view.gd) are untouched — the change lives in
+[`editor.gd`](scripts/editor.gd), its [chrome](editor.tscn), and the
+[`PongScripts.scenes()`](scripts/pong_scripts.gd) seed.
+
+- **The model + the seed.** [`PongScripts.scenes()`](scripts/pong_scripts.gd) composes the existing
+  per-scene content builders (`sprites()` / `variables()` / `background()` / `grid()`, all unchanged)
+  into one stock scene "Scene 1" — the scene counterpart of `sprites()`/`variables()`. The editor seeds
+  `_scenes` from it ([`_seed_demo`](scripts/editor.gd)) and tracks the active index in `_scene`.
+- **Working vars are the active scene, by reference.** The editor's `_scripts` / `_variables` /
+  `_grid_settings` are pointed at `_scenes[_scene]`'s arrays/dict
+  ([`_load_scene_into_working`](scripts/editor.gd)), so they *are* the active scene's data and every
+  M9–M32 per-sprite / per-variable path edits it in place. `_background` is a String (a value), so it
+  is the one field written back explicitly. [`_persist_current_scene`](scripts/editor.gd) (the
+  scene-level analog of `_persist_current`) folds the active sprite's canvas into `_scripts`, then
+  rebinds `_scenes[_scene]` to the current working refs — called before every scene switch, SAVE, and
+  RUN, the three moments the scene list must be current.
+- **Switching scenes reuses the bring-up routine.**
+  [`_load_scene(index)`](scripts/editor.gd) persists the outgoing scene, lifts the chosen one into the
+  working vars, and calls [`_load_project_into_ui`](scripts/editor.gd) — the routine that already
+  repopulates the sprite selector, re-points `BlockView.project_*`, syncs background/grid, and shows
+  sprite 0 (now extended to repopulate the **scene selector** too). So a scene switch is exactly a
+  whole-project reload onto a different sprite-set, and `_current = -1` (reset there) keeps the leading
+  `_persist_current` from writing the outgoing scene's stale canvas anywhere.
+- **Add / Delete / Rename Scene** mirror the M24/M25 sprite chrome:
+  [`_add_scene_pressed`](scripts/editor.gd)/[`_rename_scene_pressed`](scripts/editor.gd) share one name
+  dialog (a `_scene_dialog_mode` state var routes [`_on_scene_dialog_confirmed`](scripts/editor.gd) to
+  add vs rename). A **new scene** starts with **one default placeholder sprite** (the +Sprite default,
+  named `"Sprite1"`) — so the sprite selector is never empty and `_show(0)` stays safe — plus its own
+  empty variable list and the stock background/grid (each scene self-contained). A **rename** is purely
+  cosmetic (nothing references a scene by name — scenes are independent — so no cascade, unlike a sprite
+  rename): set the model name + the selector item text in place.
+  [`_del_scene_pressed`](scripts/editor.gd)/[`_on_del_scene_confirmed`](scripts/editor.gd) refuse the
+  last scene and switch to a clamped neighbour, the M24 sprite-delete pattern.
+- **Sprite-name uniqueness is now per-scene.** Every name guard
+  ([`_sprite_names`](scripts/editor.gd), the +Sprite / rename checks) already ran against `_scripts`
+  (the active scene), so two scenes may each have a "Sprite1" with **no code change** — the registry the
+  `Stage` builds is one scene's at a time.
+- **RUN plays the active scene.** [`_on_run`](scripts/editor.gd) calls `_persist_current_scene` then
+  hands the working vars over as before (`Stage.project_sprites`/`project_variables`/
+  `project_background`) — after the persist they *are* `_scenes[_scene]`'s fields, so the M24 hand-off is
+  byte-for-byte unchanged.
+- **Persistence reshaped, backward-compatible.** [`_write_project`](scripts/editor.gd) writes
+  `{scenes, active}` (each scene carrying its own sprites/variables/background/grid).
+  [`_read_project`](scripts/editor.gd) accepts the new shape **and** a pre-M33 `{scripts, variables,
+  background, grid}` file — wrapping the latter into a single "Scene 1" — so every saved `.json` still
+  opens; [`_normalize_scene`](scripts/editor.gd) back-fills each scene's name / per-sprite geometry /
+  background / grid (the per-scene version of M24/M27's normalisation), validating all scenes before
+  adopting any so a malformed file can't half-load.
+
+Still deferred (delivered in M34, below): **runtime scene navigation**. And **cross-scene shared
+state** — by design each scene owns its variables, so a project-global store carried across scenes (a
+score across levels) is a separate milestone.
+
+### Multiple stages — runtime scene navigation (M34)
+
+M33 made a project hold several scenes switchable at *edit* time but RUN played only the active one;
+M34 adds the two blocks that change scene **at play time** — **`switch to scene {name}`** and
+**`next scene`** — the deferral M33 named. It is the first opcode addition since M30's custom blocks,
+and the runtime half is small because it **reuses the existing scene-swap primitive** rather than
+inventing a teardown: a scene change is a `change_scene_to_file` reload, exactly what RUN/ESC do.
+**Two new opcodes, no block-data-shape change, no per-block runtime-logic change** — the only
+structural change is that the editor now hands the `Stage` the *whole* scene list, not one scene's worth.
+
+- **The runtime carries all scenes now.** The three M24/M20/M27 statics
+  (`Stage.project_sprites`/`project_variables`/`project_background` — one scene's worth) are **replaced
+  by one** [`Stage.project_scenes`](scripts/stage.gd) (the full `[{name, sprites, variables, background,
+  grid}]` list) **+** [`project_active`](scripts/stage.gd) (the index to build first). The build is
+  otherwise unchanged: [`Stage._ready`](scripts/stage.gd) reads the active scene dict once
+  ([`_active_scene`](scripts/stage.gd) — clamps `project_active` into the tracked `_active`, the index
+  `next_scene` advances from) and sources the background ColorRect, the sprite build/run loops, and the
+  variable seed loop from its `background`/`sprites`/`variables` fields (`grid` stays editor-only,
+  ignored). [`_scene_list`](scripts/stage.gd) falls back to
+  [`PongScripts.scenes()`](scripts/pong_scripts.gd) when no editor handed a list over, so a direct
+  `main.tscn` launch still plays stock Pong (a single "Scene 1") — the fallback the old
+  `_sprite_model`/`_variable_model`/`_background_hex` each gave, now in one place since a scene bundles
+  all three.
+- **The navigation methods, on the `Stage`.** [`go_to_scene_by_name(name)`](scripts/stage.gd) scans the
+  scene list for a matching `name` (unknown → `push_warning` + no-op — the dropdown lists real scenes,
+  so this only bites a stale hand-edited name); [`go_to_next_scene`](scripts/stage.gd) advances
+  `(_active + 1) % count` (wraps). Both funnel into [`_change_to_scene(index)`](scripts/stage.gd):
+  point the **static** `project_active` at the target (so the new value survives the reload),
+  [`stop_all`](scripts/stage.gd) the current scripts (every `forever`/`_run_stack` poll bails on the
+  next frame — so blocks after `switch_scene` don't run; a scene change ends the scene), then
+  `change_scene_to_file(_GAME_SCENE)`. The new Stage instance's `_ready` rebuilds fresh.
+- **The interpreter handlers are one line each.** [`_on_switch_scene`](scripts/interpreter.gd) →
+  `_stage.go_to_scene_by_name(String(_value(block, "name")))`;
+  [`_on_next_scene`](scripts/interpreter.gd) → `_stage.go_to_next_scene()` — registered in
+  `_statement_handlers` the usual way. The Stage owns the resolve + reload; the interpreter just names
+  the intent.
+- **The editor side.** [`block_view.gd`](scripts/block_view.gd) gets the two `_OPCODES` entries, a new
+  `"scenes"` category in `_CATEGORY_COLORS` + `PALETTE_CATEGORY_ORDER`, and the static
+  [`project_scene_names`](scripts/block_view.gd) ([`_options_for`](scripts/block_view.gd) resolves the
+  `"scenes"` data source to it — the scene twin of `"sprites"`). [`editor.gd`](scripts/editor.gd)'s
+  [`_on_run`](scripts/editor.gd) hands `Stage.project_scenes = _scenes.duplicate(true)` +
+  `Stage.project_active = _scene` (after `_persist_current_scene`); [`_scene_names`](scripts/editor.gd)
+  feeds `BlockView.project_scene_names`, re-pointed in
+  [`_load_project_into_ui`](scripts/editor.gd) (so NEW / OPEN / scene-switch / add / delete refresh the
+  dropdown) and on a scene rename (the in-place branch of
+  [`_on_scene_dialog_confirmed`](scripts/editor.gd) now also re-points it + rebuilds palette + refreshes
+  canvas, so an open `switch to scene` dropdown relabels live).
+
+What this leaves deferred (see [Deliberately deferred](#deliberately-deferred-to-a-later-milestone)):
+the **scene-rename → `switch_scene` cascade** — renaming a scene relabels the *dropdown* (so new blocks
+are correct) but does not rewrite existing `switch to scene {name}` blocks that target the old name
+(they resolve null → a runtime warning, no-op), the same tradeoff M30 made for custom-block calls before
+M32's cascade; M25's `rewrite_sprite_refs` is the template, but here it would be a **cross-scene** walk
+(a block in any scene can name any scene). And **cross-scene shared state** — a scene change re-seeds
+variables to the new scene's defaults (each scene owns its variables — M33), so a value like a score
+does **not** persist across a switch; a project-global variable store carried across scenes is a
+separate milestone.
+
 ## Opcodes implemented
+
+**M34 added two opcodes** — `switch_scene` and `next_scene` (runtime scene navigation): the first opcode
+additions since M30's custom blocks. Each is the usual one-`_OPCODES`-entry + one-interpreter-handler
+step, with no block-data-shape change. The runtime change is structural but contained — the editor hands
+the `Stage` the *whole* scene list (`project_scenes` + `project_active`, replacing M24/M20/M27's three
+per-scene statics), and a scene change is a `change_scene_to_file` reload (the same swap RUN/ESC use), so
+no per-block runtime logic changed.
+
+**M33 added no opcodes** — it is a pure **editor + model + persistence** change (a project holds
+multiple scenes, each a `{name, sprites, variables, background, grid}` dict; RUN plays the active one),
+touching neither the block language nor the runtime — the `Stage` received one scene's worth of data
+(M34 lifts that to the whole list); the notes below are kept as written for earlier milestones.
 
 **M32 added no opcodes** — it is a pure **editor-side cascade** (renaming a `define` in place rewrites
 this sprite's `call`s, via the new `BlockView.rewrite_custom_block_refs` walk), touching neither the
@@ -1755,6 +1991,8 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `define` | hat | `name`, `params`, `body` | custom-block definition (M30); never auto-started — its body runs only when a `call` of the same name invokes it. Per-sprite. `params` (M31) is the ordered parameter-name list; its prototype pills drag copies of `param` into the body |
 | `call` | statement | `name`, `args` | run the custom block `name` defined in this sprite's script (M30); resolves the `define` and `await`s its body. Unknown name → warn + no-op. `args` (M31) is a `{param: value}` dict — one argument per parameter, bound into a frame for the body |
 | `param` | reporter | `name` | read a custom-block parameter (M31), resolved against the active `call`'s frame; 0 + a warning if read outside a custom block. Value output |
+| `switch_scene` | statement | `name` | switch the running game to the scene named `name` (M34); the Stage relaunches on it. `{name}` is a dropdown of the project's scenes. Unknown name → warn + no-op. Ends the current scene's scripts |
+| `next_scene` | statement | — | advance to the next scene in the project's list (M34), wrapping past the last back to the first |
 
 > Note on `"bounce"`: the reflection math still lives in the runtime as a sentinel
 > input of `point_in_direction` rather than as data. M3 added arithmetic, so this
@@ -1769,21 +2007,21 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); initial window 1280x720 fullscreen (M26) — the per-scene content-scale overrides in editor.gd/stage.gd take over from there (editor 960x540 logical, game a fixed 480x360 integer-snapped viewport)
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.)
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + scene selector + Add/Del/Rename scene buttons (M33) + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25) and the scene name + delete-scene dialogs (M33), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.)
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
-  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures; that dialog also takes **parameters** (M31, _parse_params splits on commas/whitespace → the define's params list), and _custom_block_params_in re-derives each sprite's block→params map into BlockView.project_custom_block_params, so a call chip gets one arg slot per parameter and a param reporter can be dragged out of the define hat's prototype; renaming a define in place cascades the new name to its calls (M32, _on_custom_block_renamed re-derives the sprite's custom-block names after BlockCanvas rewrites them)
+  editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures; that dialog also takes **parameters** (M31, _parse_params splits on commas/whitespace → the define's params list), and _custom_block_params_in re-derives each sprite's block→params map into BlockView.project_custom_block_params, so a call chip gets one arg slot per parameter and a param reporter can be dragged out of the define hat's prototype; renaming a define in place cascades the new name to its calls (M32, _on_custom_block_renamed re-derives the sprite's custom-block names after BlockCanvas rewrites them); owns the **scene (stage/level) model** too (M33) — _scenes is a list of {name,sprites,variables,background,grid} dicts, _scene the active index, seeded from PongScripts.scenes(); the working vars (_scripts/_variables/_background/_grid_settings) are the live editing surface for the active scene (_load_scene_into_working points them at _scenes[_scene]), persisted back via _persist_current_scene before each scene switch / SAVE / RUN; a top-bar scene selector + Add/Del/Rename Scene buttons manage the list (_load_scene/_add_scene_pressed/_rename_scene_pressed/_del_scene_pressed — a new scene gets one default placeholder sprite, delete refuses the last); persistence reshaped to {scenes,active} (_write_project), with a pre-M33 {scripts,variables,…} file wrapped into one "Scene 1" on OPEN (_read_project/_normalize_scene); runtime scene navigation (M34) — RUN now hands the Stage the **whole** scene list (Stage.project_scenes = _scenes + project_active = _scene, replacing the per-scene hand-off) so a switch_scene/next_scene block can rebuild for a different scene at play time; _scene_names feeds BlockView.project_scene_names (the switch_scene dropdown's options), re-pointed in _load_project_into_ui and on a scene rename (which now also rebuilds palette + refreshes canvas so the dropdown relabels — but does not cascade to existing switch_scene blocks, deferred)
   stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); _spawn_at/_pending_spawn spawn a fresh param-reporter copy when a define hat's prototype parameter pill is dragged (M31), confined to slots inside that function's body (_nearest_slot/_scoped_slots/_enclosing_define_body — also for an already-placed param grabbed out); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); an in-place define rename is detected in _commit_literal (the define_name-stamped field) and, after a uniqueness check (_other_define_named), deferred to _rename_custom_block_deferred which rewrites the sprite's calls + notifies the editor via on_custom_block_renamed (M32); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette; a call chip carries one args slot per the block's declared parameters (M31, project_custom_block_params), the drag re-minting the args dict from the chip's palette_params
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds sprites + runs their scripts from the one sprite model (the editor's via static project_sprites — which may include UI-added sprites — else PongScripts.sprites(), M24; each entry carries geometry + script, so M10's separate project_scripts/_script_for are retired), owns the name->Target registry + shared font, seeds variables from the project variable model (the editor's via static project_variables — which may include UI-made variables — else PongScripts.variables(), M18/M20); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); ESC returns to the editor (the inverse of editor.gd's RUN)
-  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter)
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; runtime scene navigation (M34) — the switch_scene/next_scene opcodes in a new "scenes" category, switch_scene's {name} a data-scoped dropdown from project_scene_names (the editor's scene-name list, the scenes twin of project_sprites; _options_for resolves the "scenes" source); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); ESC returns to the editor (the inverse of editor.gd's RUN)
+  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload)
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
-  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed; and the seed stage-level settings — background() (the backdrop hex) and grid() ({show,snap,color,step}, the stage editor's alignment grid), each a project property the editor seeds from here and persists in the .json (M27)
+  pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed; and the seed stage-level settings — background() (the backdrop hex) and grid() ({show,snap,color,step}, the stage editor's alignment grid), each a project property the editor seeds from here and persists in the .json (M27); and the seed **scene model** — scenes() (M33) bundles sprites()/variables()/background()/grid() into one stock scene "Scene 1", the project's starting (single) stage and the shape the editor's _scenes list seeds from
 CLAUDE.md                  This file
 ```
 
@@ -1849,6 +2087,20 @@ CLAUDE.md                  This file
   view (M27: select / drag / resize — Alt about the centre, Shift to lock aspect (M28) — / recolour, or the inspector's x/y/w/h/colour fields) — but a
   `go_to` block in the script still wins at RUN (behaviour is blocks), so the model position matters
   most for a sprite with no `go_to`.
+- New scene (stage / level)? Two ways, mirroring sprites. **From the UI** (M33): **+ Scene** in the top
+  bar names a new stage (one default placeholder sprite, an empty variable list, the stock
+  backdrop/grid); **− Scene** deletes the active one (refused when only one is left); **Rename Scene**
+  renames it (a rename relabels the `switch to scene` dropdown but doesn't cascade to existing
+  `switch_scene` blocks — deferred). RUN plays the **active** scene; **change scene at play time** with a
+  `switch to scene {name}` / `next scene` block (M34, the SCENES palette group). A UI-added scene
+  survives relaunch only if you **SAVE**. **In the stock project**: add a `{name, sprites, variables,
+  background, grid}` entry to [`PongScripts.scenes()`](scripts/pong_scripts.gd) (M33) — the seed scene
+  model the editor's `_scenes` list starts from. Each scene is **self-contained** (its own variables), so
+  sprite names need only be unique *within* a scene, and a scene switch re-seeds variables to the new
+  scene's defaults. Don't reach across scenes in editor code — the active scene's data lives in the
+  working vars (`_scripts` etc.), kept in sync with `_scenes[_scene]` by `_persist_current_scene` /
+  `_load_scene_into_working`. At RUN the whole list crosses to the Stage via `Stage.project_scenes` +
+  `project_active` (M34), so the runtime can navigate between scenes.
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -1862,6 +2114,20 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
+- **Multiple stages / runtime scene navigation** — **M33 delivered the multi-scene model**: a project
+  holds several independent stages (scenes / levels), each `{name, sprites, variables, background,
+  grid}`, switchable at edit time via a top-bar scene selector + Add/Delete/Rename Scene, with RUN
+  playing the **active** scene and persistence reshaped to `{scenes, active}` (a pre-M33 file opens as
+  one "Scene 1"). **M34 delivered runtime navigation** — `switch_scene` / `next_scene` blocks (new
+  `scenes` palette group) change scene *at play time*: the editor hands the Stage the whole scene list
+  (`project_scenes` + `project_active`), and a block re-points `project_active` + reloads the game scene
+  (`change_scene_to_file`, the same swap RUN/ESC use — `go_to_scene_by_name` / `go_to_next_scene` /
+  `_change_to_scene` in [`stage.gd`](scripts/stage.gd)), rebuilding on the target with no bespoke
+  teardown. What's *still* deferred: the **scene-rename → `switch_scene` cascade** (a rename relabels the
+  dropdown but leaves existing `switch_scene` blocks naming the old scene → a runtime warning;
+  `rewrite_sprite_refs` is the template, but cross-scene); and **cross-scene shared state** — a scene
+  change re-seeds variables to the new scene's defaults (scenes own their variables), so a value like a
+  score across levels needs a project-global store carried across scenes, a separate milestone.
 - **Custom block parameters / return value / rename cascade** — **M30 delivered the custom block** and
   **M31 delivered parameters.** M30 added the procedure (`define {name}` + `call {name}`, Scratch's "My
   Blocks") — a per-sprite named routine you make from the palette's **Make a Block** button and invoke

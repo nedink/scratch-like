@@ -12,24 +12,34 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M32 — custom block **rename cascade**. Editing a `define`'s name field in
-  place on the canvas now rewrites this sprite's `call`s to match (the custom-block analog of M21's
-  variable rename / M25's sprite rename, scoped per-sprite since custom blocks are per-sprite). The
-  walk is `BlockView.rewrite_custom_block_refs` (define + call by `inputs.name`); the trigger is the
-  in-place name commit — `_define_header` stamps the name field `define_name`, `BlockCanvas._commit_literal`
-  catches it, validates uniqueness (`_other_define_named`, blank/duplicate → revert), and defers
-  (`call_deferred`, so it doesn't free the committing field) `_rename_custom_block_deferred`, which
-  rewrites the calls and fires `on_custom_block_renamed` → `editor._on_custom_block_renamed` (re-derive
-  the sprite's block names + params, rebuild palette, refresh canvas). **`param` reporters and `call`
-  `args` keys are untouched** — they bind to parameters, not the block name.
-- **Git:** last commit is `f592341 M32: custom block rename cascade` (committed + pushed to `main`).
-- **Immediate next action:** F5-verify M32 (see [testing](#testing)) if not already done; then pick
-  the next milestone from [Next up](#next-up-candidate-milestones).
+- **Milestone in flight:** M34 — **runtime scene navigation**. Two new blocks change the playing scene
+  at run time: **`switch to scene {name}`** (a dropdown of the project's scenes) and **`next scene`**
+  (advance, wrapping). Adds **two opcodes** (`switch_scene`/`next_scene`, in a new `scenes` palette
+  group) but no block-data-shape change. The runtime now carries the **whole** scene list:
+  `editor._on_run` hands `Stage.project_scenes` (the full `[{name, sprites, variables, background,
+  grid}]` list) + `Stage.project_active` (replacing M24/M20/M27's three per-scene statics). A block
+  re-points the static `project_active`, `stop_all`s the current scripts, and reloads the game scene via
+  `change_scene_to_file` — the same swap RUN/ESC use, so `Stage._ready` rebuilds on the target with **no
+  bespoke teardown** (`go_to_scene_by_name`/`go_to_next_scene`/`_change_to_scene` in `stage.gd`;
+  `_active_scene`/`_scene_list` read per-scene fields off the active dict). Editor: `_scene_names` feeds
+  `BlockView.project_scene_names` (the dropdown source), re-pointed on every project load + scene rename.
+- **Git:** ⚠️ **uncommitted.** Per the session's `git status`, **M33** sits uncommitted in the working
+  tree (CLAUDE.md, editor.tscn, editor.gd, pong_scripts.gd modified) — M32 *is* committed (`f592341` +
+  `80d4736`). **M34** (this) is now layered on top, also uncommitted, touching stage.gd, interpreter.gd,
+  block_view.gd, editor.gd + docs. There are also stray untracked files (`build_platformer.py`,
+  `platformer.json`) — unrelated, leave them. Decide how to split/commit M33 then M34 before pushing.
+- **Immediate next action:** F5-verify M34 (see [testing](#testing)); commit M33 + M34; then pick the
+  next milestone from [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
 Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay scoped.
 
+- **Cross-scene shared state (M34 follow-on).** A project-global variable store carried across scenes,
+  so e.g. a score survives a `switch_scene` (variables are per-scene today, re-seeded on every switch).
+- **Scene-rename → `switch_scene` cascade (M34 follow-on).** Renaming a scene relabels the dropdown but
+  leaves existing `switch_scene` blocks naming the old scene (→ runtime warning). `rewrite_sprite_refs`
+  (M25) is the template, but here it's a *cross-scene* walk (any scene's block can name any scene).
 - **Custom-block *parameter* rename/sync + delete.** M32 did the *name* cascade; editing a `define`'s
   *params* should rewrite its `call`s' `args` keys and its body's `param`s — but first needs a **params-
   editing UI** (no way to edit params after the Make-a-Block dialog today) plus a rename-vs-add/remove
@@ -47,6 +57,10 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M34 — runtime scene navigation: `switch to scene {name}` / `next scene` blocks change the playing
+  scene at run time; the runtime carries the whole scene list. *(code complete, uncommitted)*
+- M33 — multiple stages (scenes / levels): a project holds several independent scenes, switchable in
+  the editor; RUN plays the active one. *(code complete, uncommitted)*
 - M32 — custom block rename cascade (renaming a `define` rewrites its `call`s).
 - M31 — custom block parameters (`define` params + `call` args + `param` reporter).
 - M30 — custom blocks (`define`/`call`, "My Blocks").
