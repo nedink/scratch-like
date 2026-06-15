@@ -23,13 +23,12 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   bespoke teardown** (`go_to_scene_by_name`/`go_to_next_scene`/`_change_to_scene` in `stage.gd`;
   `_active_scene`/`_scene_list` read per-scene fields off the active dict). Editor: `_scene_names` feeds
   `BlockView.project_scene_names` (the dropdown source), re-pointed on every project load + scene rename.
-- **Git:** ⚠️ **uncommitted.** Per the session's `git status`, **M33** sits uncommitted in the working
-  tree (CLAUDE.md, editor.tscn, editor.gd, pong_scripts.gd modified) — M32 *is* committed (`f592341` +
-  `80d4736`). **M34** (this) is now layered on top, also uncommitted, touching stage.gd, interpreter.gd,
-  block_view.gd, editor.gd + docs. There are also stray untracked files (`build_platformer.py`,
-  `platformer.json`) — unrelated, leave them. Decide how to split/commit M33 then M34 before pushing.
-- **Immediate next action:** F5-verify M34 (see [testing](#testing)); commit M33 + M34; then pick the
-  next milestone from [Next up](#next-up-candidate-milestones).
+- **Git:** M33 + M34 committed together (`be3da68`, pushed to `main`) — they were intertwined across
+  `editor.gd`/docs, so they landed in one commit rather than a clean per-milestone split. The stray
+  untracked files (`build_platformer.py`, `platformer.json`) remain unrelated and uncommitted — leave
+  them.
+- **Immediate next action:** F5-verify M34 (see [testing](#testing)); then pick the next milestone from
+  [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
