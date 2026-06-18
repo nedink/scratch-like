@@ -12,25 +12,27 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M36 — **curved (convex) paddle bounce in the demo**. The Pong paddles now
-  deflect the ball as if they bulge toward the centre of the playfield: the rebound angle tracks **where**
-  the ball strikes — centre → straight back, an end → steep deflection toward that end (classic arcade
-  Pong). **Demo-only** follow-on to M35: a pure [`PongScripts`](scripts/pong_scripts.gd) edit using
-  **only existing opcodes** — **no new opcode, no block-data-shape change, no runtime change, no editor
-  change**. Mechanism: each paddle **publishes its centre y into a global** every tick (`set
-  left_paddle_y / right_paddle_y to (y position)` in `_paddle`; two new globals in `variables()`),
-  because M35's `y_position` reads the *running* sprite (the ball can't read another sprite directly).
-  The ball reads the offset of its own y from the paddle's relayed y and aims off straight-back by
-  `offset × PADDLE_BOUNCE_CURVE` (0.9 °/px): LEFT → `90 + offset×curve`, RIGHT → `270 − offset×curve`.
-  M35's sign-gate + `go_to` nudge are kept; the gated angle range (`90/270 ± ~50°`) stays heading-away,
-  so no double-flip/stick.
-- **Git:** M36 code + docs complete, **uncommitted** — F5-verify first. (Note: M35 itself is already
-  committed as `00108ea` — the prior HANDOFF was stale on that.) The stray untracked files
+- **Milestone in flight:** M37 — **stage-editor world view, panning, and camera blocks**. Three things:
+  ① the **stage editor shows the whole game world** (no longer clipped to the 480×352 screen) with the
+  screen marked by a **bright guide-line border**, **pan by dragging the background**, a **Recenter view**
+  button (inspector), and **opaque panels** framing the top bar + the right inspector
+  ([`stage_view.gd`](scripts/stage_view.gd), [`editor.tscn`](editor.tscn), one wire in
+  [`editor.gd`](scripts/editor.gd)). ② a new **CAMERA block group** — `set camera to x: y:`,
+  `change camera by x: y:`, `camera follow {sprite}`, `camera stop following` (4 new opcodes,
+  [`block_view.gd`](scripts/block_view.gd) + one-line handlers each in
+  [`interpreter.gd`](scripts/interpreter.gd)). ③ the **runtime camera** — [`stage.gd`](scripts/stage.gd)
+  adds a `Camera2D` centred at (240,176) (= today's identity view, so a project with no camera blocks is
+  unchanged), follows a sprite each frame via `_process`, and the background ColorRect moved onto a
+  `CanvasLayer(-1)` so it stays screen-fixed while the camera pans. Camera coords = sprite coords (the
+  world point shown at screen centre). No block-data-shape change; saves ride existing persistence.
+- **Git:** M37 code + docs complete, **committed + pushed**. The stray untracked files
   (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
-- **Immediate next action:** F5-verify M36 (see [testing](#testing)) — play Pong, confirm the ball
-  bounces off both paddles with an angle that depends on the contact point (centre ≈ straight back, ends
-  deflect steeply), still bounces flat off the top/bottom walls, never sticks, and re-serves on a miss;
-  then commit + push and pick the next milestone from [Next up](#next-up-candidate-milestones).
+- **Immediate next action:** F5-verify M37 (see [testing](#testing)) — in **Stage** mode the off-screen
+  Announcer is now visible, the screen region is outlined, dragging empty background pans, Recenter
+  re-frames, sprite drag/resize still work, the bar + inspector read as solid panels; in a script build
+  `when flag clicked → forever → camera follow {Ball}`, RUN and confirm the view scrolls to keep the ball
+  centred; with no camera blocks the demo plays exactly as before. Then pick the next milestone from
+  [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
@@ -58,9 +60,9 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
-- M36 — curved (convex) paddle bounce in the demo: paddles relay their centre y into a global and the
-  ball aims its rebound off straight-back by its contact offset × `PADDLE_BOUNCE_CURVE`. Existing opcodes
-  only; pure `pong_scripts.gd` edit. *(code + docs complete, uncommitted)*
+- M36 — curved (convex) paddle bounce in the demo: the rebound angle tracks the contact point on the
+  paddle (centre → straight back, ends → steep deflection). Existing opcodes only; pure
+  `pong_scripts.gd` edit. *(committed `21eb50f`)*
 - M35 — motion-state reporters (`direction`/`x_position`/`y_position`) + the Pong ball's bounce
   decomposed into blocks (sign-gated reflection + `go_to` nudge), retiring the `"bounce"` sentinel in
   the demo. *(committed `00108ea`)*
@@ -82,8 +84,9 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 These are the standing rules for this project (also recorded in Claude's memory):
 
-- **Commit + push after every feature.** Branch off `main` first if not already on a working
-  branch. Commit, then **`git push` immediately** — don't batch.
+- **Commit + push after every feature — without asking.** When work is code-complete, commit and
+  **`git push` immediately** (don't batch, don't wait for approval or a manual F5-verify — the remote
+  history is the backup/undo). Branch off `main` first if not already on a working branch.
 - **Update this HANDOFF.md after every feature**, alongside the `CLAUDE.md` milestone write-up.
 - **Git identity:** commit as `nedink@gmail.com` here (not the global work email).
 - **Commit message convention:** `M<n>: <short description>` matching the milestone.
@@ -92,7 +95,8 @@ These are the standing rules for this project (also recorded in Claude's memory)
 
 - **Claude cannot run Godot** — there's no CLI for it in this environment. The user tests
   manually by pressing **F5** in the Godot editor (main scene = `editor.tscn`).
-- So: after implementing, describe what to look for, and ask the user to F5-verify before commit.
+- So: commit + push when code-complete, **then** describe what to look for so the user can F5-verify
+  (verification no longer gates the commit — the remote is the safety net).
 
 ## Extending (quick pointer)
 

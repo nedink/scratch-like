@@ -59,6 +59,7 @@ static var _CATEGORY_COLORS := {
 	"operators": Color("#59c059"),
 	"custom": Color("#ff6680"),
 	"scenes": Color("#5a7d9a"),
+	"camera": Color("#0fbd8c"),
 	"unknown": Color("#7f7f7f"),
 }
 
@@ -219,11 +220,22 @@ const _OPCODES := {
 	# statements — the Stage carries out the change by relaunching the game on the target scene.
 	"switch_scene": {"category": "scenes", "kind": "statement", "template": "switch to scene {name}", "defaults": {"name": "Scene 1"}, "data_enums": {"name": "scenes"}},
 	"next_scene": {"category": "scenes", "kind": "statement", "template": "next scene", "defaults": {}},
+
+	# Camera (M37): scroll the runtime view. The camera shows the world point given by its position at
+	# the screen centre, so camera coordinates are the *same space sprites live in* (default 240,176 =
+	# the identity view today). `set_camera`/`change_camera` move it (movement); `camera_follow` /
+	# `camera_stop_following` track a sprite (tracking). The Stage owns a Camera2D and carries these out
+	# (set_camera / move_camera / camera_follow / camera_stop_following). `camera_follow`'s {name} is a
+	# data-scoped dropdown of the project's sprites (the touching_sprite? "sprites" source).
+	"set_camera": {"category": "camera", "kind": "statement", "template": "set camera to x: {x} y: {y}", "defaults": {"x": 240, "y": 176}},
+	"change_camera": {"category": "camera", "kind": "statement", "template": "change camera by x: {dx} y: {dy}", "defaults": {"dx": 0, "dy": 0}},
+	"camera_follow": {"category": "camera", "kind": "statement", "template": "camera follow {name}", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
+	"camera_stop_following": {"category": "camera", "kind": "statement", "template": "camera stop following", "defaults": {}},
 }
 
 ## Category display order for the palette (operators are all reporters, so that group is
 ## empty after filtering and simply produces no chips).
-const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators", "scenes"]
+const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators", "scenes", "camera"]
 
 
 ## A vertical run of blocks (a sprite's whole script, a hat's body, or a C-block's

@@ -65,8 +65,8 @@ const _DEFAULT_GRID_COLOR := Color(0.529, 0.808, 0.980, 0.35)
 const _DEFAULT_BACKGROUND := Color("#000000ff")
 
 
-## A thin custom-draw layer that paints the alignment grid behind the sprites, clipped to the stage
-## region (it is a child of _stage_area, whose clip_contents trims any overshoot). Kept dead simple:
+## A thin custom-draw layer that paints the alignment grid over the screen region (it is a child of
+## _screen_panel and fills it, so the grid is a screen-space aid). Kept dead simple:
 ## vertical + horizontal lines every `step` display px in `color`, only when `show` is set. The
 ## editor toggles `show` and recolours via StageView's set_grid_* setters, which queue_redraw here.
 class _GridLayer:
@@ -108,15 +108,27 @@ var _selected: int = -1
 var on_pick: Callable
 var on_geometry_changed: Callable
 
-## The bordered 480x352 region, centred in this control and clipping its contents so off-stage
-## sprites (e.g. the Announcer parked at -400,-400) don't bleed over the inspector. Built in _ready.
-var _stage_area: Panel
+## The dark "outside-screen" backdrop filling this whole control (M37). The world is drawn over it,
+## so the area *beyond* the 480x352 screen reads as out-of-bounds rather than empty.
+var _backdrop: Panel
+
+## The pannable world container (M37): every world-space node is a child, and the container is
+## positioned at `_pan` (display px), so moving it scrolls the whole world at once. The pan is
+## absorbed here, so _display_rect (world*scale) and the child get_global_rect() hit-tests need no
+## pan term — the node tree carries it.
+var _world: Control
+
+## The 480x352 **screen region** inside the world (M37) — drawn with the project background colour and
+## a bright **guide-line border** so the user can see where the playable screen sits while the
+## surrounding world is visible around it. Replaces M27's clipped `_stage_area`.
+var _screen_panel: Panel
 
 ## Holds the per-sprite rectangles and the selection overlay (outline + handles), all rebuilt in
-## _render and hit-tested by get_global_rect — exactly like block_canvas._layer.
+## _render and hit-tested by get_global_rect — exactly like block_canvas._layer. A child of _world
+## (so it pans) and **not clipped**, so a sprite outside the screen region is fully visible (M37).
 var _layer: Control
 
-## The stage region's stylebox, kept so set_background can recolour it live (M27).
+## The screen region's stylebox, kept so set_background can recolour it live (M27).
 var _stage_box: StyleBoxFlat
 
 ## The grid overlay layer (M27), drawn behind the sprites; the editor toggles/recolours it via the
@@ -132,10 +144,15 @@ var _grid_snap: bool = true
 ## set_grid_step. Both the drawn grid and snap-to-grid read this.
 var _grid_step: int = _DEFAULT_GRID_STEP
 
+## The world's pan offset in display px (M37) — _world.position. Set by recenter() (screen centred in
+## the view) and dragged by a background pan. _pan_start captures it at the start of a pan drag.
+var _pan: Vector2
+var _pan_start: Vector2
+
 var _state: int = _IDLE
 var _press_pos: Vector2            # global position of the initial press
-var _pending: Dictionary = {}      # {index, mode, corner?} of the sprite/handle pressed
-var _drag_mode: String = ""        # "move" or "resize"
+var _pending: Dictionary = {}      # {index, mode, corner?} of the sprite/handle pressed, or {mode:"pan"}
+var _drag_mode: String = ""        # "move", "resize", or "pan"
 var _drag_index: int = -1          # the sprite being dragged
 var _grab_offset_model: Vector2    # (move) sprite centre minus the press point, in model space
 var _resize_w0: float = 0.0        # (resize) the sprite's w/h at the start of the drag — the aspect
@@ -148,36 +165,55 @@ func _ready() -> void:
 	# do our own global hit-testing, same as block_canvas / block_palette.
 	mouse_filter = Control.MOUSE_FILTER_PASS
 
-	# The stage region: a dark panel with a light border, clipping its sprite children.
-	_stage_area = Panel.new()
-	_stage_area.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_stage_area.clip_contents = true
-	_stage_area.custom_minimum_size = _STAGE_SIZE * _DISPLAY_SCALE
-	_stage_area.size = _STAGE_SIZE * _DISPLAY_SCALE
+	# The out-of-bounds backdrop: a dark panel filling the whole view, behind the world (M37). The
+	# world (screen region + sprites) is drawn over it, so the area beyond the screen reads as
+	# out-of-bounds rather than empty.
+	_backdrop = Panel.new()
+	_backdrop.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_backdrop.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var backdrop_box := StyleBoxFlat.new()
+	backdrop_box.bg_color = Color("#15151c")
+	_backdrop.add_theme_stylebox_override("panel", backdrop_box)
+	add_child(_backdrop)
+
+	# The pannable world container (M37): positioned at _pan, holding the screen region + sprites.
+	_world = Control.new()
+	_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_world)
+
+	# The screen region: the project background fill with a bright guide-line border, at world (0,0)
+	# sized to the 480x352 screen. Unlike M27's _stage_area it does NOT clip — sprites live in the
+	# sibling _layer and may extend beyond it, which is the whole point (show the surrounding world).
+	_screen_panel = Panel.new()
+	_screen_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_screen_panel.position = Vector2.ZERO
+	_screen_panel.size = _STAGE_SIZE * _DISPLAY_SCALE
 	_stage_box = StyleBoxFlat.new()
 	_stage_box.bg_color = _DEFAULT_BACKGROUND
-	_stage_box.border_color = Color("#43435a")
-	_stage_box.set_border_width_all(1)
-	_stage_area.add_theme_stylebox_override("panel", _stage_box)
-	add_child(_stage_area)
+	_stage_box.border_color = Color("#4ad0ff")  # bright sky — the screen-boundary guide line
+	_stage_box.set_border_width_all(2)
+	_screen_panel.add_theme_stylebox_override("panel", _stage_box)
+	_world.add_child(_screen_panel)
 
-	# The grid sits behind the sprites: added before _layer so it draws first (lowest), and fills the
-	# stage region. Its step is the model grid spacing scaled into display px.
+	# The grid sits over the screen region (a child of _screen_panel, full rect), so it only shows
+	# inside the screen — the grid is a screen-space authoring aid. Its step is the model grid
+	# spacing scaled into display px.
 	_grid = _GridLayer.new()
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grid.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_grid.step = _grid_step * _DISPLAY_SCALE
 	_grid.color = _DEFAULT_GRID_COLOR  # the editor overrides via set_grid_color; this is the standalone default
-	_stage_area.add_child(_grid)
+	_screen_panel.add_child(_grid)
 
+	# Sprites + selection overlay, drawn over the screen region and the surrounding world. A child of
+	# _world (so it pans) at the world origin; positioned per-sprite at world*scale by _display_rect.
 	_layer = Control.new()
 	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_layer.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_stage_area.add_child(_layer)
+	_world.add_child(_layer)
 
-	# Re-centre + redraw when this control is laid out / resized (its size is 0 until the first
-	# layout pass, so the initial set_model render lands centred once a real size arrives).
-	resized.connect(_render)
+	# Re-centre on the screen + redraw when this control is laid out / resized (its size is 0 until the
+	# first layout pass, so the initial render lands centred once a real size arrives).
+	resized.connect(recenter)
 
 
 ## Point the view at a model array and select an index (called when entering Stage mode, or after
@@ -185,7 +221,7 @@ func _ready() -> void:
 func set_model(sprites: Array, selected: int) -> void:
 	_sprites = sprites
 	_selected = selected
-	_render()
+	recenter()  # centre the screen in the view on entering Stage mode, then render
 
 
 ## Change only the selection (called when the sprite selector changes while in Stage mode). The
@@ -196,9 +232,25 @@ func set_selected(index: int) -> void:
 
 
 ## Re-render from the current data without otherwise touching it — the editor calls this after an
-## inspector edit so the on-stage rectangle reflects the new geometry/colour.
+## inspector edit so the on-stage rectangle reflects the new geometry/colour. Leaves the pan as-is.
 func refresh() -> void:
 	_render()
+
+
+## Centre the 480x352 screen region in the view (M37) — the initial framing, and what the editor's
+## "Recenter view" button restores after the user has panned around. A negative pan (view smaller
+## than the screen region) is fine now that nothing clips to the screen. Re-renders.
+func recenter() -> void:
+	var region := _STAGE_SIZE * _DISPLAY_SCALE
+	_pan = (size - region) * 0.5
+	_apply_pan()
+	_render()
+
+
+## Push the current pan onto the world container, rounded so the world doesn't land on half-pixels.
+func _apply_pan() -> void:
+	if _world:
+		_world.position = _pan.round()
 
 
 ## --- Stage settings the editor drives (M27) --------------------------------
@@ -245,13 +297,12 @@ func set_grid_step(step: int) -> void:
 ## on the selected sprite, a selection outline plus a single bottom-right resize handle. The data is
 ## the single source of truth, so this runs after every change (drag, inspector edit, selection).
 func _render() -> void:
-	if _stage_area == null:
+	if _world == null:
 		return
-	# Centre the stage region in whatever space the layout gave us (clamped so it never goes
-	# negative when the control is briefly smaller than the region).
-	var region := _STAGE_SIZE * _DISPLAY_SCALE
-	var origin := (size - region) * 0.5
-	_stage_area.position = Vector2(maxf(origin.x, 0.0), maxf(origin.y, 0.0))
+	# Keep the world at the current pan (recenter / a pan drag set _pan; this re-asserts it after a
+	# rebuild). We deliberately do NOT recompute the pan here, so a user pan survives a selection /
+	# inspector-edit re-render — only recenter() (and resize) re-frames.
+	_apply_pan()
 
 	for child in _layer.get_children():
 		child.queue_free()
@@ -343,7 +394,16 @@ func _input(event: InputEvent) -> void:
 		if event.pressed and _state == _IDLE:
 			var hit := _hit(event.position)
 			if hit.is_empty():
-				return  # missed every sprite/handle — let the press fall through
+				# Missed every sprite/handle. A press inside our own rect starts a **pan** of the world
+				# (M37); a press outside it (e.g. on the inspector beside us) falls through untouched.
+				if not get_global_rect().has_point(event.position):
+					return
+				_state = _PENDING
+				_press_pos = event.position
+				_pending = {"mode": "pan"}
+				_pan_start = _pan
+				get_viewport().set_input_as_handled()
+				return
 			_state = _PENDING
 			_press_pos = event.position
 			_pending = hit
@@ -353,17 +413,27 @@ func _input(event: InputEvent) -> void:
 				_end_drag()
 				get_viewport().set_input_as_handled()
 			elif _state == _PENDING:
-				# A plain click, never dragged: select the sprite under the press.
-				_select(int(_pending["index"]))
+				# A plain click that never dragged: select the sprite under the press (a background
+				# click — a pending pan — is a no-op, leaving the selection alone).
+				if String(_pending.get("mode", "")) != "pan":
+					_select(int(_pending["index"]))
 				_state = _IDLE
 				_pending = {}
 	elif event is InputEventMouseMotion:
 		if _state == _PENDING and event.position.distance_to(_press_pos) > DRAG_THRESHOLD:
-			_begin_drag()
-			_update_drag(event.position)
+			if String(_pending.get("mode", "")) == "pan":
+				_state = _DRAGGING
+				_drag_mode = "pan"
+				_update_pan(event.position)
+			else:
+				_begin_drag()
+				_update_drag(event.position)
 			get_viewport().set_input_as_handled()
 		elif _state == _DRAGGING:
-			_update_drag(event.position)
+			if _drag_mode == "pan":
+				_update_pan(event.position)
+			else:
+				_update_drag(event.position)
 			get_viewport().set_input_as_handled()
 
 
@@ -467,6 +537,13 @@ func _update_drag(global_point: Vector2) -> void:
 		on_geometry_changed.call(_drag_index)
 
 
+## Pan the world to follow the cursor (M37): offset the captured pan by how far the cursor has moved
+## since the press. Only _world's position changes — no model data is touched.
+func _update_pan(global_point: Vector2) -> void:
+	_pan = _pan_start + (global_point - _press_pos)
+	_apply_pan()
+
+
 ## Finish a drag — the geometry was written live, so this just resets the state machine.
 func _end_drag() -> void:
 	_state = _IDLE
@@ -475,10 +552,11 @@ func _end_drag() -> void:
 	_drag_index = -1
 
 
-## A global point expressed in stage model coordinates: subtract the stage region's global origin,
-## then divide out the display scale. The inverse of _display_rect's mapping.
+## A global point expressed in stage model coordinates: subtract the world container's global origin
+## (which already includes the pan), then divide out the display scale. The inverse of _display_rect's
+## mapping (_display_rect is world*scale local to _world, so the pan is absorbed by _world's position).
 func _global_to_model(global_point: Vector2) -> Vector2:
-	var local := global_point - _stage_area.get_global_rect().position
+	var local := global_point - _world.global_position
 	return local / _DISPLAY_SCALE
 
 

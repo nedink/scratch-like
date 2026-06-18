@@ -8,6 +8,13 @@
 [sub_resource type="Theme" id="Theme_ui"]
 default_font_size = 11
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.109804, 0.109804, 0.14902, 1)
+content_margin_left = 6.0
+content_margin_top = 6.0
+content_margin_right = 6.0
+content_margin_bottom = 6.0
+
 [node name="Editor" type="Control" unique_id=1899586967]
 layout_mode = 3
 anchors_preset = 15
@@ -36,81 +43,85 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 4
 
-[node name="Bar" type="HBoxContainer" parent="Page" unique_id=1721499136]
+[node name="BarPanel" type="PanelContainer" parent="Page" unique_id=1721499200]
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Bar" type="HBoxContainer" parent="Page/BarPanel" unique_id=1721499136]
 layout_mode = 2
 theme_override_constants/separation = 8
 
-[node name="Title" type="Label" parent="Page/Bar" unique_id=504235260]
+[node name="Title" type="Label" parent="Page/BarPanel/Bar" unique_id=504235260]
 unique_name_in_owner = true
 layout_mode = 2
 text = "scratch-like"
 
-[node name="SceneSelector" type="OptionButton" parent="Page/Bar" unique_id=566786400]
+[node name="SceneSelector" type="OptionButton" parent="Page/BarPanel/Bar" unique_id=566786400]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="AddSceneButton" type="Button" parent="Page/Bar" unique_id=566786401]
+[node name="AddSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786401]
 unique_name_in_owner = true
 layout_mode = 2
 text = "+ Scene"
 
-[node name="DelSceneButton" type="Button" parent="Page/Bar" unique_id=566786402]
+[node name="DelSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786402]
 unique_name_in_owner = true
 layout_mode = 2
 text = "- Scene"
 
-[node name="RenameSceneButton" type="Button" parent="Page/Bar" unique_id=566786403]
+[node name="RenameSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786403]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Rename Scene"
 
-[node name="BarSep" type="VSeparator" parent="Page/Bar" unique_id=566786404]
+[node name="BarSep" type="VSeparator" parent="Page/BarPanel/Bar" unique_id=566786404]
 layout_mode = 2
 
-[node name="SpriteSelector" type="OptionButton" parent="Page/Bar" unique_id=1853098916]
+[node name="SpriteSelector" type="OptionButton" parent="Page/BarPanel/Bar" unique_id=1853098916]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="AddSpriteButton" type="Button" parent="Page/Bar" unique_id=1458511911]
+[node name="AddSpriteButton" type="Button" parent="Page/BarPanel/Bar" unique_id=1458511911]
 unique_name_in_owner = true
 layout_mode = 2
 text = "+ Sprite"
 
-[node name="DelSpriteButton" type="Button" parent="Page/Bar" unique_id=155060642]
+[node name="DelSpriteButton" type="Button" parent="Page/BarPanel/Bar" unique_id=155060642]
 unique_name_in_owner = true
 layout_mode = 2
 text = "- Sprite"
 
-[node name="RenameSpriteButton" type="Button" parent="Page/Bar" unique_id=1458511912]
+[node name="RenameSpriteButton" type="Button" parent="Page/BarPanel/Bar" unique_id=1458511912]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Rename Sprite"
 
-[node name="ViewToggle" type="Button" parent="Page/Bar" unique_id=1458511913]
+[node name="ViewToggle" type="Button" parent="Page/BarPanel/Bar" unique_id=1458511913]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Stage"
 
-[node name="Spacer" type="Control" parent="Page/Bar" unique_id=1330330019]
+[node name="Spacer" type="Control" parent="Page/BarPanel/Bar" unique_id=1330330019]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="NewButton" type="Button" parent="Page/Bar" unique_id=1782081314]
+[node name="NewButton" type="Button" parent="Page/BarPanel/Bar" unique_id=1782081314]
 unique_name_in_owner = true
 layout_mode = 2
 text = "NEW"
 
-[node name="OpenButton" type="Button" parent="Page/Bar" unique_id=307340559]
+[node name="OpenButton" type="Button" parent="Page/BarPanel/Bar" unique_id=307340559]
 unique_name_in_owner = true
 layout_mode = 2
 text = "OPEN"
 
-[node name="SaveButton" type="Button" parent="Page/Bar" unique_id=245657938]
+[node name="SaveButton" type="Button" parent="Page/BarPanel/Bar" unique_id=245657938]
 unique_name_in_owner = true
 layout_mode = 2
 text = "SAVE"
 
-[node name="RunButton" type="Button" parent="Page/Bar" unique_id=348307656]
+[node name="RunButton" type="Button" parent="Page/BarPanel/Bar" unique_id=348307656]
 unique_name_in_owner = true
 layout_mode = 2
 text = "RUN"
@@ -158,92 +169,104 @@ size_flags_horizontal = 3
 size_flags_vertical = 3
 script = ExtResource("4_stage")
 
-[node name="Inspector" type="VBoxContainer" parent="Page/Workspace/StageContainer" unique_id=566786305]
-custom_minimum_size = Vector2(240, 0)
+[node name="InspectorPanel" type="PanelContainer" parent="Page/Workspace/StageContainer" unique_id=566786350]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="Inspector" type="VBoxContainer" parent="Page/Workspace/StageContainer/InspectorPanel" unique_id=566786305]
 layout_mode = 2
 theme_override_constants/separation = 6
 
-[node name="InspName" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786306]
+[node name="InspName" type="Label" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786306]
 unique_name_in_owner = true
 layout_mode = 2
 text = "Sprite:"
 
-[node name="InspX" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786307]
+[node name="InspX" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786307]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -2000.0
 max_value = 2000.0
 prefix = "x"
 
-[node name="InspY" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786308]
+[node name="InspY" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786308]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = -2000.0
 max_value = 2000.0
 prefix = "y"
 
-[node name="InspW" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786309]
+[node name="InspW" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786309]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 2000.0
 prefix = "w"
 
-[node name="InspH" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786310]
+[node name="InspH" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786310]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 2000.0
 prefix = "h"
 
-[node name="InspColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786311]
+[node name="InspColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786311]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 text = "Colour"
 
-[node name="StageSep" type="HSeparator" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786312]
+[node name="StageSep" type="HSeparator" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786312]
 layout_mode = 2
 
-[node name="StageSettingsLabel" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786313]
+[node name="StageSettingsLabel" type="Label" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786313]
 layout_mode = 2
 text = "Stage"
 
-[node name="BgColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786314]
+[node name="BgColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786314]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 text = "Background"
 
-[node name="GridShow" type="CheckBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786315]
+[node name="GridShow" type="CheckBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786315]
 unique_name_in_owner = true
 layout_mode = 2
 button_pressed = true
 text = "Show grid"
 
-[node name="GridSnap" type="CheckBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786316]
+[node name="GridSnap" type="CheckBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786316]
 unique_name_in_owner = true
 layout_mode = 2
 button_pressed = true
 text = "Snap to grid"
 
-[node name="GridColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786317]
+[node name="GridColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786317]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 text = "Grid colour"
 color = Color(0.529, 0.808, 0.98, 0.35)
 
-[node name="GridStepLabel" type="Label" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786318]
+[node name="GridStepLabel" type="Label" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786318]
 layout_mode = 2
 text = "Grid step"
 
-[node name="GridStep" type="SpinBox" parent="Page/Workspace/StageContainer/Inspector" unique_id=566786319]
+[node name="GridStep" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786319]
 unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 64.0
 value = 8.0
+
+[node name="ViewSep" type="HSeparator" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786320]
+layout_mode = 2
+
+[node name="RecenterButton" type="Button" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786321]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Recenter view"
 
 [node name="VarDialog" type="ConfirmationDialog" parent="." unique_id=300687861]
 unique_name_in_owner = true

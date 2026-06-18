@@ -118,6 +118,9 @@ var _scene: int = 0
 @onready var _grid_color: ColorPickerButton = %GridColor
 @onready var _grid_step: SpinBox = %GridStep
 
+## The stage view's "Recenter view" button (M37) — re-frames the pannable world on the screen region.
+@onready var _recenter_button: Button = %RecenterButton
+
 ## The project's stage background colour as a hex string (M27) — a real project property, the
 ## stage-level counterpart of _scripts / _variables. Seeded from PongScripts.background(), edited via
 ## the inspector's Background picker (_on_insp_bg_color), saved under a top-level "background" key, and
@@ -305,6 +308,8 @@ func _ready() -> void:
 	_grid_snap.toggled.connect(_on_grid_snap)
 	_grid_color.color_changed.connect(_on_grid_color)
 	_grid_step.value_changed.connect(_on_grid_step_changed)
+	# Recenter view (M37): re-frame the pannable stage world on the screen region.
+	_recenter_button.pressed.connect(_stage_view.recenter)
 
 	# Wire the scene's dialogs: their confirmed signal to the handler, and Enter in the text
 	# field to confirm (register_text_enter, matching Scratch's quick flow). The delete dialog
@@ -1365,6 +1370,11 @@ func _update_title() -> void:
 func _on_run() -> void:
 	# Fold the active scene's edits back into the scene list (M33), so `_scenes` is fully current.
 	_persist_current_scene()
+	# Auto-save before launching: if the project is bound to a file, write the latest edits to it so
+	# RUN never plays a version that differs from what's on disk. The unsaved in-code demo has no bound
+	# path, so there's nowhere to write — it just runs (SAVE it under a name first to persist edits).
+	if _current_path != "":
+		_write_project(_current_path)
 	# Hand the whole **scene list** over (M34): every stage the project holds, each carrying its own
 	# sprites (geometry + scripts) / variables / background / grid. The runtime now carries all scenes
 	# (not just one) so `switch_scene` / `next_scene` can rebuild for a different one at play time;

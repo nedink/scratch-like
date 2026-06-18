@@ -105,6 +105,10 @@ func _register_handlers() -> void:
 		"call": _on_call,
 		"switch_scene": _on_switch_scene,
 		"next_scene": _on_next_scene,
+		"set_camera": _on_set_camera,
+		"change_camera": _on_change_camera,
+		"camera_follow": _on_camera_follow,
+		"camera_stop_following": _on_camera_stop_following,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
@@ -546,6 +550,33 @@ func _on_switch_scene(block: Dictionary) -> void:
 ## Like switch_scene, the Stage carries it out (go_to_next_scene) by reloading the game on that scene.
 func _on_next_scene(_block: Dictionary) -> void:
 	_stage.go_to_next_scene()
+
+
+# --- Camera (Milestone 37) -------------------------------------------------
+
+## set_camera: scroll the view so its centre shows world point (x, y) — the same coordinate space
+## sprites live in. The Stage owns the Camera2D; it also clears any active follow so a manual move
+## takes control (camera_follow / camera_stop_following manage tracking).
+func _on_set_camera(block: Dictionary) -> void:
+	_stage.set_camera(float(_value(block, "x")), float(_value(block, "y")))
+
+
+## change_camera: scroll the view by (dx, dy) relative to where it is now. Like set_camera it stops
+## following first (a relative move is manual control).
+func _on_change_camera(block: Dictionary) -> void:
+	_stage.move_camera(float(_value(block, "dx")), float(_value(block, "dy")))
+
+
+## camera_follow: track the named sprite — the Stage keeps the view centred on it each frame. An
+## unknown name warns + no-ops there (the block's dropdown lists real sprites, so only a stale
+## hand-edited name hits this).
+func _on_camera_follow(block: Dictionary) -> void:
+	_stage.camera_follow(String(_value(block, "name")))
+
+
+## camera_stop_following: release tracking; the camera holds wherever it currently is.
+func _on_camera_stop_following(_block: Dictionary) -> void:
+	_stage.camera_stop_following()
 
 
 # --- Helpers ---------------------------------------------------------------

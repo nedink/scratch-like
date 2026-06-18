@@ -5,26 +5,64 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 36 — curved (convex) paddle bounce in the demo
+## Current state: Milestone 37 — stage-editor world view, panning, and camera blocks
 
-**Goal of this milestone:** make the Pong paddles deflect the ball as if they were **convex** (bulging
-toward the centre of the playfield) — the classic arcade feel where *where* the ball strikes the paddle
-sets the rebound angle: a hit at the paddle's centre goes straight back, a hit toward an end deflects
-steeply toward that end. It is a **demo-only** follow-on to M35: a pure
-[`PongScripts`](scripts/pong_scripts.gd) edit using **only existing opcodes** — **no new opcode, no
-block-data-shape change, no runtime change, no editor change** — that rides `export_script()` →
-persistence/RUN exactly like M35's ball rewrite.
+**Goal of this milestone:** make the **stage editor show the whole game world** (not just the 480×352
+screen) so off-screen sprites are visible and editable, add **panning** + a **Recenter** button + a
+**screen-boundary guide line** + **opaque panels** framing the chrome, and add a **camera block group**
+(movement + tracking) so scripts can scroll the runtime view. Three layers:
 
-The bounce angle needs the paddle's centre y, but the M35 `y_position` reporter reads the **running**
-sprite (the ball can't read another sprite's position). So each paddle **publishes its centre y into a
-global** every tick (`set left_paddle_y / right_paddle_y to (y position)` in
-[`PongScripts._paddle`](scripts/pong_scripts.gd) — two new global variables), and the ball reads that
-relay: it offsets its own `y_position` from the paddle's relayed y and aims off straight-back by
-`offset × PADDLE_BOUNCE_CURVE` ([`_paddle_bounce_dir`](scripts/pong_scripts.gd)) — **LEFT** paddle →
-`point in direction (90 + offset×curve)`, **RIGHT** → `(270 − offset×curve)`. M35's sign-gate (only
-flip when heading into the paddle) and `go_to` nudge are kept; the gated angle range
-(`90 ± ~50°` / `270 ± ~50°`) stays on the correct side of the gate, so the ball can't double-flip into a
-stick. See [Curved (convex) paddle bounce (M36)](#curved-convex-paddle-bounce-m36).
+1. **Stage editor becomes a pannable window onto the world** ([`StageView`](scripts/stage_view.gd)).
+   Through M36 the stage view clipped everything to a centred 480×352 panel, so the Announcer (parked at
+   -400,-400) and anything off-screen was invisible. M37 restructures it into a `_world` container
+   (positioned at a `_pan` offset, **not clipped**) holding the **screen region** ([`_screen_panel`](scripts/stage_view.gd)
+   — the project background fill + a bright **guide-line border** marking the playable 480×352) and the
+   sprite `_layer` (sprites/overlay over the surrounding world). **Drag empty background to pan**
+   (a new `{mode:"pan"}` branch in [`_input`](scripts/stage_view.gd), guarded to presses inside our own
+   rect so the inspector still falls through; the `IDLE→PENDING→DRAGGING` spine and sprite drag/resize
+   are unchanged), and a **Recenter view** button ([`recenter`](scripts/stage_view.gd)) re-frames on the
+   screen. A dark `_backdrop` fills the out-of-bounds area. The pan is absorbed by `_world`'s position,
+   so `_display_rect` and the child-rect hit-tests need no pan term — only [`_global_to_model`](scripts/stage_view.gd)
+   gained it (via `_world.global_position`).
+
+2. **A CAMERA block group** (4 new opcodes, [`block_view.gd`](scripts/block_view.gd)) — `set camera to
+   x: {x} y: {y}`, `change camera by x: {dx} y: {dy}`, `camera follow {name}` (a sprites dropdown), and
+   `camera stop following`. Each is the usual one-`_OPCODES`-entry + one-interpreter-handler step
+   ([`_on_set_camera`](scripts/interpreter.gd) / [`_on_change_camera`](scripts/interpreter.gd) /
+   [`_on_camera_follow`](scripts/interpreter.gd) / [`_on_camera_stop_following`](scripts/interpreter.gd)),
+   all plain `{opcode, inputs}` statements — **no block-data-shape change**, so persistence (M22) carries
+   them untouched. New slate-teal `"camera"` category.
+
+3. **The runtime camera** ([`Stage`](scripts/stage.gd)). `_ready` adds a `Camera2D` (`_camera`) centred
+   at (240,176) and `make_current()`s it — at that position the view is **identical** to the old
+   no-camera transform, so a project with no camera blocks renders exactly as before. The background
+   `ColorRect` moves onto a `CanvasLayer(layer -1)` so the backdrop stays **screen-fixed** while the
+   camera pans (a `CanvasLayer` isn't transformed by a `Camera2D`). `_process` keeps the camera on the
+   followed sprite each frame. The blocks call [`set_camera`](scripts/stage.gd) /
+   [`move_camera`](scripts/stage.gd) / [`camera_follow`](scripts/stage.gd) /
+   [`camera_stop_following`](scripts/stage.gd); manual set/move clears any follow (manual control wins).
+   **Camera coordinates equal sprite coordinates** — the world point shown at the screen centre.
+
+The chrome change is editor-only: [`editor.tscn`](editor.tscn) wraps the top **Bar** and the right
+**Inspector** in opaque-stylebox `PanelContainer`s (`BarPanel` / `InspectorPanel`; all the inner
+widgets keep `unique_name_in_owner`, so [`editor.gd`](scripts/editor.gd)'s `%Name` lookups are
+unchanged) and adds a `%RecenterButton` wired in `_ready` to `_stage_view.recenter`. See
+[Stage-editor world view + camera blocks (M37)](#stage-editor-world-view--camera-blocks-m37).
+
+---
+
+For context, the M36 mechanics this builds on:
+
+**Curved (convex) paddle bounce in the demo (M36).** Made the Pong paddles deflect the ball as if they
+were **convex** (bulging toward the centre): the rebound angle tracks *where* the ball strikes — centre
+→ straight back, an end → steep deflection toward that end. A **demo-only**, existing-opcodes-only edit
+to [`PongScripts`](scripts/pong_scripts.gd): each paddle **publishes its centre y into a global** every
+tick (`set left_paddle_y / right_paddle_y to (y position)` in [`_paddle`](scripts/pong_scripts.gd) — two
+new globals), and the ball offsets its own `y_position` from the paddle's relayed y and aims off
+straight-back by `offset × PADDLE_BOUNCE_CURVE` ([`_paddle_bounce_dir`](scripts/pong_scripts.gd)):
+**LEFT** → `(90 + offset×curve)`, **RIGHT** → `(270 − offset×curve)`. M35's sign-gate + `go_to` nudge
+are kept; the gated angle range (`90/270 ± ~50°`) stays heading-away so the ball can't double-flip into
+a stick. See [Curved (convex) paddle bounce (M36)](#curved-convex-paddle-bounce-m36).
 
 ---
 
@@ -611,6 +649,18 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    it on the stage won't change where it ends up in the demo — the block wins, as in Scratch; the stage
    position is the sprite's **starting** spot, which visibly matters for a fresh **+ Sprite** that has no
    `go_to`. (No on-stage move/resize is saved as *layout* — it's the model geometry, which RUN/SAVE carry.)
+   **The stage view now shows the whole game world** (M37), not just the screen: a sprite parked
+   off-screen (the Announcer) is visible and selectable, and the playable **480×352 screen is outlined
+   with a bright guide line** (filled with the background colour, grid inside it). **Drag the empty
+   background to pan** the world around (sprite drag/resize are unchanged — only empty space pans), and
+   click **Recenter view** in the inspector to re-frame on the screen. The top bar and the right
+   inspector sit on **opaque panels** so they read as distinct from the stage.
+   **Scroll the runtime view with camera blocks** (M37) in the palette's **CAMERA** group: **`set camera
+   to x: y:`** centres the view on a world point (camera coordinates are the same as sprite coordinates),
+   **`change camera by x: y:`** scrolls it relative to where it is, **`camera follow {sprite}`** keeps the
+   view centred on a sprite each frame, and **`camera stop following`** releases it. Wire e.g.
+   `when_flag_clicked → forever → camera follow {Ball}` and at RUN the view scrolls to track the ball. A
+   project that uses no camera blocks plays exactly as before (the camera sits at the default centre).
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
    version, or the stock script if you didn't touch it. Press **ESC** in-game to
@@ -1977,15 +2027,15 @@ demo-script rewrite that rides `export_script()` → persistence/RUN untouched.
 	`point_in_direction` wraps the result, so a negative angle is fine.
   - **Gates the flip on the motion's sign** via an inner `if`, reproducing `_bounce()`'s `absf`
 	steering (force the component *away* from the surface, don't blindly negate): top reflects only
-    when heading up (`direction < 90 or direction > 270`), bottom only when heading down
-    (`90 < direction < 270`), LeftPaddle only when heading left (`direction > 180`), RightPaddle only
+	when heading up (`direction < 90 or direction > 270`), bottom only when heading down
+	(`90 < direction < 270`), LeftPaddle only when heading left (`direction > 180`), RightPaddle only
 	when heading right (`direction < 180`). So a re-trigger next frame can't double-flip the ball into
 	a stick — the load-bearing property `_bounce` guaranteed.
   - **Nudges** with a `go_to` — snap the centre clear so the ball never lingers inside the surface.
 	Edge bounds are the 8px-inset viewport (the ball's half-size; top `y = 8`, bottom `y = 344` for the
-    480×352 viewport), preserving x via `x_position`. The paddle clear-x is a **literal** off the
-    fixed rails (LeftPaddle right edge 40 + ball half 8 = `48`; RightPaddle left edge 440 − 8 = `432`),
-    preserving y via `y_position`.
+	480×352 viewport), preserving x via `x_position`. The paddle clear-x is a **literal** off the
+	fixed rails (LeftPaddle right edge 40 + ball half 8 = `48`; RightPaddle left edge 440 − 8 = `432`),
+	preserving y via `y_position`.
 - **Why this is "faithful" but not a general reimplementation.** In Pong every surface is cleanly
   horizontal or vertical, so `_bounce`'s runtime shallowest-overlap-axis choice collapses to a *known*
   axis per-`if`, and the paddle push-out (which `_bounce` computes from the live overlap) is a constant
@@ -1999,6 +2049,75 @@ demo-script rewrite that rides `export_script()` → persistence/RUN untouched.
 What this leaves deferred: a **general data-form bounce** (the trig + cross-sprite-geometry reporters
 above) and exposing **velocity as a first-class vector** (today motion is `direction` + a `speed`
 variable, not vx/vy).
+
+### Stage-editor world view + camera blocks (M37)
+
+Three additions, all built the project's usual way (one `_OPCODES` entry + one handler per new block;
+the stage view a pure editor-side change over the data-owned model):
+
+**1. The stage editor shows the whole world and pans.** Through M36 [`StageView`](scripts/stage_view.gd)
+drew a single centred 480×352 `Panel` (`_stage_area`) with `clip_contents = true`, so a sprite outside
+the screen — the Announcer at -400,-400, anything a camera would reveal — was invisible and
+unselectable. M37 restructures the node tree into a **pannable window onto the world**:
+
+- A dark `_backdrop` Panel fills the whole control (the out-of-bounds area).
+- A `_world` Control (no clip), positioned at `_pan` (display px), holds all world content. Because the
+  pan lives on `_world`'s position, the world→display mapping ([`_display_rect`](scripts/stage_view.gd)
+  = `world * _DISPLAY_SCALE`) and the child `get_global_rect()` hit-tests ([`_hit`](scripts/stage_view.gd))
+  are **unchanged** — the node tree carries the pan. Only [`_global_to_model`](scripts/stage_view.gd)
+  changed, to subtract `_world.global_position`.
+- `_screen_panel` (a child of `_world` at world (0,0), size 480×352·scale) is the **screen region**: the
+  project background fill plus a bright sky-blue **guide-line border** (the old `_stage_box`, re-pointed
+  here, so [`set_background`](scripts/stage_view.gd) still recolours it). It does **not** clip — the grid
+  ([`_GridLayer`](scripts/stage_view.gd)) is its child (a screen-space aid), while the sprite `_layer`
+  is a sibling under `_world` and may extend past the screen edge (the point of the world view).
+- **Pan by dragging empty background**: [`_input`](scripts/stage_view.gd)'s press handler, when `_hit`
+  is empty **and** the press is inside `get_global_rect()` (so a press on the inspector still falls
+  through), starts a `{mode:"pan"}` pending; past `DRAG_THRESHOLD` it becomes a `_drag_mode == "pan"`
+  drag that offsets `_pan` by the cursor delta ([`_update_pan`](scripts/stage_view.gd)). A plain
+  background click is a no-op. Sprite select / move / resize are untouched (they only start when `_hit`
+  is non-empty).
+- [`recenter`](scripts/stage_view.gd) sets `_pan` to centre the screen in the view — the initial framing
+  (called from [`set_model`](scripts/stage_view.gd) on entering Stage mode, and on `resized`) and what
+  the inspector's **Recenter view** button restores. `_render` re-asserts the current `_pan` after a
+  rebuild but **never recomputes it**, so a user pan survives a selection / inspector-edit re-render.
+
+**2. A CAMERA block group.** Four new statement opcodes in [`block_view.gd`](scripts/block_view.gd)'s
+`_OPCODES`, a new slate-teal `"camera"` category (in `_CATEGORY_COLORS` + `PALETTE_CATEGORY_ORDER`):
+`set_camera` (`set camera to x: {x} y: {y}`), `change_camera` (`change camera by x: {dx} y: {dy}`),
+`camera_follow` (`camera follow {name}`, a `data_enums: {name:"sprites"}` dropdown — the
+`touching_sprite?` "sprites" source, no new resolver needed), and `camera_stop_following`. The
+interpreter handlers ([`interpreter.gd`](scripts/interpreter.gd)) are one line each, delegating to the
+Stage exactly as `switch_scene` delegates to `go_to_scene_by_name`. Plain `{opcode, inputs}` dicts —
+**no block-data-shape change**, so persistence (M22) and RUN (M10) carry them untouched, and a pre-M37
+project still opens/runs.
+
+**3. The runtime camera.** [`Stage._ready`](scripts/stage.gd) creates a `Camera2D` (`_camera`) at the
+screen midpoint `Vector2(_GAME_SIZE) * 0.5` (240,176) and `make_current()`s it. At that position the
+viewport transform is **identical** to the old no-camera identity view (the screen shows world
+(0,0)-(480,352)), so a project with no camera blocks is visually unchanged. The background `ColorRect`
+moved onto a `CanvasLayer` (layer `-1`): a `CanvasLayer` is **not** transformed by a `Camera2D`, so the
+backdrop stays screen-fixed while the camera pans, and the negative layer keeps it behind the sprites.
+[`_process`](scripts/stage.gd) sets `_camera.position = _camera_follow.node.position` each frame when a
+follow target is set (instant tracking, on the render frame). The block-called methods —
+[`set_camera`](scripts/stage.gd) / [`move_camera`](scripts/stage.gd) (both clear `_camera_follow`, so a
+manual move takes control) / [`camera_follow`](scripts/stage.gd) (warn + no-op on an unknown name) /
+[`camera_stop_following`](scripts/stage.gd) — own the resolve + reload pattern the Stage already uses
+for scene navigation. **Camera coordinates equal sprite coordinates** (the world point shown at the
+screen centre), so `camera follow {Ball}` centres the ball and `set camera to x:_ y:_` centres on that
+world point.
+
+The chrome is editor-only: [`editor.tscn`](editor.tscn) wraps the top **Bar** and the right
+**Inspector** in opaque-stylebox `PanelContainer`s (`BarPanel` / `InspectorPanel`); every inner widget
+keeps `unique_name_in_owner`, so [`editor.gd`](scripts/editor.gd)'s `%Name` lookups are unaffected by
+the re-parent. The new `%RecenterButton` (in the inspector's Stage section) is wired in `_ready` to
+`_stage_view.recenter`.
+
+What this leaves deferred: a **camera in the editor's stage view** (the editor draws the *default*
+camera view — its screen guide — but doesn't preview a camera-block-scrolled view or let you set a
+camera start position; the camera is a pure runtime/blocks concept), **camera zoom** (movement +
+tracking only, per the milestone scope), and **screen-fixed HUD sprites** (a followed camera scrolls
+regular sprites including the HUDs; a "stick to screen" layer is a separate milestone).
 
 ### Curved (convex) paddle bounce (M36)
 
@@ -2039,6 +2158,13 @@ reporters) — M36's relay is a hand-built, Pong-specific stand-in for a real "o
 reporter, and the curve is position-only (no incoming-angle reflection off the curve).
 
 ## Opcodes implemented
+
+**M37 added four opcodes** — `set_camera`, `change_camera`, `camera_follow`, `camera_stop_following`
+(the CAMERA block group: scroll the runtime view). Each is the usual one-`_OPCODES`-entry + one-handler
+step, with no block-data-shape change; the Stage owns a `Camera2D` and carries them out. M37 also makes
+the **stage editor a pannable world view** (off-screen sprites visible, a screen-boundary guide line,
+drag-to-pan, a Recenter button) and frames the chrome in opaque panels — all pure editor/runtime view
+changes, no block-language change beyond the four camera opcodes.
 
 **M36 added no opcodes** — it is a pure **demo-script** change (the Pong paddles bounce the ball as a
 convex curve: each paddle relays its centre y into a global, and the ball aims its rebound off
@@ -2147,6 +2273,10 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `param` | reporter | `name` | read a custom-block parameter (M31), resolved against the active `call`'s frame; 0 + a warning if read outside a custom block. Value output |
 | `switch_scene` | statement | `name` | switch the running game to the scene named `name` (M34); the Stage relaunches on it. `{name}` is a dropdown of the project's scenes. Unknown name → warn + no-op. Ends the current scene's scripts |
 | `next_scene` | statement | — | advance to the next scene in the project's list (M34), wrapping past the last back to the first |
+| `set_camera` | statement | `x`, `y` | centre the runtime view on world point (x, y) (M37); camera coords are sprite coords. Clears any active follow |
+| `change_camera` | statement | `dx`, `dy` | scroll the runtime view by (dx, dy) from its current centre (M37); clears any active follow |
+| `camera_follow` | statement | `name` | track the named sprite — the camera re-centres on it each frame (M37). `{name}` is a sprites dropdown; unknown → warn + no-op |
+| `camera_stop_following` | statement | — | release camera tracking (M37); the camera holds its current position |
 
 > Note on `"bounce"`: the `point_in_direction "bounce"` sentinel and its `_bounce()`
 > implementation **remain in the runtime** as a supported opcode value (any saved or
@@ -2165,18 +2295,18 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); initial window 1280x720 fullscreen (M26) — the per-scene content-scale overrides in editor.gd/stage.gd take over from there (editor 960x540 logical, game a fixed 480x360 integer-snapped viewport)
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + scene selector + Add/Del/Rename scene buttons (M33) + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25) and the scene name + delete-scene dialogs (M33), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.)
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + scene selector + Add/Del/Rename scene buttons (M33) + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25) and the scene name + delete-scene dialogs (M33), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.) M37 wraps the top Bar and the right Inspector in opaque-stylebox PanelContainers (BarPanel/InspectorPanel — the inner widgets keep unique_name_in_owner, so editor.gd's %Name lookups are unchanged) and adds a RecenterButton in the inspector.
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures; that dialog also takes **parameters** (M31, _parse_params splits on commas/whitespace → the define's params list), and _custom_block_params_in re-derives each sprite's block→params map into BlockView.project_custom_block_params, so a call chip gets one arg slot per parameter and a param reporter can be dragged out of the define hat's prototype; renaming a define in place cascades the new name to its calls (M32, _on_custom_block_renamed re-derives the sprite's custom-block names after BlockCanvas rewrites them); owns the **scene (stage/level) model** too (M33) — _scenes is a list of {name,sprites,variables,background,grid} dicts, _scene the active index, seeded from PongScripts.scenes(); the working vars (_scripts/_variables/_background/_grid_settings) are the live editing surface for the active scene (_load_scene_into_working points them at _scenes[_scene]), persisted back via _persist_current_scene before each scene switch / SAVE / RUN; a top-bar scene selector + Add/Del/Rename Scene buttons manage the list (_load_scene/_add_scene_pressed/_rename_scene_pressed/_del_scene_pressed — a new scene gets one default placeholder sprite, delete refuses the last); persistence reshaped to {scenes,active} (_write_project), with a pre-M33 {scripts,variables,…} file wrapped into one "Scene 1" on OPEN (_read_project/_normalize_scene); runtime scene navigation (M34) — RUN now hands the Stage the **whole** scene list (Stage.project_scenes = _scenes + project_active = _scene, replacing the per-scene hand-off) so a switch_scene/next_scene block can rebuild for a different scene at play time; _scene_names feeds BlockView.project_scene_names (the switch_scene dropdown's options), re-pointed in _load_project_into_ui and on a scene rename (which now also rebuilds palette + refreshes canvas so the dropdown relabels — but does not cascade to existing switch_scene blocks, deferred)
-  stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it
+  stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it. M37 restructures it into a **pannable world view**: a _world container (positioned at _pan, not clipped) holds the screen region (_screen_panel — background fill + a bright guide-line border marking the 480x352 screen, grid inside it) and the sprite _layer, so off-screen sprites are visible; dragging empty background pans (a {mode:"pan"} branch in _input, guarded inside our rect; sprite drag/resize unchanged), recenter() re-frames on the screen (set_model/resized/Recenter button), and _render re-asserts but never recomputes _pan (so a pan survives a re-render)
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); _spawn_at/_pending_spawn spawn a fresh param-reporter copy when a define hat's prototype parameter pill is dragged (M31), confined to slots inside that function's body (_nearest_slot/_scoped_slots/_enclosing_define_body — also for an already-placed param grabbed out); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); an in-place define rename is detected in _commit_literal (the define_name-stamped field) and, after a uniqueness check (_other_define_named), deferred to _rename_custom_block_deferred which rewrites the sprite's calls + notifies the editor via on_custom_block_renamed (M32); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette; a call chip carries one args slot per the block's declared parameters (M31, project_custom_block_params), the drag re-minting the args dict from the chip's palette_params
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; runtime scene navigation (M34) — the switch_scene/next_scene opcodes in a new "scenes" category, switch_scene's {name} a data-scoped dropdown from project_scene_names (the editor's scene-name list, the scenes twin of project_sprites; _options_for resolves the "scenes" source); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); ESC returns to the editor (the inverse of editor.gd's RUN)
-  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload)
+  stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); runtime camera (M37) — _ready adds a Camera2D centred at (240,176) (= the no-camera identity view, so a project without camera blocks is unchanged) and puts the background ColorRect on a CanvasLayer(-1) so it stays screen-fixed while the camera pans; set_camera/move_camera/camera_follow/camera_stop_following move or track it (_process re-centres on the followed sprite each frame), called by the camera blocks; ESC returns to the editor (the inverse of editor.gd's RUN)
+  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload); camera (M37) — _on_set_camera/_on_change_camera/_on_camera_follow/_on_camera_stop_following delegate to the Stage's camera methods (the Stage owns the Camera2D)
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
   pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed; and the seed stage-level settings — background() (the backdrop hex) and grid() ({show,snap,color,step}, the stage editor's alignment grid), each a project property the editor seeds from here and persists in the .json (M27); and the seed **scene model** — scenes() (M33) bundles sprites()/variables()/background()/grid() into one stock scene "Scene 1", the project's starting (single) stage and the shape the editor's _scenes list seeds from
@@ -2272,6 +2402,15 @@ CLAUDE.md                  This file
 
 ## Deliberately deferred (to a later milestone)
 
+- **Camera: editor preview / start position, zoom, screen-fixed HUD** — **M37 delivered the camera**:
+  a CAMERA block group (`set camera`, `change camera`, `camera follow {sprite}`, `camera stop
+  following`) scrolls a runtime `Camera2D`, and the stage editor became a **pannable world view** (the
+  whole world visible, a screen-boundary guide line, drag-to-pan, a Recenter button, opaque chrome
+  panels). What's *still* deferred: the editor draws only the **default** camera view (its screen guide)
+  — there is no in-editor preview of a camera-block-scrolled view, and no UI to set a camera *start*
+  position (the camera is a pure runtime/blocks concept); **camera zoom** (movement + tracking only);
+  and **screen-fixed sprites** (a followed camera scrolls regular sprites including the HUDs — a
+  "stick to screen" layer is a separate milestone).
 - **Multiple stages / runtime scene navigation** — **M33 delivered the multi-scene model**: a project
   holds several independent stages (scenes / levels), each `{name, sprites, variables, background,
   grid}`, switchable at edit time via a top-bar scene selector + Add/Delete/Rename Scene, with RUN

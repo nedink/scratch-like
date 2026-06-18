@@ -71,6 +71,17 @@ static var project_active: int = 0
 ## Set by _active_scene during _ready (clamped from project_active).
 var _active: int = 0
 
+## The runtime camera (M37). A Camera2D centred at the screen midpoint (240,176) by default, which
+## reproduces the no-camera identity view exactly — so a project with no camera blocks renders as
+## before. The camera blocks (set_camera / change_camera / camera_follow / camera_stop_following)
+## scroll it. Its `position` is the world point shown at screen centre, so camera coordinates are the
+## same space sprite coordinates live in.
+var _camera: Camera2D
+
+## The sprite the camera tracks (M37), or null when not following. While set, _process keeps the
+## camera centred on it each frame. set_camera / move_camera clear it (manual control wins).
+var _camera_follow: Target = null
+
 
 func _ready() -> void:
 	# Re-impose the runtime's fixed logical resolution (M26). The project window is now sized for
@@ -89,16 +100,20 @@ func _ready() -> void:
 	# with a different project_active to build a different one (see go_to_scene_by_name / go_to_next_scene).
 	var scene := _active_scene()
 
-	# Paint the stage background (M27): a full-viewport ColorRect added *first* so it draws behind
-	# every sprite (2D child order is draw order). Its colour is the active scene's background hex. The
-	# 480x352 logical viewport (just imposed above) is the space sprite coordinates live in, so size it
-	# to _GAME_SIZE.
+	# Paint the stage background (M27): a full-viewport ColorRect. It sits on a CanvasLayer at layer -1
+	# (M37) so it stays **screen-fixed** when the camera pans (a CanvasLayer is not transformed by a
+	# Camera2D) and draws *behind* the sprites (the negative layer). Its colour is the active scene's
+	# background hex; the 480x352 logical viewport is the space sprite coordinates live in, so size it to
+	# _GAME_SIZE.
+	var bg_layer := CanvasLayer.new()
+	bg_layer.layer = -1
+	add_child(bg_layer)
 	var background := ColorRect.new()
 	background.color = Color(String(scene["background"]))
 	background.position = Vector2.ZERO
 	background.size = Vector2(_GAME_SIZE)
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(background)
+	bg_layer.add_child(background)
 
 	_font = PixelFont.new()
 
@@ -117,6 +132,14 @@ func _ready() -> void:
 	var model: Array = scene["sprites"]
 	for s in model:
 		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])))
+
+	# The runtime camera (M37). Centred at the screen midpoint, so by default the view is identical to
+	# the old no-camera transform (the screen shows world (0,0)-(480,352)). make_current() routes the
+	# viewport through it; the camera blocks then scroll it.
+	_camera = Camera2D.new()
+	_camera.position = Vector2(_GAME_SIZE) * 0.5
+	add_child(_camera)
+	_camera.make_current()
 
 	# Seed every variable from the one project model (Milestone 18) — the same declaration
 	# the editor reads its `{name}` dropdown options from, so the two can no longer drift.
@@ -154,6 +177,13 @@ func _ready() -> void:
 	# script is simply the one in its entry.
 	for s in model:
 		_run(find_target(String(s["name"])), s["script"])
+
+
+## Keep the camera on the followed sprite each frame (M37). A no-op until `camera_follow` sets a
+## target. Runs on the render frame (not the physics tick the scripts use) so tracking is smooth.
+func _process(_delta: float) -> void:
+	if _camera_follow != null and is_instance_valid(_camera_follow.node):
+		_camera.position = _camera_follow.node.position
 
 
 ## ESC returns to the editor (the inverse of RUN's editor→game hand-off). Unhandled-input,
@@ -228,6 +258,39 @@ func _change_to_scene(index: int) -> void:
 	project_active = index
 	stop_all()
 	get_tree().change_scene_to_file(_GAME_SCENE)
+
+
+# --- Camera (Milestone 37) -------------------------------------------------
+
+## set_camera: centre the view on world point (x, y). Clears any follow so the manual position holds
+## (camera_follow / camera_stop_following manage tracking).
+func set_camera(x: float, y: float) -> void:
+	_camera_follow = null
+	if _camera:
+		_camera.position = Vector2(x, y)
+
+
+## change_camera: scroll the view by (dx, dy) from its current centre. Also stops following (a manual
+## move is manual control).
+func move_camera(dx: float, dy: float) -> void:
+	_camera_follow = null
+	if _camera:
+		_camera.position += Vector2(dx, dy)
+
+
+## camera_follow: track the named sprite — _process re-centres on it each frame. Unknown name warns
+## and leaves the camera where it is (the block's dropdown lists real sprites).
+func camera_follow(target_name: String) -> void:
+	var target := find_target(target_name)
+	if target == null:
+		push_warning("Stage: camera follow unknown sprite '%s'" % target_name)
+		return
+	_camera_follow = target
+
+
+## camera_stop_following: release tracking; the camera holds its current position.
+func camera_stop_following() -> void:
+	_camera_follow = null
 
 
 ## Look up another target by the name it was registered under. Returns null if
