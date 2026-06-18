@@ -5,9 +5,32 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 35 — motion-state reporters; the demo's bounce as blocks
+## Current state: Milestone 36 — curved (convex) paddle bounce in the demo
 
-**Goal of this milestone:** pay off the deferral the `"bounce"` note carried for the project's whole
+**Goal of this milestone:** make the Pong paddles deflect the ball as if they were **convex** (bulging
+toward the centre of the playfield) — the classic arcade feel where *where* the ball strikes the paddle
+sets the rebound angle: a hit at the paddle's centre goes straight back, a hit toward an end deflects
+steeply toward that end. It is a **demo-only** follow-on to M35: a pure
+[`PongScripts`](scripts/pong_scripts.gd) edit using **only existing opcodes** — **no new opcode, no
+block-data-shape change, no runtime change, no editor change** — that rides `export_script()` →
+persistence/RUN exactly like M35's ball rewrite.
+
+The bounce angle needs the paddle's centre y, but the M35 `y_position` reporter reads the **running**
+sprite (the ball can't read another sprite's position). So each paddle **publishes its centre y into a
+global** every tick (`set left_paddle_y / right_paddle_y to (y position)` in
+[`PongScripts._paddle`](scripts/pong_scripts.gd) — two new global variables), and the ball reads that
+relay: it offsets its own `y_position` from the paddle's relayed y and aims off straight-back by
+`offset × PADDLE_BOUNCE_CURVE` ([`_paddle_bounce_dir`](scripts/pong_scripts.gd)) — **LEFT** paddle →
+`point in direction (90 + offset×curve)`, **RIGHT** → `(270 − offset×curve)`. M35's sign-gate (only
+flip when heading into the paddle) and `go_to` nudge are kept; the gated angle range
+(`90 ± ~50°` / `270 ± ~50°`) stays on the correct side of the gate, so the ball can't double-flip into a
+stick. See [Curved (convex) paddle bounce (M36)](#curved-convex-paddle-bounce-m36).
+
+---
+
+For context, the M35 mechanics this builds on:
+
+**Motion-state reporters; the demo's bounce as blocks (M35).** Paid off the deferral the `"bounce"` note carried for the project's whole
 life — *expose the sprite's velocity/position as reporters* so a reflection can be expressed as **data**
 instead of the `point_in_direction "bounce"` runtime sentinel. M35 adds three value reporters —
 **`direction`**, **`x_position`**, **`y_position`** (motion category, no inputs; each reads the running
@@ -594,7 +617,10 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    return to the editor (the inverse of RUN's editor→game hand-off). With no edits it
    plays the M7 Pong exactly as before:
    A yellow ball serves from the center at a **randomized angle** and bounces off
-   the top/bottom walls and both paddles. **Player 1 = W/S**, **Player 2 = ↑/↓**.
+   the top/bottom walls and both paddles. The paddles are **convex (curved toward the
+   centre)** (M36): hit the ball with the middle of a paddle and it goes nearly straight
+   back, hit it with an end and it deflects steeply toward that end — so you aim by
+   positioning the paddle. **Player 1 = W/S**, **Player 2 = ↑/↓**.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
    that scored. Each point increments that player's **numeric score readout** (a
    single digit, top-left for P1, top-right for P2). **First to `ROUND_POINTS` (5)
@@ -1974,7 +2000,51 @@ What this leaves deferred: a **general data-form bounce** (the trig + cross-spri
 above) and exposing **velocity as a first-class vector** (today motion is `direction` + a `speed`
 variable, not vx/vy).
 
+### Curved (convex) paddle bounce (M36)
+
+A **demo-only** follow-on to M35: the Pong paddles now deflect the ball as if they were **convex**
+(bulging toward the centre of the playfield) — the arcade-Pong feel where the contact point sets the
+rebound angle, not a flat mirror. It is a pure [`PongScripts`](scripts/pong_scripts.gd) edit using
+**only existing opcodes** — **no new opcode, no block-data-shape change, no runtime change, no editor
+change** — so it rides `export_script()` → persistence/RUN like M35's ball rewrite.
+
+- **The physics.** A flat paddle (M35: `360 - direction`) mirrors the incoming angle. A convex paddle's
+  surface normal tilts *away* from centre as you move toward an end, so the outgoing angle should depend
+  on **where the ball struck**: centre → straight back (`90` right / `270` left), toward an end →
+  steep deflection toward that end. So M36 sets the rebound direction **absolutely** from the contact
+  offset, ignoring the incoming angle (the classic-Pong simplification — a true reflection off a curve
+  would compose normal-angle with incoming, but the position-only rule is what players read as "curved").
+- **Cross-sprite position via a global relay.** The angle needs the paddle's centre y, but M35's
+  [`y_position`](scripts/interpreter.gd) reports the **running** sprite — the ball can't read another
+  sprite's position, and M36 adds no cross-sprite reporter. So each paddle **publishes its own centre y
+  into a global** every tick: [`PongScripts._paddle`](scripts/pong_scripts.gd) gained a `y_var` arg and a
+  leading `set {y_var} to (y position)` in its `forever`, writing the two new globals `left_paddle_y` /
+  `right_paddle_y` ([`variables()`](scripts/pong_scripts.gd)). A global is how one sprite tells another
+  where it is — the same pattern a user would reach for in the editor.
+- **The ball reads the offset.** [`_paddle_bounce_dir(paddle_y_var)`](scripts/pong_scripts.gd) is the
+  deflection as an expression (like the serve angles): `(ball y_position − paddle's relayed y) ×
+  PADDLE_BOUNCE_CURVE`. Screen y grows downward, so a hit **above** the paddle centre is a *negative*
+  offset. The two paddle `if`s feed it to `point_in_direction`: **LEFT** → `90 + offset×curve` (negative
+  offset → up-right, positive → down-right), **RIGHT** → `270 − offset×curve` (the mirror).
+  `PADDLE_BOUNCE_CURVE = 0.9` (degrees per pixel) gives ~`±50°` at the extreme reach (paddle half-height
+  48 + ball half 8 = 56px), so the ball never rebounds vertically.
+- **Anti-stick preserved.** M35's inner sign-gate (`if direction > 180` left / `< 180` right — only flip
+  when heading **into** the paddle) and the `go_to` nudge (snap the centre clear of the rail, `48` / `432`)
+  are unchanged. The gated angle range stays strictly on the heading-*away* side (`90 ± ~50° ⊂ (0,180)`,
+  `270 ± ~50° ⊂ (180,360)`), so a re-trigger next frame while still overlapping can't double-flip the
+  ball into a stick — the load-bearing property M35 inherited from `_bounce`'s `absf` steering.
+
+What this leaves deferred: the same **general data-form bounce** M35 named (trig + cross-sprite-geometry
+reporters) — M36's relay is a hand-built, Pong-specific stand-in for a real "other sprite's position"
+reporter, and the curve is position-only (no incoming-angle reflection off the curve).
+
 ## Opcodes implemented
+
+**M36 added no opcodes** — it is a pure **demo-script** change (the Pong paddles bounce the ball as a
+convex curve: each paddle relays its centre y into a global, and the ball aims its rebound off
+straight-back by its contact offset × `PADDLE_BOUNCE_CURVE`), built entirely from existing blocks in
+[`PongScripts`](scripts/pong_scripts.gd) — touching neither the block language nor the runtime; the
+notes below are kept as written for earlier milestones.
 
 **M35 added three opcodes** — `direction`, `x_position`, `y_position` (motion-state reporters). Each is
 the usual one-`_OPCODES`-entry + one-interpreter-handler step, with no block-data-shape change and no
@@ -2084,11 +2154,12 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 > M35 added `direction`/`x_position`/`y_position` reporters and expressed the ball's
 > bounce as blocks (see [Motion-state reporters — bounce as blocks (M35)](#motion-state-reporters--bounce-as-blocks-m35)).
 > That decomposition is faithful to `_bounce()`'s observable behaviour *for Pong*
-> (sign-gated reflection reproducing the anti-stick steering, plus a `go_to` nudge),
-> where every surface is cleanly horizontal or vertical so the shallowest-overlap-axis
-> logic collapses to a known axis per-`if`. A **general** data-form bounce (arbitrary
-> angles, dynamic overlap, cross-sprite geometry) would still need trig and other-sprite
-> geometry reporters, and stays deferred — which is why `_bounce()` is kept.
+> (the walls reflect flat; the paddles became a **convex curved** bounce in M36 — the
+> rebound angle tracks the contact point — plus the sign-gated anti-stick steering and a
+> `go_to` nudge), where every surface is cleanly horizontal or vertical so the
+> shallowest-overlap-axis logic collapses to a known axis per-`if`. A **general** data-form
+> bounce (arbitrary angles, dynamic overlap, cross-sprite geometry) would still need trig
+> and other-sprite geometry reporters, and stays deferred — which is why `_bounce()` is kept.
 
 ## File layout
 

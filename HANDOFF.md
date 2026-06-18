@@ -12,27 +12,24 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M35 — **motion-state reporters + bounce decomposed in the demo**. Three new
-  **value reporters** (`direction`, `x_position`, `y_position`, in the motion category) expose the
-  running sprite's facing/centre as data — the "sprites expose velocity/position as reporters" the
-  `_bounce` deferral named. The Pong **ball's bounce is now expressed as blocks** instead of the
-  `point_in_direction "bounce"` runtime sentinel: each of the 4 bounce `if`s reflects direction
-  (`180 - direction` off the horizontal top/bottom edges, `360 - direction` off the vertical paddles),
-  **gated by an inner `if` on the motion's sign** (only flip when heading into the surface — reproducing
-  `_bounce`'s `absf` anti-stick steering), plus a `go_to` **nudge** that snaps the centre clear (edge
-  bounds = 8px-inset viewport; paddle clear-x literals 48 / 432 from the fixed rails). Adds **three
-  opcodes**, no block-data-shape change, no other runtime change. `_bounce()` + the `"bounce"` sentinel
-  **stay in the runtime** (still a supported opcode value — saved/hand-written scripts using it work);
-  the demo just no longer uses it.
-- **Faithfulness caveat:** the decomposition matches `_bounce`'s *observable* behaviour for Pong (where
-  every surface is cleanly horizontal or vertical, so the shallow-overlap-axis logic collapses to a known
-  axis per-`if`, and the paddle push-out is a constant). It is **not** a general reimplementation of
-  `_bounce` (no trig reporters, no cross-sprite geometry) — a sprite at an arbitrary angle/overlap isn't
-  covered. That fuller version stays deferred.
-- **Git:** M35 code complete, **uncommitted** — F5-verify first. The stray untracked files
+- **Milestone in flight:** M36 — **curved (convex) paddle bounce in the demo**. The Pong paddles now
+  deflect the ball as if they bulge toward the centre of the playfield: the rebound angle tracks **where**
+  the ball strikes — centre → straight back, an end → steep deflection toward that end (classic arcade
+  Pong). **Demo-only** follow-on to M35: a pure [`PongScripts`](scripts/pong_scripts.gd) edit using
+  **only existing opcodes** — **no new opcode, no block-data-shape change, no runtime change, no editor
+  change**. Mechanism: each paddle **publishes its centre y into a global** every tick (`set
+  left_paddle_y / right_paddle_y to (y position)` in `_paddle`; two new globals in `variables()`),
+  because M35's `y_position` reads the *running* sprite (the ball can't read another sprite directly).
+  The ball reads the offset of its own y from the paddle's relayed y and aims off straight-back by
+  `offset × PADDLE_BOUNCE_CURVE` (0.9 °/px): LEFT → `90 + offset×curve`, RIGHT → `270 − offset×curve`.
+  M35's sign-gate + `go_to` nudge are kept; the gated angle range (`90/270 ± ~50°`) stays heading-away,
+  so no double-flip/stick.
+- **Git:** M36 code + docs complete, **uncommitted** — F5-verify first. (Note: M35 itself is already
+  committed as `00108ea` — the prior HANDOFF was stale on that.) The stray untracked files
   (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
-- **Immediate next action:** F5-verify M35 (see [testing](#testing)) — play Pong, confirm the ball
-  bounces off both walls and both paddles without sticking and re-serves on a miss exactly as before;
+- **Immediate next action:** F5-verify M36 (see [testing](#testing)) — play Pong, confirm the ball
+  bounces off both paddles with an angle that depends on the contact point (centre ≈ straight back, ends
+  deflect steeply), still bounces flat off the top/bottom walls, never sticks, and re-serves on a miss;
   then commit + push and pick the next milestone from [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
@@ -61,9 +58,12 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M36 — curved (convex) paddle bounce in the demo: paddles relay their centre y into a global and the
+  ball aims its rebound off straight-back by its contact offset × `PADDLE_BOUNCE_CURVE`. Existing opcodes
+  only; pure `pong_scripts.gd` edit. *(code + docs complete, uncommitted)*
 - M35 — motion-state reporters (`direction`/`x_position`/`y_position`) + the Pong ball's bounce
   decomposed into blocks (sign-gated reflection + `go_to` nudge), retiring the `"bounce"` sentinel in
-  the demo. *(code complete, uncommitted)*
+  the demo. *(committed `00108ea`)*
 - M34 — runtime scene navigation: `switch to scene {name}` / `next scene` blocks change the playing
   scene at run time; the runtime carries the whole scene list. *(committed `be3da68`)*
 - M33 — multiple stages (scenes / levels): a project holds several independent scenes, switchable in

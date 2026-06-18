@@ -32,6 +32,13 @@ const ROUND_POINTS := 5
 const ROUNDS_TO_WIN := 2
 ## Serve angle = straight across (90 = right, 270 = left) ± a random spread.
 const SERVE_SPREAD := 45.0
+## Curved-paddle bounce: the paddles deflect the ball as if they were convex (bulging
+## toward the centre of the playfield), so the outgoing angle depends on *where* the ball
+## hits — centre sends it straight back, the ends deflect it steeply toward that end (the
+## surface normal of a bulge tilts away from centre). This is degrees of deflection per
+## pixel the ball's centre is offset from the paddle's centre; at the extreme reach
+## (paddle half-height 48 + ball half 8 = 56px) that's ~50° off straight, never vertical.
+const PADDLE_BOUNCE_CURVE := 0.9
 
 
 ## The project's variable model (Milestone 18): the single declaration of every variable's
@@ -58,6 +65,12 @@ static func variables() -> Array:
 		{"name": "p2_rounds", "value": 0, "scope": "global"},
 		{"name": "round", "value": 0, "scope": "global"},  # only `change`d, never read (vestigial)
 		{"name": "speed", "value": 0, "scope": "Ball"},     # set to BALL_SPEED by a block in ball()
+		# Each paddle publishes its centre y here every tick (a `set` block in _paddle), so the
+		# ball — a different sprite — can read the paddle's position for the curved bounce below.
+		# (y_position reports the *running* sprite, so a global relay is how one sprite tells
+		# another where it is.) Global so the ball can see them.
+		{"name": "left_paddle_y", "value": 0, "scope": "global"},
+		{"name": "right_paddle_y", "value": 0, "scope": "global"},
 	]
 
 
@@ -139,10 +152,14 @@ static func sprites() -> Array:
 ## A keyboard-driven paddle: move on its vertical rail while a key is held, and
 ## clamp back onto the playfield at the top and bottom. `rail_x` is the fixed x,
 ## so the clamp targets are literals.
-static func _paddle(up_key: String, down_key: String, rail_x: float) -> Array:
+static func _paddle(up_key: String, down_key: String, rail_x: float, y_var: String) -> Array:
 	return [
 		_hat([
 			_forever([
+				# Publish our centre y so the ball can read where this paddle is (see the curved
+				# bounce in ball()). y_position reports this running sprite — the paddle — so this
+				# global is the relay one sprite uses to tell another its position.
+				_set_var(y_var, _ypos()),
 				_if(_key_pressed(up_key), [
 					_point(0),  # up
 					_move(PADDLE_SPEED),
@@ -161,11 +178,11 @@ static func _paddle(up_key: String, down_key: String, rail_x: float) -> Array:
 static func left_paddle() -> Array:
 	# Key names are Godot's canonical keycode-name strings (see
 	# OS.find_keycode_from_string), so "W"/"S"/"Up"/"Down", not "w"/"s".
-	return _paddle("W", "S", 24.0)
+	return _paddle("W", "S", 24.0, "left_paddle_y")
 
 
 static func right_paddle() -> Array:
-	return _paddle("Up", "Down", 456.0)
+	return _paddle("Up", "Down", 456.0, "right_paddle_y")
 
 
 ## The ball: serve from center, then forever move and reflect off the top/bottom
@@ -185,8 +202,17 @@ static func ball() -> Array:
 				_move(_var("speed")),  # speed is a per-sprite local, set by the block above
 				# Bounce, expressed as blocks (M35) instead of the `point_in_direction "bounce"`
 				# runtime sentinel — faithful to _bounce's sign-based steering + position nudge:
-				#  * Reflect off a horizontal surface (top/bottom) -> 180 - direction; off a vertical
-				#    surface (the paddles) -> 360 - direction (point_in_direction wraps the result).
+				#  * The top/bottom WALLS reflect flat off a horizontal surface -> 180 - direction
+				#    (point_in_direction wraps the result).
+				#  * The PADDLES are CURVED (convex, bulging toward the centre of the playfield), so
+				#    they don't mirror the incoming angle — the outgoing angle depends on *where* the
+				#    ball strikes: a hit at the paddle's centre goes straight back (90 right / 270
+				#    left), a hit toward an end deflects steeply toward that end, because a bulge's
+				#    surface normal tilts away from centre. We read the offset of the ball's centre
+				#    from the paddle's centre (ball y_position - the paddle's relayed y) and add it,
+				#    scaled by PADDLE_BOUNCE_CURVE, to the straight-back direction: LEFT paddle ->
+				#    90 + offset*curve (negative offset = hit high -> up-right; positive = low ->
+				#    down-right); RIGHT paddle -> 270 - offset*curve (mirror). See _paddle_bounce_dir.
 				#  * The inner `if` gates the flip on the *sign* of the motion (only reflect if heading
 				#    INTO the surface), so re-triggering next frame can't double-flip the ball into a
 				#    stick — exactly what _bounce's absf() steering guarantees. Direction here is Scratch
@@ -205,11 +231,11 @@ static func ball() -> Array:
 					_go_to(_xpos(), 344),
 				]),
 				_if(_touching("LeftPaddle"), [
-					_if(_gt(_dir(), 180), [_point(_sub(360, _dir()))]),
+					_if(_gt(_dir(), 180), [_point(_add(90, _paddle_bounce_dir("left_paddle_y")))]),
 					_go_to(48, _ypos()),
 				]),
 				_if(_touching("RightPaddle"), [
-					_if(_lt(_dir(), 180), [_point(_sub(360, _dir()))]),
+					_if(_lt(_dir(), 180), [_point(_sub(270, _paddle_bounce_dir("right_paddle_y")))]),
 					_go_to(432, _ypos()),
 				]),
 				_if(_edge("left"), [  # passed left -> Player 2 scores, re-serve right
@@ -243,6 +269,18 @@ static func _serve_right() -> Dictionary:
 
 static func _serve_left() -> Dictionary:
 	return _add(270.0, _random(-SERVE_SPREAD, SERVE_SPREAD))
+
+
+## The curved-paddle deflection (an expression, like the serve angles): how far off
+## straight-back the bounce should aim, given where the ball struck the paddle. It is the
+## ball's centre offset from the paddle's centre (ball y_position minus the paddle's relayed
+## centre y, read from `paddle_y_var`) times PADDLE_BOUNCE_CURVE. A hit above the paddle
+## centre is a negative offset (the screen y grows downward), so for the LEFT paddle
+## `90 + offset*curve` aims up-right, and a hit below aims down-right; the RIGHT paddle uses
+## `270 - offset*curve` for the mirror. This is what makes the paddle act convex: the angle
+## tracks the contact point, not the incoming direction.
+static func _paddle_bounce_dir(paddle_y_var: String) -> Dictionary:
+	return _mul(_sub(_ypos(), _var(paddle_y_var)), PADDLE_BOUNCE_CURVE)
 
 
 ## The blocks that run when a player takes a round (the body of the round-end `if`).
