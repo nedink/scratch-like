@@ -5,10 +5,40 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 34 — runtime scene navigation (`switch to scene` / `next scene`)
+## Current state: Milestone 35 — motion-state reporters; the demo's bounce as blocks
 
-**Goal of this milestone:** pay off the half M33 deferred — **navigating between scenes at *play*
-time**. M33 let a project hold multiple stages switchable in the *editor*, but RUN played only the
+**Goal of this milestone:** pay off the deferral the `"bounce"` note carried for the project's whole
+life — *expose the sprite's velocity/position as reporters* so a reflection can be expressed as **data**
+instead of the `point_in_direction "bounce"` runtime sentinel. M35 adds three value reporters —
+**`direction`**, **`x_position`**, **`y_position`** (motion category, no inputs; each reads the running
+`Target`) — and **rewrites the Pong ball's bounce as blocks**: each of the four bounce `if`s reflects
+the direction (`180 - direction` off the horizontal top/bottom edges, `360 - direction` off the vertical
+paddles), **gated by an inner `if` on the motion's sign** so it only flips when heading *into* the
+surface (reproducing [`_bounce()`](scripts/interpreter.gd)'s `absf` anti-stick steering), plus a `go_to`
+**nudge** that snaps the centre clear (edge bounds = the 8px-inset viewport; paddle clear-x literals
+`48`/`432` off the fixed rails).
+
+**Three new opcodes; no block-data-shape change, no other runtime change.** Each is the usual
+one-`_OPCODES`-entry ([`block_view.gd`](scripts/block_view.gd)) + one-interpreter-handler step
+([`_on_direction`](scripts/interpreter.gd) / [`_on_x_position`](scripts/interpreter.gd) /
+[`_on_y_position`](scripts/interpreter.gd)). The ball rewrite is a pure
+[`PongScripts.ball()`](scripts/pong_scripts.gd) edit that rides `export_script()` → persistence/RUN
+untouched. **`_bounce()` and the `"bounce"` sentinel stay in the runtime** as a supported opcode value
+(any saved/hand-written script using it still runs) — the demo just no longer uses it.
+
+**Faithful for Pong, not a general bounce.** The decomposition matches `_bounce`'s *observable* output
+*because* every Pong surface is cleanly horizontal or vertical (so the runtime shallowest-overlap-axis
+choice collapses to a known axis per-`if`) and the paddles ride fixed x-rails (so the push-out is a
+constant). A general data-form bounce — arbitrary angles, dynamic overlap, moving/rotated obstacles —
+would need trig reporters and cross-sprite geometry, which M35 does **not** add (and which is why
+`_bounce()` is kept). See [Motion-state reporters — bounce as blocks (M35)](#motion-state-reporters--bounce-as-blocks-m35).
+
+---
+
+For context, the M34 mechanics this builds on:
+
+**Runtime scene navigation (M34).** Paid off the half M33 deferred — **navigating between scenes at
+*play* time**. M33 let a project hold multiple stages switchable in the *editor*, but RUN played only the
 active one and no block could change scene mid-game. M34 adds the two blocks the user asked for —
 **`switch to scene {name}`** (a data-scoped dropdown of the project's scenes — the "set the scene"
 block) and **`next scene`** (advance, wrapping past the last to the first) — plus the runtime
@@ -1899,7 +1929,59 @@ variables to the new scene's defaults (each scene owns its variables — M33), s
 does **not** persist across a switch; a project-global variable store carried across scenes is a
 separate milestone.
 
+### Motion-state reporters — bounce as blocks (M35)
+
+The deferral the `"bounce"` note named for the whole project's life: *expose the sprite's
+velocity/position as reporters* so a reflection can be expressed as data instead of the
+`point_in_direction "bounce"` runtime sentinel. M35 adds the three reporters and rewrites the Pong
+ball's bounce as blocks. It is the usual symmetric extension — **three opcodes** (one `_OPCODES` entry
++ one interpreter handler each), **no block-data-shape change, no other runtime change** — plus a
+demo-script rewrite that rides `export_script()` → persistence/RUN untouched.
+
+- **The reporters.** [`block_view.gd`](scripts/block_view.gd) gets `direction`, `x_position`,
+  `y_position` (motion category, `kind: "reporter"`, value output, no inputs — a plain pill).
+  [`interpreter.gd`](scripts/interpreter.gd)'s [`_on_direction`](scripts/interpreter.gd) returns
+  `_target.direction`; [`_on_x_position`](scripts/interpreter.gd) /
+  [`_on_y_position`](scripts/interpreter.gd) return the node's centre (`Sprite2D` is centred). They are
+  the data the deferral named — `direction` standing in for velocity (speed is a separate variable).
+- **The decomposition, faithful to `_bounce`'s observable behaviour.** Each of the ball's four bounce
+  `if`s ([`PongScripts.ball()`](scripts/pong_scripts.gd)) now:
+  - **Reflects** — `point in direction (180 - direction)` off a **horizontal** surface (the top/bottom
+	edges), `point in direction (360 - direction)` off a **vertical** one (the paddles).
+	`point_in_direction` wraps the result, so a negative angle is fine.
+  - **Gates the flip on the motion's sign** via an inner `if`, reproducing `_bounce()`'s `absf`
+	steering (force the component *away* from the surface, don't blindly negate): top reflects only
+    when heading up (`direction < 90 or direction > 270`), bottom only when heading down
+    (`90 < direction < 270`), LeftPaddle only when heading left (`direction > 180`), RightPaddle only
+	when heading right (`direction < 180`). So a re-trigger next frame can't double-flip the ball into
+	a stick — the load-bearing property `_bounce` guaranteed.
+  - **Nudges** with a `go_to` — snap the centre clear so the ball never lingers inside the surface.
+	Edge bounds are the 8px-inset viewport (the ball's half-size; top `y = 8`, bottom `y = 344` for the
+    480×352 viewport), preserving x via `x_position`. The paddle clear-x is a **literal** off the
+    fixed rails (LeftPaddle right edge 40 + ball half 8 = `48`; RightPaddle left edge 440 − 8 = `432`),
+    preserving y via `y_position`.
+- **Why this is "faithful" but not a general reimplementation.** In Pong every surface is cleanly
+  horizontal or vertical, so `_bounce`'s runtime shallowest-overlap-axis choice collapses to a *known*
+  axis per-`if`, and the paddle push-out (which `_bounce` computes from the live overlap) is a constant
+  because the paddles ride fixed x-rails. So the block version matches `_bounce`'s output for this demo.
+  It is **not** a general bounce: a sprite at an arbitrary angle, with dynamic overlap or against a
+  moving/rotated obstacle, would need trig reporters (sin/cos/atan2) and cross-sprite geometry
+  (the other sprite's x/y/w/h) — neither of which M35 adds. That fuller version stays deferred, which
+  is why `_bounce()` and the `"bounce"` sentinel **remain in the runtime** (still a supported opcode
+  value for any script that uses it).
+
+What this leaves deferred: a **general data-form bounce** (the trig + cross-sprite-geometry reporters
+above) and exposing **velocity as a first-class vector** (today motion is `direction` + a `speed`
+variable, not vx/vy).
+
 ## Opcodes implemented
+
+**M35 added three opcodes** — `direction`, `x_position`, `y_position` (motion-state reporters). Each is
+the usual one-`_OPCODES`-entry + one-interpreter-handler step, with no block-data-shape change and no
+other runtime change; they read the running `Target`'s facing/centre. They let the Pong ball's bounce be
+expressed as blocks (sign-gated reflection + `go_to` nudge), retiring the `point_in_direction "bounce"`
+sentinel *in the demo* — though `_bounce()` and the sentinel remain in the runtime as a supported opcode
+value.
 
 **M34 added two opcodes** — `switch_scene` and `next_scene` (runtime scene navigation): the first opcode
 additions since M30's custom blocks. Each is the usual one-`_OPCODES`-entry + one-interpreter-handler
@@ -1984,6 +2066,8 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
 | `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original |
 | `variable` | reporter | `name` | reads a variable, resolving local-first then global |
+| `direction` | reporter | — | the running sprite's facing direction in degrees (M35); Scratch convention (90 = right, 0 = up). Value output |
+| `x_position` / `y_position` | reporter | — | the running sprite's centre x / y (M35); Sprite2D is centred. Value output. Together with `direction` these expose the motion state a data-form bounce needs |
 | `add` / `subtract` / `multiply` / `divide` / `mod` | reporter | `a`, `b` | arithmetic; `divide`/`mod` guard ÷0 → 0 |
 | `equals` / `greater_than` / `less_than` | reporter | `a`, `b` | numeric comparison → bool |
 | `and` / `or` / `not` | reporter | `a`, `b` (`not`: `a`) | boolean combinators → bool |
@@ -1994,14 +2078,17 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `switch_scene` | statement | `name` | switch the running game to the scene named `name` (M34); the Stage relaunches on it. `{name}` is a dropdown of the project's scenes. Unknown name → warn + no-op. Ends the current scene's scripts |
 | `next_scene` | statement | — | advance to the next scene in the project's list (M34), wrapping past the last back to the first |
 
-> Note on `"bounce"`: the reflection math still lives in the runtime as a sentinel
-> input of `point_in_direction` rather than as data. M3 added arithmetic, so this
-> *could* now be expressed as blocks, but `_bounce()` also reflects off both
-> viewport edges and overlapping sprites (shallowest-overlap axis for sprite
-> hits) using *sign-based steering* — forcing the velocity component away from the
-> surface rather than negating it, so calling bounce from several `if` branches in
-> one frame can't make a sprite stick. Replacing it with pure data is left for
-> when sprites expose their velocity/position as reporters.
+> Note on `"bounce"`: the `point_in_direction "bounce"` sentinel and its `_bounce()`
+> implementation **remain in the runtime** as a supported opcode value (any saved or
+> hand-written script using it still runs). But **the Pong demo no longer uses it** —
+> M35 added `direction`/`x_position`/`y_position` reporters and expressed the ball's
+> bounce as blocks (see [Motion-state reporters — bounce as blocks (M35)](#motion-state-reporters--bounce-as-blocks-m35)).
+> That decomposition is faithful to `_bounce()`'s observable behaviour *for Pong*
+> (sign-gated reflection reproducing the anti-stick steering, plus a `go_to` nudge),
+> where every surface is cleanly horizontal or vertical so the shallowest-overlap-axis
+> logic collapses to a known axis per-`if`. A **general** data-form bounce (arbitrary
+> angles, dynamic overlap, cross-sprite geometry) would still need trig and other-sprite
+> geometry reporters, and stays deferred — which is why `_bounce()` is kept.
 
 ## File layout
 

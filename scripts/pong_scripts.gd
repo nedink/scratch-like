@@ -183,10 +183,35 @@ static func ball() -> Array:
 			_point(_serve_right()),
 			_forever([
 				_move(_var("speed")),  # speed is a per-sprite local, set by the block above
-				_if(_edge("top"), [_point("bounce")]),
-				_if(_edge("bottom"), [_point("bounce")]),
-				_if(_touching("LeftPaddle"), [_point("bounce")]),
-				_if(_touching("RightPaddle"), [_point("bounce")]),
+				# Bounce, expressed as blocks (M35) instead of the `point_in_direction "bounce"`
+				# runtime sentinel — faithful to _bounce's sign-based steering + position nudge:
+				#  * Reflect off a horizontal surface (top/bottom) -> 180 - direction; off a vertical
+				#    surface (the paddles) -> 360 - direction (point_in_direction wraps the result).
+				#  * The inner `if` gates the flip on the *sign* of the motion (only reflect if heading
+				#    INTO the surface), so re-triggering next frame can't double-flip the ball into a
+				#    stick — exactly what _bounce's absf() steering guarantees. Direction here is Scratch
+				#    degrees (90 = right, 0 = up): heading up is dir<90 or dir>270, down is 90<dir<270,
+				#    left is dir>180, right is dir<180.
+				#  * The go_to is the nudge: snap the centre clear of the surface so the ball never
+				#    lingers inside it. Edge bounds are the 8px-inset viewport (ball half-size); the
+				#    paddle clear-x is a literal from the paddles' fixed rails (LeftPaddle right edge
+				#    40 + ball half 8 = 48; RightPaddle left edge 440 - 8 = 432).
+				_if(_edge("top"), [
+					_if(_or(_lt(_dir(), 90), _gt(_dir(), 270)), [_point(_sub(180, _dir()))]),
+					_go_to(_xpos(), 8),
+				]),
+				_if(_edge("bottom"), [
+					_if(_and(_gt(_dir(), 90), _lt(_dir(), 270)), [_point(_sub(180, _dir()))]),
+					_go_to(_xpos(), 344),
+				]),
+				_if(_touching("LeftPaddle"), [
+					_if(_gt(_dir(), 180), [_point(_sub(360, _dir()))]),
+					_go_to(48, _ypos()),
+				]),
+				_if(_touching("RightPaddle"), [
+					_if(_lt(_dir(), 180), [_point(_sub(360, _dir()))]),
+					_go_to(432, _ypos()),
+				]),
 				_if(_edge("left"), [  # passed left -> Player 2 scores, re-serve right
 					_change("p2_score", 1),
 					_go_to(CENTER.x, CENTER.y),
@@ -374,6 +399,28 @@ static func _gt(a: Variant, b: Variant) -> Dictionary:
 
 static func _lt(a: Variant, b: Variant) -> Dictionary:
 	return {"opcode": "less_than", "inputs": {"a": a, "b": b}}
+
+
+static func _and(a: Variant, b: Variant) -> Dictionary:
+	return {"opcode": "and", "inputs": {"a": a, "b": b}}
+
+
+static func _or(a: Variant, b: Variant) -> Dictionary:
+	return {"opcode": "or", "inputs": {"a": a, "b": b}}
+
+
+# Motion-state reporters (M35) — read the ball's facing / centre so a bounce can be
+# expressed as blocks instead of the `point_in_direction "bounce"` runtime sentinel.
+static func _dir() -> Dictionary:
+	return {"opcode": "direction", "inputs": {}}
+
+
+static func _xpos() -> Dictionary:
+	return {"opcode": "x_position", "inputs": {}}
+
+
+static func _ypos() -> Dictionary:
+	return {"opcode": "y_position", "inputs": {}}
 
 
 static func _random(from: float, to: float) -> Dictionary:

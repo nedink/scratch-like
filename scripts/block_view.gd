@@ -167,6 +167,12 @@ const _OPCODES := {
 	"turn_degrees": {"category": "motion", "kind": "statement", "template": "turn {degrees} degrees", "defaults": {"degrees": 15}},
 	"point_in_direction": {"category": "motion", "kind": "statement", "template": "point in direction {direction}", "defaults": {"direction": 90}},
 	"go_to": {"category": "motion", "kind": "statement", "template": "go to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
+	# motion reporters (M35) — expose the sprite's motion state as data, so a reflection (the
+	# `point_in_direction "bounce"` sentinel) can be expressed as blocks. No inputs: each reads the
+	# running Target's facing / position. `direction` stands in for velocity (speed is a separate var).
+	"direction": {"category": "motion", "kind": "reporter", "template": "direction", "defaults": {}},
+	"x_position": {"category": "motion", "kind": "reporter", "template": "x position", "defaults": {}},
+	"y_position": {"category": "motion", "kind": "reporter", "template": "y position", "defaults": {}},
 	# looks
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	# sensing

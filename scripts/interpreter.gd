@@ -124,6 +124,9 @@ func _register_handlers() -> void:
 		"not": _on_not,
 		"random": _on_random,
 		"param": _on_param,
+		"direction": _on_direction,
+		"x_position": _on_x_position,
+		"y_position": _on_y_position,
 	}
 
 
@@ -350,6 +353,21 @@ func _on_say(block: Dictionary) -> void:
 ## variable: read a variable's value (local-first, then global).
 func _on_variable(block: Dictionary) -> Variant:
 	return _get_variable(String(_value(block, "name")))
+
+
+# Motion-state reporters (M35). They read the live Target so a script can compute a
+# reflection (the data form of `point_in_direction "bounce"`): direction is the facing in
+# Scratch degrees (90 = right, 0 = up), x/y_position the sprite's centre (Sprite2D is centred).
+func _on_direction(_block: Dictionary) -> float:
+	return _target.direction
+
+
+func _on_x_position(_block: Dictionary) -> float:
+	return _target.node.position.x
+
+
+func _on_y_position(_block: Dictionary) -> float:
+	return _target.node.position.y
 
 
 # Arithmetic. divide / mod guard division by zero (-> 0) so a bad script can't

@@ -12,23 +12,28 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M34 — **runtime scene navigation**. Two new blocks change the playing scene
-  at run time: **`switch to scene {name}`** (a dropdown of the project's scenes) and **`next scene`**
-  (advance, wrapping). Adds **two opcodes** (`switch_scene`/`next_scene`, in a new `scenes` palette
-  group) but no block-data-shape change. The runtime now carries the **whole** scene list:
-  `editor._on_run` hands `Stage.project_scenes` (the full `[{name, sprites, variables, background,
-  grid}]` list) + `Stage.project_active` (replacing M24/M20/M27's three per-scene statics). A block
-  re-points the static `project_active`, `stop_all`s the current scripts, and reloads the game scene via
-  `change_scene_to_file` — the same swap RUN/ESC use, so `Stage._ready` rebuilds on the target with **no
-  bespoke teardown** (`go_to_scene_by_name`/`go_to_next_scene`/`_change_to_scene` in `stage.gd`;
-  `_active_scene`/`_scene_list` read per-scene fields off the active dict). Editor: `_scene_names` feeds
-  `BlockView.project_scene_names` (the dropdown source), re-pointed on every project load + scene rename.
-- **Git:** M33 + M34 committed together (`be3da68`, pushed to `main`) — they were intertwined across
-  `editor.gd`/docs, so they landed in one commit rather than a clean per-milestone split. The stray
-  untracked files (`build_platformer.py`, `platformer.json`) remain unrelated and uncommitted — leave
-  them.
-- **Immediate next action:** F5-verify M34 (see [testing](#testing)); then pick the next milestone from
-  [Next up](#next-up-candidate-milestones).
+- **Milestone in flight:** M35 — **motion-state reporters + bounce decomposed in the demo**. Three new
+  **value reporters** (`direction`, `x_position`, `y_position`, in the motion category) expose the
+  running sprite's facing/centre as data — the "sprites expose velocity/position as reporters" the
+  `_bounce` deferral named. The Pong **ball's bounce is now expressed as blocks** instead of the
+  `point_in_direction "bounce"` runtime sentinel: each of the 4 bounce `if`s reflects direction
+  (`180 - direction` off the horizontal top/bottom edges, `360 - direction` off the vertical paddles),
+  **gated by an inner `if` on the motion's sign** (only flip when heading into the surface — reproducing
+  `_bounce`'s `absf` anti-stick steering), plus a `go_to` **nudge** that snaps the centre clear (edge
+  bounds = 8px-inset viewport; paddle clear-x literals 48 / 432 from the fixed rails). Adds **three
+  opcodes**, no block-data-shape change, no other runtime change. `_bounce()` + the `"bounce"` sentinel
+  **stay in the runtime** (still a supported opcode value — saved/hand-written scripts using it work);
+  the demo just no longer uses it.
+- **Faithfulness caveat:** the decomposition matches `_bounce`'s *observable* behaviour for Pong (where
+  every surface is cleanly horizontal or vertical, so the shallow-overlap-axis logic collapses to a known
+  axis per-`if`, and the paddle push-out is a constant). It is **not** a general reimplementation of
+  `_bounce` (no trig reporters, no cross-sprite geometry) — a sprite at an arbitrary angle/overlap isn't
+  covered. That fuller version stays deferred.
+- **Git:** M35 code complete, **uncommitted** — F5-verify first. The stray untracked files
+  (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
+- **Immediate next action:** F5-verify M35 (see [testing](#testing)) — play Pong, confirm the ball
+  bounces off both walls and both paddles without sticking and re-serves on a miss exactly as before;
+  then commit + push and pick the next milestone from [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
@@ -56,8 +61,11 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M35 — motion-state reporters (`direction`/`x_position`/`y_position`) + the Pong ball's bounce
+  decomposed into blocks (sign-gated reflection + `go_to` nudge), retiring the `"bounce"` sentinel in
+  the demo. *(code complete, uncommitted)*
 - M34 — runtime scene navigation: `switch to scene {name}` / `next scene` blocks change the playing
-  scene at run time; the runtime carries the whole scene list. *(code complete, uncommitted)*
+  scene at run time; the runtime carries the whole scene list. *(committed `be3da68`)*
 - M33 — multiple stages (scenes / levels): a project holds several independent scenes, switchable in
   the editor; RUN plays the active one. *(code complete, uncommitted)*
 - M32 — custom block rename cascade (renaming a `define` rewrites its `call`s).
