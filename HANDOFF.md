@@ -60,6 +60,11 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- Bugfix — **open project now survives the RUN → ESC round trip.** ESC reloaded `editor.tscn`, whose
+  `_ready` always `_seed_demo()`'d, so the editor came back as the stock demo and discarded the open
+  project + unsaved edits. Fix: `_on_run` stashes the project (`_restore_*` statics — the deep copy it
+  already hands the Stage, plus the active scene + bound file path), and `_ready` calls a new
+  `_restore_project()` instead of `_seed_demo()` when `_restore_pending` is set ([`editor.gd`](scripts/editor.gd)).
 - M36 — curved (convex) paddle bounce in the demo: the rebound angle tracks the contact point on the
   paddle (centre → straight back, ends → steep deflection). Existing opcodes only; pure
   `pong_scripts.gd` edit. *(committed `21eb50f`)*

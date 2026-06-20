@@ -78,6 +78,17 @@ var _current: int = -1
 var _scenes: Array = []
 var _scene: int = 0
 
+## Project state stashed across a RUN -> game -> ESC round trip. The editor scene is torn down by
+## change_scene_to_file (RUN) and rebuilt fresh when ESC returns, so instance vars are lost — without
+## this, _ready would always reseed the demo and the open project (and any unsaved edits) would vanish
+## on the ESC return. _on_run records these; _ready restores from them instead of _seed_demo when
+## _restore_pending is set (a genuine return — false on a fresh program launch, where statics default).
+## Static so they outlive the editor instance, exactly like Stage.project_scenes.
+static var _restore_pending: bool = false
+static var _restore_scenes: Array = []
+static var _restore_scene: int = 0
+static var _restore_path: String = ""
+
 ## The interactive block canvas (M9): drag/snap lives here. Reloaded on selection.
 ## A scene node (editor.tscn), grabbed by unique name.
 @onready var _canvas: BlockCanvas = %Canvas
@@ -255,9 +266,14 @@ func _ready() -> void:
 	win.content_scale_size = _EDITOR_SIZE
 	win.content_scale_factor = 1.0
 
-	# Land on the in-code demo (the stock Pong project). It is the unsaved default — bound to no
-	# file — so it is always reachable and never overwritten by a saved project (M22).
-	_seed_demo()
+	# Land on the in-code demo (the stock Pong project) — the unsaved default, bound to no file, so
+	# it is always reachable and never overwritten by a saved project (M22). Exception: when ESC has
+	# just returned us from a RUN, restore the project that was open instead of reseeding the demo, so
+	# the round trip doesn't discard the user's open project / unsaved edits.
+	if _restore_pending:
+		_restore_project()
+	else:
+		_seed_demo()
 
 	# Wire the signals/callbacks once (the *contents* below re-render per project, but these
 	# connections are set up a single time). The layout and dialogs are declared in editor.tscn;
@@ -401,6 +417,19 @@ func _seed_demo() -> void:
 	_scenes = PongScripts.scenes().duplicate(true)
 	_scene = 0
 	_load_scene_into_working(0)
+
+
+## Restore the project stashed by _on_run when ESC returns from a RUN (see _restore_* statics). The
+## counterpart of _seed_demo: it adopts the stashed scene list, active scene, and bound file path
+## instead of the stock demo, then lifts the active scene into the working vars for _load_project_into_ui
+## to bring up. Clears _restore_pending so a later fresh _ready (without an intervening RUN) falls back
+## to the demo. The stashed scenes are the deep copy _on_run made, so the editor owns them outright.
+func _restore_project() -> void:
+	_restore_pending = false
+	_scenes = _restore_scenes
+	_scene = clampi(_restore_scene, 0, _scenes.size() - 1)
+	_current_path = _restore_path
+	_load_scene_into_working(_scene)
 
 
 ## Lift scene `index`'s fields into the editor's working state (M33): `_scripts` / `_variables` /
@@ -1381,6 +1410,15 @@ func _on_run() -> void:
 	# project_active tells the Stage which to build first — the one the editor is on. Deep-duplicated,
 	# so the running game can't mutate the editor's working copy. (This replaces M24/M20/M27's three
 	# separate per-scene statics — the Stage reads the per-scene fields off the active scene dict now.)
-	Stage.project_scenes = _scenes.duplicate(true)
+	var snapshot := _scenes.duplicate(true)
+	Stage.project_scenes = snapshot
 	Stage.project_active = _scene
+	# Stash the open project so the ESC return restores it instead of reseeding the demo. The game
+	# never mutates project_scenes' contents (only project_active, an int, on switch_scene/next_scene),
+	# so the editor can safely reclaim this same deep copy on the way back. We keep the editor's own
+	# active scene (_scene) — not Stage.project_active, which in-game navigation may have advanced.
+	_restore_scenes = snapshot
+	_restore_scene = _scene
+	_restore_path = _current_path
+	_restore_pending = true
 	get_tree().change_scene_to_file(_GAME_SCENE)
