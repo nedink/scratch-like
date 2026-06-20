@@ -5,7 +5,18 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 37 — stage-editor world view, panning, and camera blocks
+## Current state: Milestone 38 — web export save/open
+
+**Goal of this milestone:** make SAVE / OPEN work on a **Web (WebAssembly) export** — where there is no
+native `FileDialog` and no OS filesystem — by splitting M22's file methods into a transport-agnostic
+*model* half ([`_serialize_project`](scripts/editor.gd) / [`_apply_project`](scripts/editor.gd)) and per-
+transport shells: desktop keeps the `FileAccess` path, Web uses a browser download / `<input type=file>`
+upload through `JavaScriptBridge`. Same `{scenes, active}` JSON either way; no block/runtime change. See
+[Web export: browser save/open (M38)](#web-export-browser-saveopen-m38).
+
+---
+
+## Earlier: Milestone 37 — stage-editor world view, panning, and camera blocks
 
 **Goal of this milestone:** make the **stage editor show the whole game world** (not just the 480×352
 screen) so off-screen sprites are visible and editable, add **panning** + a **Recenter** button + a
@@ -2049,6 +2060,42 @@ demo-script rewrite that rides `export_script()` → persistence/RUN untouched.
 What this leaves deferred: a **general data-form bounce** (the trig + cross-sprite-geometry reporters
 above) and exposing **velocity as a first-class vector** (today motion is `direction` + a `speed`
 variable, not vx/vy).
+
+### Web export: browser save/open (M38)
+
+Made SAVE / OPEN work on a **Web (WebAssembly) export**, where there is no native `FileDialog` and no
+absolute OS path — `FileAccess` sees only the virtual FS (`user://` = IndexedDB, `res://` = read-only),
+so the desktop M22 save/open path can't run. M38 swaps the **transport** while reusing the **model**
+verbatim, so a project round-trips as the same `{scenes, active}` JSON in either build. **No new opcode,
+no block-data-shape change, no runtime change** — purely an editor-side persistence/transport split.
+
+The load-bearing refactor is splitting each of M22's two file methods into a transport-agnostic *model*
+half and a transport *shell* ([editor.gd](scripts/editor.gd)):
+
+- [`_serialize_project()`](scripts/editor.gd) returns the project as a JSON String (persisting the
+  active scene first) — the model half of the old `_write_project`, which is now a thin OS-filesystem
+  shell over it (and binds `_current_path`).
+- [`_apply_project(text, source)`](scripts/editor.gd) adopts a project from a JSON String, returning a
+  bool (rejecting malformed input with a `push_warning`, keeping the current project) — the model half
+  of the old `_read_project`, which is now a thin file-read shell. It deliberately does **not** touch
+  `_current_path` or rebuild the UI; the caller does, since the bound path differs per transport (a real
+  file path on desktop, none for a browser upload).
+
+The web shells, routed to from [`_on_save`](scripts/editor.gd) / [`_on_open`](scripts/editor.gd) behind
+`OS.has_feature("web")`:
+
+- [`_web_save()`](scripts/editor.gd) hands `_serialize_project().to_utf8_buffer()` to
+  `JavaScriptBridge.download_buffer(...)` — the browser's "Save As" download. No bound path on Web, so
+  the filename is the demo/default and the title stays unsaved.
+- [`_web_open()`](scripts/editor.gd) builds a hidden `<input type="file">` via `JavaScriptBridge.eval`,
+  clicks it to pop the browser picker, and reads the chosen file with a `FileReader`; its JS `onload`
+  fires a GDScript callback [`_on_web_file_loaded`](scripts/editor.gd) (kept alive in
+  `_web_file_callback` so it isn't GC'd mid-pick) with the file text, which flows into the same
+  `_apply_project` the desktop read uses. The project comes in **unsaved** (no path on Web, as after NEW).
+
+`_web_file_callback` is **untyped** on purpose: the `JavaScriptObject` class is registered only on web
+exports, so a typed annotation would break the desktop parse. The web methods are no-ops off Web (the
+desktop branch is taken), so the desktop M22 path is unchanged.
 
 ### Stage-editor world view + camera blocks (M37)
 

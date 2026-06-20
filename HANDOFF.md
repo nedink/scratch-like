@@ -12,27 +12,20 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Milestone in flight:** M37 — **stage-editor world view, panning, and camera blocks**. Three things:
-  ① the **stage editor shows the whole game world** (no longer clipped to the 480×352 screen) with the
-  screen marked by a **bright guide-line border**, **pan by dragging the background**, a **Recenter view**
-  button (inspector), and **opaque panels** framing the top bar + the right inspector
-  ([`stage_view.gd`](scripts/stage_view.gd), [`editor.tscn`](editor.tscn), one wire in
-  [`editor.gd`](scripts/editor.gd)). ② a new **CAMERA block group** — `set camera to x: y:`,
-  `change camera by x: y:`, `camera follow {sprite}`, `camera stop following` (4 new opcodes,
-  [`block_view.gd`](scripts/block_view.gd) + one-line handlers each in
-  [`interpreter.gd`](scripts/interpreter.gd)). ③ the **runtime camera** — [`stage.gd`](scripts/stage.gd)
-  adds a `Camera2D` centred at (240,176) (= today's identity view, so a project with no camera blocks is
-  unchanged), follows a sprite each frame via `_process`, and the background ColorRect moved onto a
-  `CanvasLayer(-1)` so it stays screen-fixed while the camera pans. Camera coords = sprite coords (the
-  world point shown at screen centre). No block-data-shape change; saves ride existing persistence.
-- **Git:** M37 code + docs complete, **committed + pushed**. The stray untracked files
+- **Last shipped:** M38 — **web export save/open**. SAVE / OPEN now work on a Web (WebAssembly) build,
+  where there's no native `FileDialog` or OS filesystem. M22's two file methods were split into a
+  transport-agnostic *model* half ([`_serialize_project`](scripts/editor.gd) /
+  [`_apply_project`](scripts/editor.gd)) and per-transport shells: desktop keeps the `FileAccess` path;
+  Web uses a browser download (`JavaScriptBridge.download_buffer`) / hidden `<input type=file>` upload,
+  routed to behind `OS.has_feature("web")`. Same `{scenes, active}` JSON either build. No block-data /
+  runtime change. (Built on top of, and shipped with, the RUN→ESC round-trip bugfix below.)
+- **Git:** M37 + the bugfix + M38 are all **committed + pushed**. The stray untracked files
   (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
-- **Immediate next action:** F5-verify M37 (see [testing](#testing)) — in **Stage** mode the off-screen
-  Announcer is now visible, the screen region is outlined, dragging empty background pans, Recenter
-  re-frames, sprite drag/resize still work, the bar + inspector read as solid panels; in a script build
-  `when flag clicked → forever → camera follow {Ball}`, RUN and confirm the view scrolls to keep the ball
-  centred; with no camera blocks the demo plays exactly as before. Then pick the next milestone from
-  [Next up](#next-up-candidate-milestones).
+- **Immediate next action:** **F5-verify on desktop** that SAVE / OPEN still behave exactly as before
+  (the web branch is a no-op off Web, so desktop should be unchanged) — and ideally test the web path on
+  an actual export if one exists. Also still worth a pass: F5-verify M37 (Stage-mode pan/recenter,
+  off-screen Announcer visible, `camera follow {Ball}` scrolls the runtime view, no-camera demo
+  unchanged). Then pick the next milestone from [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
@@ -60,6 +53,9 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M38 — **web export save/open.** SAVE / OPEN work on a Web (WebAssembly) build via a transport split:
+  desktop `FileAccess` vs. browser download / `<input type=file>` upload, behind `OS.has_feature("web")`,
+  reusing the same `_serialize_project` / `_apply_project` model halves. No block/runtime change.
 - Bugfix — **open project now survives the RUN → ESC round trip.** ESC reloaded `editor.tscn`, whose
   `_ready` always `_seed_demo()`'d, so the editor came back as the stock demo and discarded the open
   project + unsaved edits. Fix: `_on_run` stashes the project (`_restore_*` statics — the deep copy it

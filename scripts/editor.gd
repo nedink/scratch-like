@@ -165,6 +165,10 @@ var _loading_inspector: bool = false
 @onready var _file_dialog: FileDialog = %FileDialog
 var _file_action: String = ""
 var _current_path: String = ""
+## Kept alive so the JS->GDScript upload callback isn't garbage-collected mid-pick (web only). See
+## _web_open / _on_web_file_loaded. Untyped: the JavaScriptObject class is registered only on web
+## exports, so a typed annotation would break the desktop parse.
+var _web_file_callback = null
 
 ## The project's variable model (M20) — the editor-owned, **mutable** counterpart of _scripts.
 ## Seeded from PongScripts.variables() (the single declaration the runtime also reads), then
@@ -1260,6 +1264,9 @@ func _on_new() -> void:
 ## re-saving is SAVE → confirm) or, for a never-saved project, at the project-dir default. The actual
 ## write happens in _on_file_selected once the user picks a name and location.
 func _on_save() -> void:
+	if OS.has_feature("web"):
+		_web_save()
+		return
 	_persist_current()
 	_file_action = "save"
 	_file_dialog.file_mode = FileDialog.FILE_MODE_SAVE_FILE
@@ -1275,6 +1282,9 @@ func _on_save() -> void:
 ## bound file's folder if one is set, else the project-dir default. The load happens in
 ## _on_file_selected; it replaces the working project (discarding unsaved canvas edits, as NEW does).
 func _on_open() -> void:
+	if OS.has_feature("web"):
+		_web_open()
+		return
 	_file_action = "open"
 	_file_dialog.file_mode = FileDialog.FILE_MODE_OPEN_FILE
 	_file_dialog.title = "Open Project"
@@ -1291,42 +1301,46 @@ func _on_file_selected(path: String) -> void:
 		_read_project(path)
 
 
-## Serialize the project — {scenes, active} — as JSON to `path` (M22, reshaped for scenes in M33). Each
-## scene carries its own sprites / variables / background / grid; `active` is the scene to reopen on. The
-## block model is already plain dicts / arrays / primitives ("exactly the shape a visual editor would
-## emit"), so this is a near-direct JSON.stringify (tab-indented for a human-readable file). We persist
-## the active scene's edits into the list first. Binds the project to this file so the title shows its
-## name and a later SAVE overwrites it.
-func _write_project(path: String) -> void:
+## Serialize the working project to a JSON string — {scenes, active} (M22, reshaped for scenes in M33).
+## Each scene carries its own sprites / variables / background / grid; `active` is the scene to reopen
+## on. This is the transport-agnostic *model* half: the desktop file write (_write_project) and the web
+## download (_web_save) both call it. The block model is already plain dicts / arrays / primitives
+## ("exactly the shape a visual editor would emit"), so this is a near-direct JSON.stringify (tab-
+## indented for a human-readable file). We persist the active scene's edits into the list first.
+func _serialize_project() -> String:
 	_persist_current_scene()
-	var data := {"scenes": _scenes, "active": _scene}
+	return JSON.stringify({"scenes": _scenes, "active": _scene}, "\t")
+
+
+## Write the serialized project to `path` via the OS filesystem (desktop transport). Thin over
+## _serialize_project; binds the project to this file so the title shows its name and a later SAVE
+## overwrites it. The web build downloads through the browser instead (_web_save) — see _on_save.
+func _write_project(path: String) -> void:
 	var file := FileAccess.open(path, FileAccess.WRITE)
 	if file == null:
 		push_warning("Editor: could not write project to '%s'" % path)
 		return
-	file.store_string(JSON.stringify(data, "\t"))
+	file.store_string(_serialize_project())
 	file.close()
 	_current_path = path
 	_update_title()
 
 
-## Load a saved project from `path` (M22), replacing the working project. Unreadable or malformed
-## input is ignored (push_warning, keep the current project) so a hand-edited or corrupt file can't
-## crash the editor. Note JSON parses every number as a float (`10` → `10.0`); this is harmless —
-## the interpreter float()s numerics, BlockView._stringify trims a whole float's `.0`, and the
-## slot-shape typing treats int/float identically — the same round-trip RUN's deep-copy never had to
-## worry about, surfacing here only because JSON has one number type.
-func _read_project(path: String) -> void:
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
-		push_warning("Editor: could not read project from '%s'" % path)
-		return
-	var text := file.get_as_text()
-	file.close()
+## Adopt a project from a JSON string, replacing the working project — the transport-agnostic *model*
+## half (M22, scenes in M33), shared by the desktop file read (_read_project) and the web upload
+## (_on_web_file_loaded). Malformed input is rejected (push_warning, return false, keep the current
+## project) so a hand-edited or corrupt file can't crash the editor; `source` names the origin for the
+## warning. On success the working project is swapped in and `true` is returned, but the UI is NOT
+## rebuilt and `_current_path` is NOT touched — the caller follows with those, since the bound path and
+## title differ per transport (a real file path on desktop, none for a browser upload).
+## Note JSON parses every number as a float (`10` → `10.0`); harmless — the interpreter float()s
+## numerics, BlockView._stringify trims a whole float's `.0`, and slot-shape typing treats int/float
+## identically — surfacing here only because JSON has one number type.
+func _apply_project(text: String, source: String) -> bool:
 	var data: Variant = JSON.parse_string(text)
 	if typeof(data) != TYPE_DICTIONARY:
-		push_warning("Editor: '%s' is not a valid project file" % path)
-		return
+		push_warning("Editor: '%s' is not a valid project file" % source)
+		return false
 	# Resolve to a scene list (M33). A new save carries a `scenes` array + `active` index; a pre-M33
 	# save carries flat `scripts`/`variables` (+ optional background/grid) — wrap that into a single
 	# "Scene 1" so every existing saved `.json` still opens. Anything else is ignored (keep current).
@@ -1344,22 +1358,89 @@ func _read_project(path: String) -> void:
 			"grid": data.get("grid", {}),
 		}]
 	else:
-		push_warning("Editor: '%s' is not a valid project file" % path)
-		return
+		push_warning("Editor: '%s' is not a valid project file" % source)
+		return false
 	# Validate + back-fill each scene before adopting any of it, so a malformed file can't half-load.
 	for sc in scenes:
 		if typeof(sc) != TYPE_DICTIONARY or typeof(sc.get("sprites")) != TYPE_ARRAY \
 				or typeof(sc.get("variables")) != TYPE_ARRAY:
-			push_warning("Editor: '%s' is not a valid project file" % path)
-			return
+			push_warning("Editor: '%s' is not a valid project file" % source)
+			return false
 		_normalize_scene(sc)
 	if scenes.is_empty():
-		push_warning("Editor: '%s' has no scenes" % path)
-		return
+		push_warning("Editor: '%s' has no scenes" % source)
+		return false
 	_scenes = scenes
 	_scene = clampi(active, 0, _scenes.size() - 1)
 	_load_scene_into_working(_scene)
+	return true
+
+
+## Load a saved project from `path` via the OS filesystem (desktop transport). Thin over _apply_project;
+## binds the project to this file on success. The web build reads through a browser file picker instead
+## (_web_open / _on_web_file_loaded) — see _on_open.
+func _read_project(path: String) -> void:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		push_warning("Editor: could not read project from '%s'" % path)
+		return
+	var text := file.get_as_text()
+	file.close()
+	if not _apply_project(text, path):
+		return
 	_current_path = path
+	_load_project_into_ui()
+
+
+# --- Web transport: browser download / upload (no OS filesystem in the browser) ---------------
+#
+# On a Web (WebAssembly) export there is no native FileDialog and no absolute OS path: FileAccess only
+# sees the virtual FS (`user://` = IndexedDB, `res://` = read-only), so the desktop save/open path above
+# can't run. These two helpers swap the *transport* while reusing the model halves (_serialize_project /
+# _apply_project) verbatim, so a project still round-trips as the same JSON. Routed to from _on_save /
+# _on_open behind OS.has_feature("web"). Untested on desktop (the methods are no-ops off Web).
+
+## SAVE on Web: hand the serialized project to the browser as a file download ("Save As"). There is no
+## bound path on Web, so the filename is the demo/default name; the title stays "(demo)"/unsaved.
+func _web_save() -> void:
+	var bytes := _serialize_project().to_utf8_buffer()
+	var fname := "project.json" if _current_path == "" else _current_path.get_file()
+	JavaScriptBridge.download_buffer(bytes, fname, "application/json")
+
+
+## OPEN on Web: there is no Godot upload API, so build a hidden <input type="file"> in the page, click
+## it to pop the browser's file picker, and read the chosen file with a FileReader. The JS `onload` fires
+## a GDScript callback (_on_web_file_loaded, kept alive in _web_file_callback so it isn't GC'd) with the
+## file text, which flows into the same _apply_project the desktop read uses.
+func _web_open() -> void:
+	_web_file_callback = JavaScriptBridge.create_callback(_on_web_file_loaded)
+	var window = JavaScriptBridge.get_interface("window")
+	window.godotOnProjectFileLoaded = _web_file_callback
+	JavaScriptBridge.eval("""
+		(function() {
+			var input = document.createElement('input');
+			input.type = 'file';
+			input.accept = '.json,application/json';
+			input.onchange = function(e) {
+				var f = e.target.files[0];
+				if (!f) return;
+				var reader = new FileReader();
+				reader.onload = function() { window.godotOnProjectFileLoaded(reader.result); };
+				reader.readAsText(f);
+			};
+			input.click();
+		})();
+	""", true)
+
+
+## The JS->GDScript bridge callback for a Web upload: `args[0]` is the chosen file's text. Adopt it
+## through the shared model half, then rebuild the UI (no bound path on Web — the project is unsaved,
+## as after NEW).
+func _on_web_file_loaded(args: Array) -> void:
+	var text := String(args[0])
+	if not _apply_project(text, "uploaded file"):
+		return
+	_current_path = ""
 	_load_project_into_ui()
 
 
