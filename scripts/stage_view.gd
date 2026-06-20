@@ -65,29 +65,64 @@ const _DEFAULT_GRID_COLOR := Color(0.529, 0.808, 0.980, 0.35)
 const _DEFAULT_BACKGROUND := Color("#000000ff")
 
 
-## A thin custom-draw layer that paints the alignment grid over the screen region (it is a child of
-## _screen_panel and fills it, so the grid is a screen-space aid). Kept dead simple:
-## vertical + horizontal lines every `step` display px in `color`, only when `show` is set. The
-## editor toggles `show` and recolours via StageView's set_grid_* setters, which queue_redraw here.
+## A full-view custom-draw layer that paints the **whole world** (M39): the dark surrounding space is
+## the StageView backdrop, and over it this draws the fine alignment grid spanning the entire view,
+## the 480x352 screen region **tiled in all directions** as a grid of adjacent screen spaces, and the
+## one **default screen highlighted** (filled with the project background + a bright boundary). It is
+## a direct child of StageView (full rect, **not** panned), so it always covers the visible area no
+## matter how far the world is panned; instead of moving, it redraws aligned to `world_origin` — the
+## display-px position of world (0,0) within the view, i.e. the pan. The editor toggles the fine grid
+## and recolours via StageView's set_grid_* / set_background setters, which queue_redraw here.
 class _GridLayer:
 	extends Control
-	# Default mirrors StageView._DEFAULT_GRID_COLOR (a bare literal — an inner class can't reference the
-	# outer class's constants by name). StageView/the editor overwrites this via set_grid_color anyway.
+	# Fine alignment grid (M27). Default mirrors StageView._DEFAULT_GRID_COLOR (a bare literal — an inner
+	# class can't reference the outer class's constants by name). The editor overwrites via set_grid_color.
 	var color: Color = Color(0.529, 0.808, 0.980, 0.35)
-	var step: float = 1.0   # display px between lines (model _grid_step * _DISPLAY_SCALE); set by StageView
+	var step: float = 1.0   # display px between fine grid lines (model _grid_step * _DISPLAY_SCALE)
 	var show_grid: bool = true
 
+	# Screen-cell overlay (M39). `world_origin` is the pan — the display-px position of world (0,0) in
+	# this pan-fixed layer; `cell` is the 480x352 screen in display px; `bg_color` fills the highlighted
+	# origin (default) screen, set from the project background.
+	var world_origin: Vector2 = Vector2.ZERO
+	var cell: Vector2 = Vector2.ONE
+	var bg_color: Color = Color("#000000ff")
+	# The screen-boundary guide line (matches StageView's old _stage_box border): bright for the default
+	# screen, the same hue dimmed for the tiled adjacent screens.
+	const _BOUNDARY := Color("#4ad0ff")
+	const _BOUNDARY_DIM := Color(0.29, 0.816, 1.0, 0.4)
+
 	func _draw() -> void:
-		if not show_grid or step <= 0.0:
+		if cell.x <= 0.0 or cell.y <= 0.0:
 			return
-		var x := step  # skip 0 (it sits under the stage border)
-		while x < size.x:
-			draw_line(Vector2(x, 0.0), Vector2(x, size.y), color, 1.0)
-			x += step
-		var y := step
-		while y < size.y:
-			draw_line(Vector2(0.0, y), Vector2(size.x, y), color, 1.0)
-			y += step
+		# 1. The highlighted default screen: fill it with the project background so it reads as the
+		#    "live" screen against the dark surrounding world.
+		var origin_rect := Rect2(world_origin, cell)
+		draw_rect(origin_rect, bg_color)
+		# 2. The fine alignment grid, world-aligned and spanning the whole view (M39 — continues past
+		#    the screen in every direction). fposmod aligns the first line to the world grid under any pan.
+		if show_grid and step > 0.0:
+			var x := fposmod(world_origin.x, step)
+			while x < size.x:
+				draw_line(Vector2(x, 0.0), Vector2(x, size.y), color, 1.0)
+				x += step
+			var y := fposmod(world_origin.y, step)
+			while y < size.y:
+				draw_line(Vector2(0.0, y), Vector2(size.x, y), color, 1.0)
+				y += step
+		# 3. The screen-boundary indicator continued into a grid (M39): the 480x352 cell tiled in all
+		#    directions, dimmed, so adjacent screen spaces are visible around the default one.
+		var cx := fposmod(world_origin.x, cell.x)
+		while cx < size.x:
+			draw_line(Vector2(cx, 0.0), Vector2(cx, size.y), _BOUNDARY_DIM, 1.0)
+			cx += cell.x
+		var cy := fposmod(world_origin.y, cell.y)
+		while cy < size.y:
+			draw_line(Vector2(0.0, cy), Vector2(size.x, cy), _BOUNDARY_DIM, 1.0)
+			cy += cell.y
+		# 4. The default screen's own boundary, bright and drawn last so it stands out from the tiled
+		#    neighbours — this is the highlight.
+		draw_rect(origin_rect, _BOUNDARY, false, 2.0)
 
 # Drag state machine (cf. block_canvas).
 const _IDLE := 0
@@ -118,21 +153,15 @@ var _backdrop: Panel
 ## pan term — the node tree carries it.
 var _world: Control
 
-## The 480x352 **screen region** inside the world (M37) — drawn with the project background colour and
-## a bright **guide-line border** so the user can see where the playable screen sits while the
-## surrounding world is visible around it. Replaces M27's clipped `_stage_area`.
-var _screen_panel: Panel
-
 ## Holds the per-sprite rectangles and the selection overlay (outline + handles), all rebuilt in
 ## _render and hit-tested by get_global_rect — exactly like block_canvas._layer. A child of _world
 ## (so it pans) and **not clipped**, so a sprite outside the screen region is fully visible (M37).
 var _layer: Control
 
-## The screen region's stylebox, kept so set_background can recolour it live (M27).
-var _stage_box: StyleBoxFlat
-
-## The grid overlay layer (M27), drawn behind the sprites; the editor toggles/recolours it via the
-## set_grid_* setters.
+## The world overlay layer (M37/M39): the fine alignment grid spanning the whole view, the screen
+## region tiled in all directions, and the highlighted default screen (background fill + bright
+## boundary). A direct child of StageView (full rect, **not** panned) — it redraws aligned to the pan
+## rather than moving. The editor toggles/recolours it via the set_grid_* / set_background setters.
 var _grid: _GridLayer
 
 ## Whether a drag snaps the changed value to the grid (M27). On by default; the editor's "Snap to
@@ -176,37 +205,26 @@ func _ready() -> void:
 	_backdrop.add_theme_stylebox_override("panel", backdrop_box)
 	add_child(_backdrop)
 
-	# The pannable world container (M37): positioned at _pan, holding the screen region + sprites.
-	_world = Control.new()
-	_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_world)
-
-	# The screen region: the project background fill with a bright guide-line border, at world (0,0)
-	# sized to the 480x352 screen. Unlike M27's _stage_area it does NOT clip — sprites live in the
-	# sibling _layer and may extend beyond it, which is the whole point (show the surrounding world).
-	_screen_panel = Panel.new()
-	_screen_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_screen_panel.position = Vector2.ZERO
-	_screen_panel.size = _STAGE_SIZE * _DISPLAY_SCALE
-	_stage_box = StyleBoxFlat.new()
-	_stage_box.bg_color = _DEFAULT_BACKGROUND
-	_stage_box.border_color = Color("#4ad0ff")  # bright sky — the screen-boundary guide line
-	_stage_box.set_border_width_all(2)
-	_screen_panel.add_theme_stylebox_override("panel", _stage_box)
-	_world.add_child(_screen_panel)
-
-	# The grid sits over the screen region (a child of _screen_panel, full rect), so it only shows
-	# inside the screen — the grid is a screen-space authoring aid. Its step is the model grid
-	# spacing scaled into display px.
+	# The world overlay (M39): the fine grid + the tiled screen cells + the highlighted default screen,
+	# all painted by one full-view, pan-fixed layer over the backdrop. It is NOT a child of _world — it
+	# spans the whole view and redraws aligned to the pan (set via world_origin in _apply_pan), so the
+	# grid and the screen tiling continue indefinitely however far the world is panned.
 	_grid = _GridLayer.new()
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_grid.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_grid.step = _grid_step * _DISPLAY_SCALE
 	_grid.color = _DEFAULT_GRID_COLOR  # the editor overrides via set_grid_color; this is the standalone default
-	_screen_panel.add_child(_grid)
+	_grid.cell = _STAGE_SIZE * _DISPLAY_SCALE
+	_grid.bg_color = _DEFAULT_BACKGROUND  # the editor overrides via set_background
+	add_child(_grid)
 
-	# Sprites + selection overlay, drawn over the screen region and the surrounding world. A child of
-	# _world (so it pans) at the world origin; positioned per-sprite at world*scale by _display_rect.
+	# The pannable world container (M37): positioned at _pan, holding the sprites.
+	_world = Control.new()
+	_world.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_world)
+
+	# Sprites + selection overlay, drawn over the world overlay. A child of _world (so it pans) at the
+	# world origin; positioned per-sprite at world*scale by _display_rect.
 	_layer = Control.new()
 	_layer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_world.add_child(_layer)
@@ -248,18 +266,24 @@ func recenter() -> void:
 
 
 ## Push the current pan onto the world container, rounded so the world doesn't land on half-pixels.
+## The pan-fixed grid overlay doesn't move — it redraws aligned to the same rounded pan (world_origin),
+## so the grid and tiled screen cells stay pixel-aligned with the panned sprites (M39).
 func _apply_pan() -> void:
 	if _world:
 		_world.position = _pan.round()
+	if _grid:
+		_grid.world_origin = _pan.round()
+		_grid.queue_redraw()
 
 
 ## --- Stage settings the editor drives (M27) --------------------------------
 
-## Recolour the stage backdrop (the project's background setting). Live — the stylebox is a resource,
-## so updating bg_color repaints without a rebuild.
+## Recolour the stage backdrop (the project's background setting) — the fill of the highlighted
+## default screen in the world overlay. Live: just update the field and redraw.
 func set_background(color: Color) -> void:
-	if _stage_box:
-		_stage_box.bg_color = color
+	if _grid:
+		_grid.bg_color = color
+		_grid.queue_redraw()
 
 
 ## Show or hide the alignment grid. Visual only — does not touch sprite geometry.

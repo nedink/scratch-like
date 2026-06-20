@@ -12,20 +12,23 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Last shipped:** M38 — **web export save/open**. SAVE / OPEN now work on a Web (WebAssembly) build,
-  where there's no native `FileDialog` or OS filesystem. M22's two file methods were split into a
-  transport-agnostic *model* half ([`_serialize_project`](scripts/editor.gd) /
-  [`_apply_project`](scripts/editor.gd)) and per-transport shells: desktop keeps the `FileAccess` path;
-  Web uses a browser download (`JavaScriptBridge.download_buffer`) / hidden `<input type=file>` upload,
-  routed to behind `OS.has_feature("web")`. Same `{scenes, active}` JSON either build. No block-data /
-  runtime change. (Built on top of, and shipped with, the RUN→ESC round-trip bugfix below.)
-- **Git:** M37 + the bugfix + M38 are all **committed + pushed**. The stray untracked files
-  (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
-- **Immediate next action:** **F5-verify on desktop** that SAVE / OPEN still behave exactly as before
-  (the web branch is a no-op off Web, so desktop should be unchanged) — and ideally test the web path on
-  an actual export if one exists. Also still worth a pass: F5-verify M37 (Stage-mode pan/recenter,
-  off-screen Announcer visible, `camera follow {Ball}` scrolls the runtime view, no-camera demo
-  unchanged). Then pick the next milestone from [Next up](#next-up-candidate-milestones).
+- **Last shipped:** M39 — **stage-editor world grid**. In the Stage view the fine alignment grid now
+  spans the **whole pannable view** (continues indefinitely past the screen), and the screen-boundary
+  indicator is tiled into a **grid of 480×352 screen cells in all directions** so adjacent screen spaces
+  are visible — with the **default (origin) screen highlighted** (project-background fill + a bright
+  guide-line border vs. the dimmed neighbour boundaries). Pure editor-side view change in
+  [`stage_view.gd`](scripts/stage_view.gd): the M27 `_screen_panel` (clipped, screen-only fill/border +
+  child grid) is replaced by one full-view, pan-fixed `_GridLayer` that redraws aligned to the pan
+  (`world_origin`) — drawing the origin fill, the world-spanning fine grid, the tiled screen boundaries,
+  and the bright origin highlight. No opcode / block-data / runtime change.
+- **Git:** M37 + the bugfix + M38 are **committed + pushed**; **M39 is not yet committed**. The stray
+  untracked files (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
+- **Immediate next action:** **F5-verify M39** — enter Stage mode, confirm the fine grid + screen-cell
+  tiling extend past the screen as you pan, the default screen stays highlighted (bg fill + bright
+  border), Recenter re-frames it, and Show-grid / Grid colour / Grid step / Background still work. Then
+  commit + push. Also still worth a pass: F5-verify M38 (desktop SAVE/OPEN unchanged) and M37
+  (pan/recenter, off-screen Announcer, `camera follow {Ball}`). Then pick the next milestone from
+  [Next up](#next-up-candidate-milestones).
 
 ## Next up (candidate milestones)
 
@@ -53,6 +56,11 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M39 — **stage-editor world grid.** The Stage view's fine alignment grid now spans the whole pannable
+  view, and the screen-boundary indicator is tiled into a grid of 480×352 screen cells in all directions
+  (default/origin screen highlighted: bg fill + bright border; neighbours dimmed). One full-view,
+  pan-fixed `_GridLayer` replaced M27's clipped `_screen_panel`. Editor-side only — no block/runtime
+  change. *(committed/pushed: pending)*
 - M38 — **web export save/open.** SAVE / OPEN work on a Web (WebAssembly) build via a transport split:
   desktop `FileAccess` vs. browser download / `<input type=file>` upload, behind `OS.has_feature("web")`,
   reusing the same `_serialize_project` / `_apply_project` model halves. No block/runtime change.
