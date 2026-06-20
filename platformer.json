@@ -1,0 +1,820 @@
+{
+	"background": "#87ceebff",
+	"grid": {
+		"color": "#87cefa59",
+		"show": true,
+		"snap": true,
+		"step": 8.0
+	},
+	"scripts": [
+		{
+			"color": "#ff5a5aff",
+			"h": 24.0,
+			"name": "Player",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "px",
+									"value": 40.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "py",
+									"value": 308.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "vy",
+									"value": 0.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "on_ground",
+									"value": 0.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": {
+										"inputs": {
+											"name": "px"
+										},
+										"opcode": "variable"
+									},
+									"y": {
+										"inputs": {
+											"name": "py"
+										},
+										"opcode": "variable"
+									}
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"name": "on_ground",
+												"value": 0.0
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "px",
+															"value": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "px"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 4.0
+																},
+																"opcode": "add"
+															}
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"key": "Right"
+													},
+													"opcode": "key_pressed?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "px",
+															"value": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "px"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 4.0
+																},
+																"opcode": "subtract"
+															}
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"key": "Left"
+													},
+													"opcode": "key_pressed?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "px",
+															"value": 9.0
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "px"
+															},
+															"opcode": "variable"
+														},
+														"b": 9.0
+													},
+													"opcode": "less_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "px",
+															"value": 471.0
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "px"
+															},
+															"opcode": "variable"
+														},
+														"b": 471.0
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"name": "vy",
+												"value": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "vy"
+															},
+															"opcode": "variable"
+														},
+														"b": 1.0
+													},
+													"opcode": "add"
+												}
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"name": "py",
+												"value": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "py"
+															},
+															"opcode": "variable"
+														},
+														"b": {
+															"inputs": {
+																"name": "vy"
+															},
+															"opcode": "variable"
+														}
+													},
+													"opcode": "add"
+												}
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"x": {
+													"inputs": {
+														"name": "px"
+													},
+													"opcode": "variable"
+												},
+												"y": {
+													"inputs": {
+														"name": "py"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "go_to"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "py",
+															"value": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "py"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "vy"
+																		},
+																		"opcode": "variable"
+																	}
+																},
+																"opcode": "subtract"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "on_ground",
+																		"value": 1.0
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "vy"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 0.0
+																},
+																"opcode": "greater_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "vy",
+															"value": 0.0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "px"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "py"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "Ground"
+															},
+															"opcode": "touching_sprite?"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "Plat1"
+																	},
+																	"opcode": "touching_sprite?"
+																},
+																"b": {
+																	"inputs": {
+																		"name": "Plat2"
+																	},
+																	"opcode": "touching_sprite?"
+																}
+															},
+															"opcode": "or"
+														}
+													},
+													"opcode": "or"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "vy",
+															"value": -12.0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"name": "on_ground",
+															"value": 0.0
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "on_ground"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1.0
+															},
+															"opcode": "equals"
+														},
+														"b": {
+															"inputs": {
+																"key": "Up"
+															},
+															"opcode": "key_pressed?"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "px",
+															"value": 40.0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"name": "py",
+															"value": 308.0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"name": "vy",
+															"value": 0.0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "px"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "py"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "bottom"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "won",
+															"value": 1.0
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "Goal"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 18.0,
+			"x": 40.0,
+			"y": 308.0
+		},
+		{
+			"color": "#5b4636ff",
+			"h": 32.0,
+			"name": "Ground",
+			"script": [],
+			"w": 480.0,
+			"x": 240.0,
+			"y": 336.0
+		},
+		{
+			"color": "#6ab04cff",
+			"h": 16.0,
+			"name": "Plat1",
+			"script": [],
+			"w": 100.0,
+			"x": 180.0,
+			"y": 250.0
+		},
+		{
+			"color": "#6ab04cff",
+			"h": 16.0,
+			"name": "Plat2",
+			"script": [],
+			"w": 100.0,
+			"x": 330.0,
+			"y": 195.0
+		},
+		{
+			"color": "#ffd23fff",
+			"h": 12.0,
+			"name": "Coin1",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1.0,
+															"name": "score"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": -200.0,
+															"y": -200.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"mode": "this script"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "Player"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 12.0,
+			"x": 110.0,
+			"y": 300.0
+		},
+		{
+			"color": "#ffd23fff",
+			"h": 12.0,
+			"name": "Coin2",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1.0,
+															"name": "score"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": -200.0,
+															"y": -200.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"mode": "this script"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "Player"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 12.0,
+			"x": 180.0,
+			"y": 230.0
+		},
+		{
+			"color": "#ffd23fff",
+			"h": 12.0,
+			"name": "Coin3",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1.0,
+															"name": "score"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": -200.0,
+															"y": -200.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"mode": "this script"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "Player"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 12.0,
+			"x": 330.0,
+			"y": 167.0
+		},
+		{
+			"color": "#2ecc71ff",
+			"h": 40.0,
+			"name": "Goal",
+			"script": [],
+			"w": 16.0,
+			"x": 448.0,
+			"y": 300.0
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16.0,
+			"name": "ScoreHud",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"size": "large",
+												"text": {
+													"inputs": {
+														"name": "score"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "say"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16.0,
+			"x": 36.0,
+			"y": 28.0
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16.0,
+			"name": "Banner",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 240.0,
+															"y": 176.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"size": "large",
+															"text": "YOU WIN"
+														},
+														"opcode": "say"
+													},
+													{
+														"inputs": {
+															"mode": "all"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "won"
+															},
+															"opcode": "variable"
+														},
+														"b": 1.0
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16.0,
+			"x": 240.0,
+			"y": 176.0
+		}
+	],
+	"variables": [
+		{
+			"name": "score",
+			"scope": "global",
+			"value": 0.0
+		},
+		{
+			"name": "won",
+			"scope": "global",
+			"value": 0.0
+		},
+		{
+			"name": "px",
+			"scope": "Player",
+			"value": 0.0
+		},
+		{
+			"name": "py",
+			"scope": "Player",
+			"value": 0.0
+		},
+		{
+			"name": "vy",
+			"scope": "Player",
+			"value": 0.0
+		},
+		{
+			"name": "on_ground",
+			"scope": "Player",
+			"value": 0.0
+		}
+	]
+}
