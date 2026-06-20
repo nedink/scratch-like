@@ -59,6 +59,15 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- Platformer — **grid/screen conformance + side-wall collision.** Reshaped every sprite in
+  `build_platformer.py` so all centers and sizes are multiples of the default 8px grid and fit inside the
+  fixed 480×352 screen (player now 16×32 resting at grid-aligned y=304; platforms/coins/goal/HUD all
+  snapped; added a ground-level `Wall` pillar). Reworked the player physics into a **separate-axis
+  collision response**: a horizontal pass (`vx`) moves then steps back out of any solid it lands in — so a
+  platform's *side* stops the player like a vertical wall (they slide along it) — followed by the original
+  vertical pass (`vy`) for floors/ceilings. Pure save-file change (existing opcodes only); regenerate with
+  `python3 build_platformer.py`. *(committed/pushed: pending)*
+
 - M40 — **multiple-stage functionality removed.** Reverted the M33/M34 scene (stage/level) layer back to
   a single flat project: editor owns `_scripts`/`_variables`/`_background`/`_grid_settings` directly (no
   `_scenes` list / active index / scene chrome), the Stage takes `project_sprites`/`project_variables`/

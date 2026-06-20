@@ -2,9 +2,13 @@
 """Generate platformer.json — a scratch-like save file (M40 flat single-stage shape).
 
 A single-level platformer built only from the engine's existing opcodes. The character
-has no "change y" block, so position is tracked in per-sprite variables (px/py/vy)
-and written each tick with go_to; gravity, jumping, one-way-solid landing, coins
-and a goal are all assembled from move/if/forever/variable/operator blocks.
+has no "change y" block, so position is tracked in per-sprite variables (px/py/vx/vy)
+and written each tick with go_to; gravity, jumping, solid landing, side-wall collision,
+coins and a goal are all assembled from move/if/forever/variable/operator blocks.
+
+All sprite geometry is aligned to the editor's default 8px grid and fits inside the
+fixed 480x352 screen (the runtime/editor stage size), so the level sits cleanly on the
+grid when opened in the stage editor.
 """
 
 import json
@@ -45,7 +49,7 @@ def any_touching(names):
 SPEED = 4        # horizontal px/tick
 GRAV = 1         # downward accel px/tick^2
 JUMP = 12        # initial upward velocity
-PW, PH = 18, 24  # player size
+PW, PH = 16, 32  # player size (grid-aligned: 2x4 tiles)
 HW = PW // 2     # half width (for screen-edge clamp)
 VIEW_W, VIEW_H = 480, 352
 
@@ -53,12 +57,26 @@ VIEW_W, VIEW_H = 480, 352
 def player_script(start_x, start_y, solids, hazards):
     """The controllable character.
 
-    Per tick: read left/right, apply gravity, move, then resolve a one-way-solid
-    collision (step back the full vy — settles to a ~1px rest gap and self-corrects
-    each frame), allow a jump only when grounded, respawn on a hazard / falling off
-    the bottom, and flag `won` on reaching the goal.
+    Per tick the two axes are resolved *independently* (the standard separate-axis
+    collision response):
+
+      1. Horizontal: read left/right into `vx`, move px, then if we end up inside a
+         solid, step the whole `vx` back out — so the side of a platform stops the
+         player like a vertical wall (they slide along it rather than passing through).
+      2. Vertical: apply gravity to `vy`, move py, then if we end up inside a solid,
+         step the whole `vy` back out (settles to a ~1px rest gap, self-corrects each
+         frame) and, if we were falling, mark on_ground so a jump is allowed.
+
+    Resolving the axes in separate passes (each with its own go_to + touching test) is
+    what makes a floor a floor and a wall a wall without any shallowest-overlap logic.
     """
-    # gravity + integrate vertical, then collide against solids
+    # --- horizontal collision: hit the side of a solid -> step back like a wall ---
+    wall_resolve = if_(any_touching(solids), [
+        set_var("px", sub(var("px"), var("vx"))),   # undo this tick's horizontal move
+        go_to(var("px"), var("py")),
+    ])
+
+    # --- vertical collision: land on / bonk under a solid ---
     grounded_resolve = if_(any_touching(solids), [
         set_var("py", sub(var("py"), var("vy"))),   # undo this tick's vertical move
         if_(gt(var("vy"), 0), [set_var("on_ground", 1)]),  # was falling -> landed
@@ -79,12 +97,16 @@ def player_script(start_x, start_y, solids, hazards):
 
     loop = forever([
         set_var("on_ground", 0),
-        # --- horizontal ---
-        if_(key("Right"), [set_var("px", add(var("px"), SPEED))]),
-        if_(key("Left"),  [set_var("px", sub(var("px"), SPEED))]),
+        # --- horizontal: build vx from input, integrate, clamp, then collide ---
+        set_var("vx", 0),
+        if_(key("Right"), [set_var("vx", SPEED)]),
+        if_(key("Left"),  [set_var("vx", -SPEED)]),
+        set_var("px", add(var("px"), var("vx"))),
         if_(lt(var("px"), HW),            [set_var("px", HW)]),
         if_(gt(var("px"), VIEW_W - HW),   [set_var("px", VIEW_W - HW)]),
-        # --- gravity + vertical ---
+        go_to(var("px"), var("py")),
+        wall_resolve,
+        # --- vertical: gravity, integrate, then collide ---
         set_var("vy", add(var("vy"), GRAV)),
         set_var("py", add(var("py"), var("vy"))),
         go_to(var("px"), var("py")),
@@ -103,6 +125,7 @@ def player_script(start_x, start_y, solids, hazards):
     return [hat([
         set_var("px", start_x),
         set_var("py", start_y),
+        set_var("vx", 0),
         set_var("vy", 0),
         set_var("on_ground", 0),
         go_to(var("px"), var("py")),
@@ -153,8 +176,8 @@ COL_SPIKE  = "#e63946ff"
 COL_GOAL   = "#2ecc71ff"
 COL_CLEAR  = "#ffffff00"
 
-GROUND_TOP = 320          # ground surface y (ground centered y=336, h=32)
-PLAYER_REST = GROUND_TOP - PH // 2   # 308: player center when standing on ground
+GROUND_TOP = 320                      # ground surface y (ground centered y=336, h=32)
+PLAYER_REST = GROUND_TOP - PH // 2    # 304: player center when standing on ground (grid-aligned)
 
 
 def common_sprites(player, solids, hazards, coins, goal_xy, extra=None):
@@ -171,12 +194,12 @@ def common_sprites(player, solids, hazards, coins, goal_xy, extra=None):
             continue
         sprites.append(sprite(n, x, y, w, h, COL_PLAT, []))
     for i, (x, y) in enumerate(coins, 1):
-        sprites.append(sprite("Coin%d" % i, x, y, 12, 12, COL_COIN, coin_script()))
+        sprites.append(sprite("Coin%d" % i, x, y, 16, 16, COL_COIN, coin_script()))
     for (n, x, y, w, h) in hazards:
         sc = extra.get(n, []) if extra else []
         sprites.append(sprite(n, x, y, w, h, COL_SPIKE, sc))
-    sprites.append(sprite("Goal", goal_xy[0], goal_xy[1], 16, 40, COL_GOAL, []))
-    sprites.append(sprite("ScoreHud", 36, 28, 16, 16, COL_CLEAR, score_hud_script()))
+    sprites.append(sprite("Goal", goal_xy[0], goal_xy[1], 16, 48, COL_GOAL, []))
+    sprites.append(sprite("ScoreHud", 40, 24, 16, 16, COL_CLEAR, score_hud_script()))
     sprites.append(sprite("Banner", 240, 176, 16, 16, COL_CLEAR, banner_script()))
     return sprites
 
@@ -187,6 +210,7 @@ def level_vars(extra_locals=None):
         {"name": "won", "value": 0, "scope": "global"},
         {"name": "px", "value": 0, "scope": "Player"},
         {"name": "py", "value": 0, "scope": "Player"},
+        {"name": "vx", "value": 0, "scope": "Player"},
         {"name": "vy", "value": 0, "scope": "Player"},
         {"name": "on_ground", "value": 0, "scope": "Player"},
     ]
@@ -202,16 +226,24 @@ def grid():
 # ---- The single stage: Meadow (gentle intro) ------------------------------
 
 def meadow():
-    # Ground spans full width; two stepping platforms; three coins; goal on ground.
+    """All centers and sizes are multiples of 8 and inside 480x352.
+
+    Layout (y grows down): ground spans the floor; a tall Wall rises from the ground
+    to demonstrate side-wall collision (the player must jump it, not walk through);
+    three floating platforms step up to the right; coins sit on the path; the goal
+    stands on the ground at the far right.
+    """
     solids = [
-        ("Ground", 240, 336, 480, 32),
-        ("Plat1", 180, 250, 100, 16),
-        ("Plat2", 330, 195, 100, 16),
+        ("Ground", 240, 336, 480, 32),   # floor:   x[0,480]   y[320,352]
+        ("Wall",   224, 288, 16, 64),    # pillar:  x[216,232] y[256,320]  (on the ground)
+        ("Plat1",  160, 256, 64, 16),    #          x[128,192] y[248,264]
+        ("Plat2",  288, 200, 64, 16),    #          x[256,320] y[192,208]
+        ("Plat3",  400, 152, 64, 16),    #          x[368,432] y[144,160]
     ]
-    coins = [(110, 300), (180, 230), (330, 167)]
+    coins = [(96, 296), (160, 232), (288, 176), (400, 128)]
     sprites = common_sprites(
         player=(40, PLAYER_REST), solids=solids, hazards=[], coins=coins,
-        goal_xy=(448, 300))
+        goal_xy=(456, 296))
     return sprites, level_vars(), "#87ceebff"
 
 
