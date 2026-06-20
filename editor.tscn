@@ -56,28 +56,6 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "scratch-like"
 
-[node name="SceneSelector" type="OptionButton" parent="Page/BarPanel/Bar" unique_id=566786400]
-unique_name_in_owner = true
-layout_mode = 2
-
-[node name="AddSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786401]
-unique_name_in_owner = true
-layout_mode = 2
-text = "+ Scene"
-
-[node name="DelSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786402]
-unique_name_in_owner = true
-layout_mode = 2
-text = "- Scene"
-
-[node name="RenameSceneButton" type="Button" parent="Page/BarPanel/Bar" unique_id=566786403]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Rename Scene"
-
-[node name="BarSep" type="VSeparator" parent="Page/BarPanel/Bar" unique_id=566786404]
-layout_mode = 2
-
 [node name="SpriteSelector" type="OptionButton" parent="Page/BarPanel/Bar" unique_id=1853098916]
 unique_name_in_owner = true
 layout_mode = 2
@@ -415,39 +393,6 @@ text = "Parameters (space-separated):"
 unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
-
-[node name="SceneDialog" type="ConfirmationDialog" parent="." unique_id=566786405]
-unique_name_in_owner = true
-title = "Scene"
-
-[node name="VBox" type="VBoxContainer" parent="SceneDialog" unique_id=566786406]
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 6
-
-[node name="NameLabel" type="Label" parent="SceneDialog/VBox" unique_id=566786407]
-layout_mode = 2
-text = "Scene name:"
-
-[node name="SceneNameEdit" type="LineEdit" parent="SceneDialog/VBox" unique_id=566786408]
-unique_name_in_owner = true
-custom_minimum_size = Vector2(220, 0)
-layout_mode = 2
-
-[node name="DelSceneDialog" type="ConfirmationDialog" parent="." unique_id=566786409]
-unique_name_in_owner = true
-title = "Delete Scene"
-
-[node name="DelSceneLabel" type="Label" parent="DelSceneDialog" unique_id=566786410]
-unique_name_in_owner = true
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
 
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true

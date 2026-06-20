@@ -12,33 +12,36 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Last shipped:** M39 — **stage-editor world grid**. In the Stage view the fine alignment grid now
-  spans the **whole pannable view** (continues indefinitely past the screen), and the screen-boundary
-  indicator is tiled into a **grid of 480×352 screen cells in all directions** so adjacent screen spaces
-  are visible — with the **default (origin) screen highlighted** (project-background fill + a bright
-  guide-line border vs. the dimmed neighbour boundaries). Pure editor-side view change in
-  [`stage_view.gd`](scripts/stage_view.gd): the M27 `_screen_panel` (clipped, screen-only fill/border +
-  child grid) is replaced by one full-view, pan-fixed `_GridLayer` that redraws aligned to the pan
-  (`world_origin`) — drawing the origin fill, the world-spanning fine grid, the tiled screen boundaries,
-  and the bright origin highlight. No opcode / block-data / runtime change.
-- **Git:** M37 + the bugfix + M38 are **committed + pushed**; **M39 is not yet committed**. The stray
-  untracked files (`build_platformer.py`, `platformer.json`) remain unrelated — leave them.
-- **Immediate next action:** **F5-verify M39** — enter Stage mode, confirm the fine grid + screen-cell
-  tiling extend past the screen as you pan, the default screen stays highlighted (bg fill + bright
-  border), Recenter re-frames it, and Show-grid / Grid colour / Grid step / Background still work. Then
-  commit + push. Also still worth a pass: F5-verify M38 (desktop SAVE/OPEN unchanged) and M37
-  (pan/recenter, off-screen Announcer, `camera follow {Ball}`). Then pick the next milestone from
-  [Next up](#next-up-candidate-milestones).
+- **Last shipped:** M40 — **multiple-stage functionality removed** (reverted to a single flat project).
+  M33/M34 added a project-level *scene (stage / level)* layer — a `_scenes` list + active index in the
+  editor, a top-bar scene selector + Add/Delete/Rename Scene chrome, `switch_scene`/`next_scene` blocks,
+  the Stage carrying the whole scene list (`project_scenes`/`project_active`), and a `{scenes, active}`
+  save shape. M40 rips all of that out: the editor again owns flat `_scripts`/`_variables`/`_background`/
+  `_grid_settings` directly (the seeds come straight from `PongScripts.sprites()/variables()/background()/
+  grid()` — `scenes()` is gone), the Stage takes the three per-scene statics again
+  (`project_sprites`/`project_variables`/`project_background` + `_sprite_model`/`_variable_model`/
+  `_background_hex` fallbacks), the two scene-nav opcodes + their interpreter handlers + the `scenes`
+  category + `project_scene_names` are deleted, and persistence is back to flat
+  `{scripts, variables, background, grid}`. RUN/ESC still use `change_scene_to_file` (that's the Godot
+  scene swap, not the removed project-scene layer). Rationale: multi-stage complicated persistence and
+  cross-stage state we're not ready to tackle, and the chrome ate top-bar space — we only need one stage
+  now. **No backward-compat in the loader** (a deliberate scope call — see next action).
+- **Git:** M39 is committed + pushed (`fc6bf91`). M40 (this removal) is **code-complete, uncommitted** —
+  6 files: `editor.gd`, `stage.gd`, `interpreter.gd`, `block_view.gd`, `pong_scripts.gd`, `editor.tscn`.
+- **Immediate next action (two parts):**
+  1. **Adapt the existing saves to the new flat format** (the explicitly-deferred step-2). `platformer.json`
+     and its generator `build_platformer.py` are in the old `{scenes, active}` shape with **3 scenes**
+     (level1/2/3). The new loader only reads `{scripts, variables, background, grid}`, so they won't open
+     as-is. Decide how to collapse the 3 levels to one stage (keep level1? merge?) and rewrite the
+     generator to emit the flat shape, then regenerate `platformer.json`.
+  2. **F5-verify M40** — launch the editor: no scene selector/buttons in the top bar; the stock Pong demo
+     loads, RUN plays it, ESC returns with edits intact; SAVE writes `{scripts, variables, background,
+     grid}` and OPEN reloads it; the palette has no SCENES group.
 
 ## Next up (candidate milestones)
 
 Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay scoped.
 
-- **Cross-scene shared state (M34 follow-on).** A project-global variable store carried across scenes,
-  so e.g. a score survives a `switch_scene` (variables are per-scene today, re-seeded on every switch).
-- **Scene-rename → `switch_scene` cascade (M34 follow-on).** Renaming a scene relabels the dropdown but
-  leaves existing `switch_scene` blocks naming the old scene (→ runtime warning). `rewrite_sprite_refs`
-  (M25) is the template, but here it's a *cross-scene* walk (any scene's block can name any scene).
 - **Custom-block *parameter* rename/sync + delete.** M32 did the *name* cascade; editing a `define`'s
   *params* should rewrite its `call`s' `args` keys and its body's `param`s — but first needs a **params-
   editing UI** (no way to edit params after the Make-a-Block dialog today) plus a rename-vs-add/remove
@@ -56,11 +59,17 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M40 — **multiple-stage functionality removed.** Reverted the M33/M34 scene (stage/level) layer back to
+  a single flat project: editor owns `_scripts`/`_variables`/`_background`/`_grid_settings` directly (no
+  `_scenes` list / active index / scene chrome), the Stage takes `project_sprites`/`project_variables`/
+  `project_background` again, `switch_scene`/`next_scene` + the `scenes` category + `project_scene_names`
+  are gone, `PongScripts.scenes()` removed, and persistence is back to `{scripts, variables, background,
+  grid}` (no backward-compat). 6 files touched. *(committed/pushed: pending)*
 - M39 — **stage-editor world grid.** The Stage view's fine alignment grid now spans the whole pannable
   view, and the screen-boundary indicator is tiled into a grid of 480×352 screen cells in all directions
   (default/origin screen highlighted: bg fill + bright border; neighbours dimmed). One full-view,
   pan-fixed `_GridLayer` replaced M27's clipped `_screen_panel`. Editor-side only — no block/runtime
-  change. *(committed/pushed: pending)*
+  change. *(committed `fc6bf91`)*
 - M38 — **web export save/open.** SAVE / OPEN work on a Web (WebAssembly) build via a transport split:
   desktop `FileAccess` vs. browser download / `<input type=file>` upload, behind `OS.has_feature("web")`,
   reusing the same `_serialize_project` / `_apply_project` model halves. No block/runtime change.

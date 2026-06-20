@@ -58,7 +58,6 @@ static var _CATEGORY_COLORS := {
 	"variables": Color("ff731aff"),
 	"operators": Color("#59c059"),
 	"custom": Color("#ff6680"),
-	"scenes": Color("#5a7d9a"),
 	"camera": Color("#0fbd8c"),
 	"unknown": Color("#7f7f7f"),
 }
@@ -88,13 +87,6 @@ static var _CATEGORY_COLORS := {
 static var project_variables: Array = []
 static var project_sprites: Array = []
 static var project_custom_blocks: Array = []
-
-## `project_scene_names` (M34) is the sibling for **scenes** (stages / levels): the names of every
-## scene the project holds. The editor re-points it whenever the scene list changes, so a
-## `switch to scene {name}` slot is a dropdown of the project's real scenes — the scenes twin of
-## project_sprites (a scene name is project-global, so this is not scoped per sprite). Empty (no
-## editor) -> the slot falls back to a free-text field, like any data-scoped slot with no model.
-static var project_scene_names: Array = []
 
 ## `project_custom_block_params` (M31) is the parameter sibling of `project_custom_blocks`: a map of
 ## custom-block name -> its ordered parameter-name list, for the sprite being edited. The editor
@@ -214,13 +206,6 @@ const _OPCODES := {
 	"call": {"category": "custom", "kind": "statement", "palette": false, "template": "call {name}", "defaults": {"name": "block", "args": {}}, "data_enums": {"name": "custom_blocks"}},
 	"param": {"category": "custom", "kind": "reporter", "output": "value", "palette": false, "template": "{name}", "defaults": {"name": "param"}},
 
-	# Runtime scene navigation (M34): change which stage (level) is playing. `switch_scene`'s {name} is
-	# a data-scoped dropdown of the project's real scenes (data_enums "scenes" -> project_scene_names,
-	# the scene sibling of touching_sprite?'s "sprites"); `next_scene` takes no input. Both are plain
-	# statements — the Stage carries out the change by relaunching the game on the target scene.
-	"switch_scene": {"category": "scenes", "kind": "statement", "template": "switch to scene {name}", "defaults": {"name": "Scene 1"}, "data_enums": {"name": "scenes"}},
-	"next_scene": {"category": "scenes", "kind": "statement", "template": "next scene", "defaults": {}},
-
 	# Camera (M37): scroll the runtime view. The camera shows the world point given by its position at
 	# the screen centre, so camera coordinates are the *same space sprites live in* (default 240,176 =
 	# the identity view today). `set_camera`/`change_camera` move it (movement); `camera_follow` /
@@ -235,7 +220,7 @@ const _OPCODES := {
 
 ## Category display order for the palette (operators are all reporters, so that group is
 ## empty after filtering and simply produces no chips).
-const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators", "scenes", "camera"]
+const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators", "camera"]
 
 
 ## A vertical run of blocks (a sprite's whole script, a hat's body, or a C-block's
@@ -679,7 +664,6 @@ static func _options_for(info: Dictionary, key: String) -> Array:
 		"variables": return project_variables
 		"sprites": return project_sprites
 		"custom_blocks": return project_custom_blocks
-		"scenes": return project_scene_names
 		_: return []
 
 

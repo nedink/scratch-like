@@ -5,7 +5,54 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 39 — stage-editor world grid
+## Current state: Milestone 40 — multiple-stage functionality removed
+
+**Goal of this milestone:** **rip out the project-level scene (stage / level) layer** that M33/M34 added,
+reverting to a **single flat project**. Multiple stages complicated persistence and cross-stage state we
+weren't ready to tackle, and the top-bar scene chrome ate space we'd rather give to other controls — we
+only need one stage right now. This is a **forward surgical removal**, not a `git revert`: M35–M39 were
+all built on top of the scene model (M38's persistence was literally `{scenes, active}`, M37's runtime
+read `project_scenes`), so the scene layer had to be collapsed out by hand while keeping everything
+M35–M39 added.
+
+What came out (the M33/M34 sections below are now **historical — the code they describe is removed**):
+
+- **The editor's scene layer** ([`editor.gd`](scripts/editor.gd)). The `_scenes` list + `_scene` active
+  index are gone; the editor again owns flat `_scripts` / `_variables` / `_background` / `_grid_settings`
+  directly, seeded straight from `PongScripts.sprites()` / `variables()` / `background()` / `grid()` in
+  [`_seed_demo`](scripts/editor.gd). The RUN→ESC restore statics went from `_restore_scenes`/`_restore_scene`
+  to the four flat `_restore_scripts`/`_restore_variables`/`_restore_background`/`_restore_grid`. Deleted
+  outright: `_load_scene_into_working`, `_persist_current_scene`, `_load_scene`, `_on_scene_selected`,
+  the Add/Rename/Delete-scene handlers, `_scene_names`, and `_normalize_scene` (its sprite/background/grid
+  back-fill folded inline into [`_apply_project`](scripts/editor.gd)).
+- **The top-bar scene chrome** ([`editor.tscn`](editor.tscn)): the `SceneSelector`, `+ Scene` / `- Scene`
+  / `Rename Scene` buttons, the separator, and the `SceneDialog` / `DelSceneDialog` are removed — the bar
+  now goes Title → SpriteSelector directly.
+- **The two scene-nav opcodes** `switch_scene` / `next_scene` ([`block_view.gd`](scripts/block_view.gd) +
+  their [`interpreter.gd`](scripts/interpreter.gd) handlers), the slate-blue `"scenes"` category, and the
+  `project_scene_names` static / `"scenes"` data-enum source.
+- **The Stage's whole-scene-list hand-off** ([`stage.gd`](scripts/stage.gd)): `project_scenes` /
+  `project_active` / `_active` and the runtime navigation methods (`go_to_scene_by_name` /
+  `go_to_next_scene` / `_change_to_scene`, plus `_scene_list` / `_active_scene`) are replaced by the
+  pre-M34 trio of statics `project_sprites` / `project_variables` / `project_background` with the
+  `_sprite_model` / `_variable_model` / `_background_hex` fallback helpers (the editor's model when handed
+  one, else PongScripts). `_GAME_SCENE` (only used by the removed `_change_to_scene`) is gone from the
+  Stage.
+- **The stock scene model** `PongScripts.scenes()` ([`pong_scripts.gd`](scripts/pong_scripts.gd)) — the
+  four content builders it composed (`sprites` / `variables` / `background` / `grid`) stay.
+- **Persistence** is back to a flat `{scripts, variables, background, grid}` JSON
+  ([`_serialize_project`](scripts/editor.gd) / [`_apply_project`](scripts/editor.gd)). **No backward-compat
+  in the loader** — it reads only the flat shape; a saved `{scenes, active}` file (or the stock
+  `platformer.json`) must be migrated separately (a deliberate scope call — that's the next step).
+
+What stayed: the RUN / ESC scene swap (`change_scene_to_file` between `editor.tscn` and `main.tscn`) — that
+is the *Godot* scene mechanism, unrelated to the removed project-scene layer. No block-data-shape change,
+no interpreter dispatch change beyond dropping two handlers; M35–M39's features are untouched. See
+[Multiple-stage functionality removed (M40)](#multiple-stage-functionality-removed-m40).
+
+---
+
+## Earlier: Milestone 39 — stage-editor world grid
 
 **Goal of this milestone:** make the stage editor's **alignment grid continue indefinitely** outside the
 default screen, and turn the **screen-boundary indicator into a tiled grid of 480×352 screen cells in all
@@ -557,24 +604,9 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
 3. Press **F5** (Run Project). The main scene is now `editor.tscn`: the **block
    editor** opens, showing a **palette of new blocks** down the left, a sprite selector,
    and one sprite's script rendered as a stack of visual blocks (pick another sprite
-   from the dropdown to load it).
-   **Switch between stages (scenes / levels)** (M33) with the **scene selector** at the left of the top
-   bar: a project can hold several independent scenes, each with its **own sprites, variables, backdrop,
-   and grid**. Pick one to edit it; **+ Scene** makes a new one (it starts with a single grey placeholder
-   sprite, an empty variable list, and the stock backdrop/grid), **− Scene** deletes the current one (the
-   last scene can't be deleted), and **Rename Scene** renames it. Scenes are self-contained — sprite
-   names need only be unique *within* a scene — and **RUN plays the scene you're currently on**. The
-   scene list (and which one is active) is part of the project, so **SAVE** keeps it and a project saved
-   before M33 opens as a single "Scene 1".
-   **Change scene while the game runs** (M34) with two blocks in the palette's **SCENES** group:
-   **`switch to scene {name}`** jumps to the scene you pick from its dropdown (the project's real
-   scenes), and **`next scene`** advances to the next scene, wrapping past the last back to the first.
-   Wire one into a script (e.g. `when_flag_clicked → forever → if (key {space} pressed?) then → next
-   scene`) and at RUN the game rebuilds on the target scene — its sprites, variables, and backdrop. A
-   scene change **ends the current scene's scripts** and **resets variables** to the new scene's defaults
-   (each scene owns its variables, so a score doesn't carry across — that's a later milestone). Renaming
-   a scene relabels the dropdown but doesn't rewrite `switch to scene` blocks that already name the old
-   scene (they warn at RUN — re-pick the new name).
+   from the dropdown to load it). A project is a **single stage** — one set of sprites, variables,
+   backdrop, and grid. (M33/M34 added multiple stages + `switch to scene` / `next scene` blocks; **M40
+   removed all of that** — see the milestone note above.)
    **Add or remove a sprite** (M24) with the **+ Sprite** / **− Sprite** buttons beside the selector:
    *+ Sprite* names a new sprite (it starts as a grey square at the stage centre with an empty script —
    give it a `when_flag_clicked` and blocks, and a `go_to` to place it); *− Sprite* deletes the selected
@@ -2292,12 +2324,16 @@ expressed as blocks (sign-gated reflection + `go_to` nudge), retiring the `point
 sentinel *in the demo* — though `_bounce()` and the sentinel remain in the runtime as a supported opcode
 value.
 
+**M40 removed two opcodes** — `switch_scene` and `next_scene` were deleted along with the rest of the
+multiple-stage layer (M33/M34), reverting to a single flat project. The M34 notes just below are
+historical (the opcodes and the whole scene model they describe no longer exist).
+
 **M34 added two opcodes** — `switch_scene` and `next_scene` (runtime scene navigation): the first opcode
 additions since M30's custom blocks. Each is the usual one-`_OPCODES`-entry + one-interpreter-handler
 step, with no block-data-shape change. The runtime change is structural but contained — the editor hands
 the `Stage` the *whole* scene list (`project_scenes` + `project_active`, replacing M24/M20/M27's three
 per-scene statics), and a scene change is a `change_scene_to_file` reload (the same swap RUN/ESC use), so
-no per-block runtime logic changed.
+no per-block runtime logic changed. **(Removed in M40.)**
 
 **M33 added no opcodes** — it is a pure **editor + model + persistence** change (a project holds
 multiple scenes, each a `{name, sprites, variables, background, grid}` dict; RUN plays the active one),
@@ -2384,8 +2420,6 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `define` | hat | `name`, `params`, `body` | custom-block definition (M30); never auto-started — its body runs only when a `call` of the same name invokes it. Per-sprite. `params` (M31) is the ordered parameter-name list; its prototype pills drag copies of `param` into the body |
 | `call` | statement | `name`, `args` | run the custom block `name` defined in this sprite's script (M30); resolves the `define` and `await`s its body. Unknown name → warn + no-op. `args` (M31) is a `{param: value}` dict — one argument per parameter, bound into a frame for the body |
 | `param` | reporter | `name` | read a custom-block parameter (M31), resolved against the active `call`'s frame; 0 + a warning if read outside a custom block. Value output |
-| `switch_scene` | statement | `name` | switch the running game to the scene named `name` (M34); the Stage relaunches on it. `{name}` is a dropdown of the project's scenes. Unknown name → warn + no-op. Ends the current scene's scripts |
-| `next_scene` | statement | — | advance to the next scene in the project's list (M34), wrapping past the last back to the first |
 | `set_camera` | statement | `x`, `y` | centre the runtime view on world point (x, y) (M37); camera coords are sprite coords. Clears any active follow |
 | `change_camera` | statement | `dx`, `dy` | scroll the runtime view by (dx, dy) from its current centre (M37); clears any active follow |
 | `camera_follow` | statement | `name` | track the named sprite — the camera re-centres on it each frame (M37). `{name}` is a sprites dropdown; unknown → warn + no-op |
@@ -2488,20 +2522,10 @@ CLAUDE.md                  This file
   view (M27: select / drag / resize — Alt about the centre, Shift to lock aspect (M28) — / recolour, or the inspector's x/y/w/h/colour fields) — but a
   `go_to` block in the script still wins at RUN (behaviour is blocks), so the model position matters
   most for a sprite with no `go_to`.
-- New scene (stage / level)? Two ways, mirroring sprites. **From the UI** (M33): **+ Scene** in the top
-  bar names a new stage (one default placeholder sprite, an empty variable list, the stock
-  backdrop/grid); **− Scene** deletes the active one (refused when only one is left); **Rename Scene**
-  renames it (a rename relabels the `switch to scene` dropdown but doesn't cascade to existing
-  `switch_scene` blocks — deferred). RUN plays the **active** scene; **change scene at play time** with a
-  `switch to scene {name}` / `next scene` block (M34, the SCENES palette group). A UI-added scene
-  survives relaunch only if you **SAVE**. **In the stock project**: add a `{name, sprites, variables,
-  background, grid}` entry to [`PongScripts.scenes()`](scripts/pong_scripts.gd) (M33) — the seed scene
-  model the editor's `_scenes` list starts from. Each scene is **self-contained** (its own variables), so
-  sprite names need only be unique *within* a scene, and a scene switch re-seeds variables to the new
-  scene's defaults. Don't reach across scenes in editor code — the active scene's data lives in the
-  working vars (`_scripts` etc.), kept in sync with `_scenes[_scene]` by `_persist_current_scene` /
-  `_load_scene_into_working`. At RUN the whole list crosses to the Stage via `Stage.project_scenes` +
-  `project_active` (M34), so the runtime can navigate between scenes.
+- Multiple stages (scenes / levels)? **Removed in M40.** M33/M34 made a project hold several
+  switchable scenes; that layer was ripped out — a project is now a single flat stage again (one set of
+  sprites / variables / background / grid). Don't add a scene layer back without a deliberate milestone
+  (and the cross-stage state / persistence work it implies — exactly what M40 deferred).
 - Keep blocks expressible as plain dictionaries/arrays — no UI assumptions, no
   bespoke classes per block.
 - Any potentially long-running block must `await get_tree().physics_frame` (the
@@ -2524,20 +2548,15 @@ CLAUDE.md                  This file
   position (the camera is a pure runtime/blocks concept); **camera zoom** (movement + tracking only);
   and **screen-fixed sprites** (a followed camera scrolls regular sprites including the HUDs — a
   "stick to screen" layer is a separate milestone).
-- **Multiple stages / runtime scene navigation** — **M33 delivered the multi-scene model**: a project
-  holds several independent stages (scenes / levels), each `{name, sprites, variables, background,
-  grid}`, switchable at edit time via a top-bar scene selector + Add/Delete/Rename Scene, with RUN
-  playing the **active** scene and persistence reshaped to `{scenes, active}` (a pre-M33 file opens as
-  one "Scene 1"). **M34 delivered runtime navigation** — `switch_scene` / `next_scene` blocks (new
-  `scenes` palette group) change scene *at play time*: the editor hands the Stage the whole scene list
-  (`project_scenes` + `project_active`), and a block re-points `project_active` + reloads the game scene
-  (`change_scene_to_file`, the same swap RUN/ESC use — `go_to_scene_by_name` / `go_to_next_scene` /
-  `_change_to_scene` in [`stage.gd`](scripts/stage.gd)), rebuilding on the target with no bespoke
-  teardown. What's *still* deferred: the **scene-rename → `switch_scene` cascade** (a rename relabels the
-  dropdown but leaves existing `switch_scene` blocks naming the old scene → a runtime warning;
-  `rewrite_sprite_refs` is the template, but cross-scene); and **cross-scene shared state** — a scene
-  change re-seeds variables to the new scene's defaults (scenes own their variables), so a value like a
-  score across levels needs a project-global store carried across scenes, a separate milestone.
+- **Multiple stages / runtime scene navigation** — **delivered in M33/M34, then removed in M40.** A
+  project held several independent stages (scenes / levels), switchable at edit time, with `switch_scene`
+  / `next_scene` blocks to navigate at play time. M40 ripped the whole layer out (it complicated
+  persistence + cross-stage state, and the chrome ate top-bar space) — a project is a single flat stage
+  again. Bringing multiple stages back is a deliberate future milestone that would also need to tackle
+  what M33/M34 left deferred: **cross-scene shared state** (a project-global variable store surviving a
+  scene change — variables were per-scene and re-seeded on every switch) and a **scene-rename →
+  `switch_scene` cascade**. The removed code (the `_scenes`/`project_scenes` model, `go_to_scene_by_name`,
+  etc.) is recoverable from history at `fc6bf91` (M39) and earlier.
 - **Custom block parameters / return value / rename cascade** — **M30 delivered the custom block** and
   **M31 delivered parameters.** M30 added the procedure (`define {name}` + `call {name}`, Scratch's "My
   Blocks") — a per-sprite named routine you make from the palette's **Make a Block** button and invoke
