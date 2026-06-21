@@ -99,6 +99,10 @@ func _build() -> void:
 			# A reporter chip is drawn as a pill (build_reporter) so it matches what lands in a
 			# slot; everything stackable keeps the statement/hat shape (build_block).
 			var chip := BlockView.build_reporter(block) if BlockView.is_reporter(opcode) else BlockView.build_block(block)
+			# Left-justify every chip in the palette column: build_reporter centres its pill
+			# (SIZE_SHRINK_CENTER, for inline use in a slot), so without this reporter chips
+			# would sit centred while statement/hat chips (SIZE_SHRINK_BEGIN) sit left.
+			chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 			chip.set_meta("palette_opcode", opcode)
 			_passthrough(chip)
 			add_child(chip)
