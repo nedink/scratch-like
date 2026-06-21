@@ -5,7 +5,51 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 40 — multiple-stage functionality removed
+## Current state: Milestone 41 — animation blocks (tween a variable over time)
+
+**Goal of this milestone:** add an **animation block** that takes a **variable** as its parameter and
+**animates its value over time**, supporting **linear**, **ease-in**, and **ease-out** interpolation. It
+is the usual symmetric extension the project is built around — **one opcode** (one `_OPCODES` entry +
+one interpreter handler), **no block-data-shape change, no editor change** — the closest sibling so far
+being the CAMERA blocks (M37), which were likewise pure `block_view.gd` + `interpreter.gd`.
+
+The block is **`animate {name} to {value} over {seconds} secs {easing}`** (a single statement, new
+slate-orchid `"animation"` category):
+
+- **It reuses the existing slot machinery whole.** `{name}` is a **data-scoped dropdown** of the
+  project's variables (`data_enums: {name: "variables"}` → `BlockView.project_variables`, the
+  `set_var`/`variable` source — **no new resolver, no editor change**, the menu re-scopes per sprite for
+  free), `{easing}` is a fixed-choice dropdown (`enums: {easing: ["linear", "ease in", "ease out"]}` —
+  the M13 pattern), and `{value}`/`{seconds}` are ordinary numeric slots (so they accept literals,
+  arithmetic — M29 — or dropped reporters). A plain `{opcode, inputs}` statement, so persistence (M22)
+  and RUN (M10) carry it untouched.
+- **The interpreter owns the tween** ([`_on_animate`](scripts/interpreter.gd)). Like `wait_seconds` (and
+  Scratch's *glide*) it is a coroutine that **blocks the calling script for the duration** — the blocks
+  after it run only once the animation finishes — yielding on the **fixed physics tick** the way
+  `forever` does (so it never freezes the engine and the value advances at a constant real rate,
+  `1.0 / Engine.physics_ticks_per_second` per step). It snapshots the **target** once at the start
+  (evaluated in the current frame) and the **start** value as the variable's value at that moment, then
+  each tick writes `lerpf(start, target, eased(t))` through [`_set_variable`](scripts/interpreter.gd) —
+  so it lands wherever the name resolves (local-first, then global), exactly where a `set` block writes,
+  and any script reading the variable (`go to x: (var)`) sees it move each frame. It polls the Stage /
+  `_alive` flags, so `stop "all"` / `stop "this script"` mid-animation unwinds it within a frame
+  (leaving the variable partway); it snaps exactly onto the target only when it runs to completion. A
+  non-positive duration sets the variable straight to the target.
+- **The easing curves** ([`_ease_fraction`](scripts/interpreter.gd)) map normalized time `t ∈ [0,1]` to
+  an eased fraction: **linear** = `t` (constant rate), **ease in** = `t²` (slow start, accelerating),
+  **ease out** = `1 − (1 − t)²` (decelerating to a slow stop) — the standard quadratic curves.
+
+Animating a *variable* (rather than a sprite property directly) is the general primitive: wire the
+variable into any block that reads it (`go to x: (x)`, `point in direction (angle)`, `say (n)`) and that
+property tweens. What this leaves deferred: **other easing curves** (cubic, elastic, bounce — the
+quadratic trio covers the milestone's linear/in/out ask), and a **direct "glide to x y"** convenience
+block (you compose it from `animate` + `go to`). No camera/sprite-geometry tween shortcut.
+
+See [Animation blocks (M41)](#animation-blocks-m41).
+
+---
+
+## Earlier: Milestone 40 — multiple-stage functionality removed
 
 **Goal of this milestone:** **rip out the project-level scene (stage / level) layer** that M33/M34 added,
 reverting to a **single flat project**. Multiple stages complicated persistence and cross-stage state we
@@ -724,6 +768,14 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    view centred on a sprite each frame, and **`camera stop following`** releases it. Wire e.g.
    `when_flag_clicked → forever → camera follow {Ball}` and at RUN the view scrolls to track the ball. A
    project that uses no camera blocks plays exactly as before (the camera sits at the default centre).
+   **Animate a variable over time** (M41) in the palette's **ANIMATION** group: **`animate {name} to
+   {value} over {seconds} secs {easing}`** smoothly tweens the chosen variable from its current value to
+   `{value}` across `{seconds}`, with `{easing}` = **linear** / **ease in** / **ease out**. It blocks
+   the script for the duration (like `wait`), so blocks after it run when the tween finishes. Pick a real
+   variable from the `{name}` dropdown, then read it where you want the motion — e.g. a sprite with
+   `when_flag_clicked → animate x to 400 over 2 secs ease out`, and a `forever → go to x: (x) y: 100`,
+   glides across and eases to a stop. (Animating a variable is the general primitive — wire it into
+   `go to`, `point in direction`, `say`, …)
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
    version, or the stock script if you didn't touch it. Press **ESC** in-game to
@@ -2302,7 +2354,62 @@ What this leaves deferred: the same **general data-form bounce** M35 named (trig
 reporters) — M36's relay is a hand-built, Pong-specific stand-in for a real "other sprite's position"
 reporter, and the curve is position-only (no incoming-angle reflection off the curve).
 
+### Animation blocks (M41)
+
+A block that takes a **variable** as its parameter and **animates its value over time**, with
+**linear / ease-in / ease-out** interpolation. It is the project's usual symmetric extension — **one
+opcode** (one [`_OPCODES`](scripts/block_view.gd) entry + one [`interpreter.gd`](scripts/interpreter.gd)
+handler), **no block-data-shape change, no editor change** — the closest precedent being M37's camera
+blocks (also pure renderer + interpreter). The block is **`animate {name} to {value} over {seconds}
+secs {easing}`**, a single statement in a new slate-orchid `"animation"` category (added to
+`_CATEGORY_COLORS` + `PALETTE_CATEGORY_ORDER`, placed after motion).
+
+- **Why animate a *variable*, not a sprite property.** A variable is the general lever: tween it, then
+  wire it into whatever reads it (`go to x: (x)` for position, `point in direction (angle)` for
+  rotation, `say (n)` for a counting readout). One block covers every animatable quantity the block set
+  already exposes, rather than a block per property. It is the dynamic counterpart of `set_var` — where
+  `set` writes once, `animate` writes a tweened sequence over a duration.
+- **It reuses the existing slot machinery whole — that is why there's no editor change.** `{name}` is a
+  **data-scoped dropdown** of the project's variables (`data_enums: {name: "variables"}` →
+  [`BlockView.project_variables`](scripts/block_view.gd), the same source `set_var`/`variable` use, so
+  it re-scopes per sprite for free and the editor needs no new wiring — the `touching_sprite?`/camera
+  pattern). `{easing}` is a fixed-choice dropdown (`enums: {easing: ["linear", "ease in", "ease out"]}`
+  — M13). `{value}` and `{seconds}` are ordinary numeric slots, so they take literals, arithmetic (M29),
+  or dropped reporters (M14). A plain `{opcode, inputs}` statement → persistence (M22) / RUN (M10) carry
+  it untouched, and the palette lists it automatically (it's a `kind: "statement"` with `defaults`).
+- **The tween, in the interpreter** ([`_on_animate`](scripts/interpreter.gd)). A coroutine like
+  `wait_seconds`: it reads `name`/`value`/`seconds`/`easing`, snapshots `start = _get_variable(name)`
+  and `target = value` (both evaluated once, in the current frame — Scratch's "evaluate the inputs at
+  the start" semantics), then loops yielding on `_tree.physics_frame`, advancing `elapsed` by the
+  **fixed step** `1.0 / Engine.physics_ticks_per_second` each tick and writing
+  `lerpf(start, target, _ease_fraction(easing, t))` (with `t = clampf(elapsed / duration, 0, 1)`)
+  through [`_set_variable`](scripts/interpreter.gd). Yielding on the *physics* tick (not render) is the
+  project's fixed-tick rule — the value advances at a constant real rate regardless of FPS, exactly
+  like `move_steps` in a `forever`. It **blocks the calling script for the duration** (blocks after it
+  run on completion, as a glide would), and it polls `_stage.is_running()` / `_alive` each tick so a
+  `stop "all"` / `stop "this script"` mid-animation unwinds it within a frame (the variable is left
+  partway); it snaps exactly onto `target` **only** when it runs to completion. A non-positive duration
+  writes the target immediately and returns.
+- **The easing curves** ([`_ease_fraction`](scripts/interpreter.gd)) map `t ∈ [0,1]` to an eased
+  fraction ∈ [0,1]: **linear** `t` (constant rate), **ease in** `t²` (slow start, accelerating),
+  **ease out** `1 − (1 − t)²` (decelerating to a slow stop) — the standard quadratic in/out. Anything
+  other than the two eased names (incl. `"linear"`) falls through to the identity, so a stale value
+  degrades to linear rather than erroring.
+
+What this leaves deferred: **more easing curves** (cubic/elastic/bounce; ease-in-out — the quadratic
+trio is exactly the milestone's linear/in/out ask), a **direct `glide to x y in secs` convenience
+block** (compose it from `animate` + `go to`, or two `animate`s onto x/y vars), and animating a
+**sprite property directly** without routing through a variable. Since the tween writes through
+`_set_variable`, **two `animate`s on the same variable race** (last write per tick wins) — fire them in
+sequence (they block) or on separate variables, as you would chain glides in Scratch.
+
 ## Opcodes implemented
+
+**M41 added one opcode** — `animate` (the animation block: tween a variable's value over a duration with
+linear / ease-in / ease-out interpolation). The usual one-`_OPCODES`-entry + one-interpreter-handler
+step, no block-data-shape change and no editor change (it reuses the `data_enums "variables"` dropdown
+and an `enums` easing dropdown). `_on_animate` is a coroutine that yields on the fixed physics tick like
+`wait_seconds`, blocking its script for the duration.
 
 **M37 added four opcodes** — `set_camera`, `change_camera`, `camera_follow`, `camera_stop_following`
 (the CAMERA block group: scroll the runtime view). Each is the usual one-`_OPCODES`-entry + one-handler
@@ -2406,6 +2513,7 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `key_pressed?` | reporter | `key` | polls a key by name (`OS.find_keycode_from_string` → `Input.is_physical_key_pressed`). Use canonical names: `"W"`, `"S"`, `"Up"`, `"Down"` |
 | `set_var` | statement | `name`, `value` | sets a variable (local-first, then global; unseeded → creates a global) |
 | `change_var` | statement | `name`, `by` | adds `by` to a variable — the score increment |
+| `animate` | statement | `name`, `value`, `seconds`, `easing` | tweens variable `name` from its current value to `value` over `seconds` (M41), one step per fixed physics tick; blocks the script for the duration (like `wait_seconds`). `easing` ∈ {`linear`, `ease in`, `ease out`} (quadratic in/out). `{name}` is a variables dropdown |
 | `say` | statement | `text`, `size` | renders `text` (stringified) through the bitmap font in the `size` face (`"small"` default / `"large"`) and sets it as the sprite's costume; the winner banner |
 | `stop` | statement | `mode` | `"all"` halts every script (the game-over freeze); `"this script"` unwinds only the calling coroutine (clears its `_alive` flag) |
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
@@ -2451,9 +2559,9 @@ scripts/
   stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it. M37 restructures it into a **pannable world view**: a _world container (positioned at _pan, not clipped) holds the screen region (_screen_panel — background fill + a bright guide-line border marking the 480x352 screen, grid inside it) and the sprite _layer, so off-screen sprites are visible; dragging empty background pans (a {mode:"pan"} branch in _input, guarded inside our rect; sprite drag/resize unchanged), recenter() re-frames on the screen (set_model/resized/Recenter button), and _render re-asserts but never recomputes _pan (so a pan survives a re-render). M39 replaces the clipped screen-only _screen_panel with one full-view, pan-fixed _GridLayer (a direct child of StageView, not in _world) that redraws aligned to the pan (world_origin): the origin screen fill (set_background), the fine alignment grid spanning the whole view, the 480x352 screen cells tiled in all directions (dimmed), and the highlighted default screen's bright boundary drawn last — so the grid continues indefinitely and adjacent screen spaces are visible around the highlighted default one
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); _spawn_at/_pending_spawn spawn a fresh param-reporter copy when a define hat's prototype parameter pill is dragged (M31), confined to slots inside that function's body (_nearest_slot/_scoped_slots/_enclosing_define_body — also for an already-placed param grabbed out); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); an in-place define rename is detected in _commit_literal (the define_name-stamped field) and, after a uniqueness check (_other_define_named), deferred to _rename_custom_block_deferred which rewrites the sprite's calls + notifies the editor via on_custom_block_renamed (M32); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette; a call chip carries one args slot per the block's declared parameters (M31, project_custom_block_params), the drag re-minting the args dict from the chip's palette_params
-  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; runtime scene navigation (M34) — the switch_scene/next_scene opcodes in a new "scenes" category, switch_scene's {name} a data-scoped dropdown from project_scene_names (the editor's scene-name list, the scenes twin of project_sprites; _options_for resolves the "scenes" source); this renderer just lists what it's handed; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
+  block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; runtime scene navigation (M34) — the switch_scene/next_scene opcodes in a new "scenes" category, switch_scene's {name} a data-scoped dropdown from project_scene_names (the editor's scene-name list, the scenes twin of project_sprites; _options_for resolves the "scenes" source); this renderer just lists what it's handed; the animation block (M41) — the `animate` opcode in a new "animation" category, its {name} a data-scoped "variables" dropdown and {easing} a fixed-choice enum (linear/ease in/ease out), {value}/{seconds} ordinary numeric slots — needs no renderer change beyond the one _OPCODES entry + category colour; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
   stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); runtime camera (M37) — _ready adds a Camera2D centred at (240,176) (= the no-camera identity view, so a project without camera blocks is unchanged) and puts the background ColorRect on a CanvasLayer(-1) so it stays screen-fixed while the camera pans; set_camera/move_camera/camera_follow/camera_stop_following move or track it (_process re-centres on the followed sprite each frame), called by the camera blocks; ESC returns to the editor (the inverse of editor.gd's RUN)
-  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload); camera (M37) — _on_set_camera/_on_change_camera/_on_camera_follow/_on_camera_stop_following delegate to the Stage's camera methods (the Stage owns the Camera2D)
+  interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload); camera (M37) — _on_set_camera/_on_change_camera/_on_camera_follow/_on_camera_stop_following delegate to the Stage's camera methods (the Stage owns the Camera2D); animation (M41) — _on_animate is a coroutine that tweens a variable from its current value to a target over a duration, one step per fixed physics tick (yielding on _tree.physics_frame like wait_seconds), via _ease_fraction (linear / ease in t² / ease out 1−(1−t)²); it writes through _set_variable and polls the Stage/_alive flags so a stop unwinds it mid-tween
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
   pong_scripts.gd          The hardcoded Pong block scripts (two paddles, ball, two numeric HUDs, announcer), as data; also the seed sprite model — sprites() (M24) declares each sprite's name + placeholder geometry (x/y/w/h/color, color a hex string) + script, the editor's starting set and the Stage's fallback; and the seed variable model — variables() declares each variable's name/value/scope, likewise the editor's starting set and the Stage's fallback (M18; the editor extends its own copies via Make a Variable / +Sprite, M20/M24). Every variable declares to 0; non-zero starts come from `set` blocks in the scripts (the ball's `set speed to BALL_SPEED`), Scratch-style — the starting value lives in the editable program, not a hidden seed; and the seed stage-level settings — background() (the backdrop hex) and grid() ({show,snap,color,step}, the stage editor's alignment grid), each a project property the editor seeds from here and persists in the .json (M27); and the seed **scene model** — scenes() (M33) bundles sprites()/variables()/background()/grid() into one stock scene "Scene 1", the project's starting (single) stage and the shape the editor's _scenes list seeds from

@@ -12,31 +12,23 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Last shipped:** M40 — **multiple-stage functionality removed** (reverted to a single flat project).
-  M33/M34 added a project-level *scene (stage / level)* layer — a `_scenes` list + active index in the
-  editor, a top-bar scene selector + Add/Delete/Rename Scene chrome, `switch_scene`/`next_scene` blocks,
-  the Stage carrying the whole scene list (`project_scenes`/`project_active`), and a `{scenes, active}`
-  save shape. M40 rips all of that out: the editor again owns flat `_scripts`/`_variables`/`_background`/
-  `_grid_settings` directly (the seeds come straight from `PongScripts.sprites()/variables()/background()/
-  grid()` — `scenes()` is gone), the Stage takes the three per-scene statics again
-  (`project_sprites`/`project_variables`/`project_background` + `_sprite_model`/`_variable_model`/
-  `_background_hex` fallbacks), the two scene-nav opcodes + their interpreter handlers + the `scenes`
-  category + `project_scene_names` are deleted, and persistence is back to flat
-  `{scripts, variables, background, grid}`. RUN/ESC still use `change_scene_to_file` (that's the Godot
-  scene swap, not the removed project-scene layer). Rationale: multi-stage complicated persistence and
-  cross-stage state we're not ready to tackle, and the chrome ate top-bar space — we only need one stage
-  now. **No backward-compat in the loader** (a deliberate scope call — see next action).
-- **Git:** M39 is committed + pushed (`fc6bf91`). M40 (this removal) is **code-complete, uncommitted** —
-  6 files: `editor.gd`, `stage.gd`, `interpreter.gd`, `block_view.gd`, `pong_scripts.gd`, `editor.tscn`.
-- **Immediate next action (two parts):**
-  1. **Adapt the existing saves to the new flat format** (the explicitly-deferred step-2). `platformer.json`
-     and its generator `build_platformer.py` are in the old `{scenes, active}` shape with **3 scenes**
-     (level1/2/3). The new loader only reads `{scripts, variables, background, grid}`, so they won't open
-     as-is. Decide how to collapse the 3 levels to one stage (keep level1? merge?) and rewrite the
-     generator to emit the flat shape, then regenerate `platformer.json`.
-  2. **F5-verify M40** — launch the editor: no scene selector/buttons in the top bar; the stock Pong demo
-     loads, RUN plays it, ESC returns with edits intact; SAVE writes `{scripts, variables, background,
-     grid}` and OPEN reloads it; the palette has no SCENES group.
+- **Last shipped:** M41 — **animation blocks** (tween a variable over time). One new statement opcode,
+  **`animate {name} to {value} over {seconds} secs {easing}`** (new slate-orchid `"animation"` palette
+  category), with `{easing}` ∈ {`linear`, `ease in`, `ease out`}. `{name}` is a data-scoped variables
+  dropdown (the `set_var`/`variable` source — so **no editor change**), `{value}`/`{seconds}` numeric
+  slots. The interpreter's `_on_animate` is a coroutine like `wait_seconds`: it snapshots start+target,
+  then each fixed physics tick writes `lerpf(start, target, _ease_fraction(easing, t))` through
+  `_set_variable`, **blocking the script for the duration** and polling the Stage/`_alive` flags so a
+  `stop` unwinds it mid-tween (it snaps onto the target only on completion). Easing: linear `t`,
+  ease-in `t²`, ease-out `1−(1−t)²`. Pure `interpreter.gd` + `block_view.gd` (the M37 camera-block
+  shape). Animating a *variable* is the general primitive — wire it into `go to`/`point in
+  direction`/`say` for the actual motion.
+- **Git:** M41 on branch `m41-animation-blocks`. **2 files:** `interpreter.gd`, `block_view.gd` (+ docs).
+- **F5-verify M41:** an ANIMATION group appears in the palette with the `animate` block; drag e.g.
+  `when_flag_clicked → animate x to 400 over 2 secs ease out` plus `forever → go to x: (x) y: 100` onto a
+  sprite (make an `x` variable first), RUN — the sprite glides right and decelerates to a stop over ~2s;
+  swap the easing to `ease in` (slow start) / `linear` (constant) to feel the curve. `stop` mid-tween
+  leaves it partway.
 
 ## Next up (candidate milestones)
 
@@ -58,6 +50,14 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 ## Recently shipped
 
 (Newest first. Move items here as they land + commit.)
+
+- M41 — **animation blocks.** One new statement opcode `animate {name} to {value} over {seconds} secs
+  {easing}` (new `"animation"` palette category) that tweens a variable from its current value to a
+  target over a duration, with `linear` / `ease in` (t²) / `ease out` (1−(1−t)²) interpolation.
+  `_on_animate` is a `wait_seconds`-style coroutine yielding on the fixed physics tick, writing through
+  `_set_variable` and polling Stage/`_alive` so a `stop` unwinds it mid-tween. Pure `interpreter.gd` +
+  `block_view.gd` — no editor change (reuses the `data_enums "variables"` dropdown + an `enums` easing
+  dropdown). *(committed/pushed: pending)*
 
 - Platformer — **grid/screen conformance + side-wall collision.** Reshaped every sprite in
   `build_platformer.py` so all centers and sizes are multiples of the default 8px grid and fit inside the

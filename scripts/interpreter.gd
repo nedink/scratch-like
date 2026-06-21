@@ -96,6 +96,7 @@ func _register_handlers() -> void:
 		"wait_seconds": _on_wait_seconds,
 		"set_var": _on_set_var,
 		"change_var": _on_change_var,
+		"animate": _on_animate,
 		"say": _on_say,
 		"stop": _on_stop,
 		"create_clone": _on_create_clone,
@@ -319,6 +320,54 @@ func _on_set_var(block: Dictionary) -> void:
 func _on_change_var(block: Dictionary) -> void:
 	var name := String(_value(block, "name"))
 	_set_variable(name, float(_get_variable(name)) + float(_value(block, "by")))
+
+
+## animate: smoothly interpolate variable `name` from its current value to `value` over `seconds`,
+## one step per physics tick, using the chosen easing curve. Like `wait_seconds` (and Scratch's glide)
+## it **blocks the calling script for the duration** — the blocks after it run only once the animation
+## finishes — and it yields on the fixed physics tick the same way `forever` does, so the script never
+## freezes the engine and the value advances at a constant real rate. The target is snapshotted once at
+## the start (evaluated in the current frame); the start value is the variable's value at that moment.
+## A non-positive duration sets the variable straight to the target. Easing (M41): "linear" (constant
+## rate), "ease in" (slow start), "ease out" (slow end) — see `_ease_fraction`.
+##
+## The eased value rides through `_set_variable`, so it lands wherever the name resolves (local-first,
+## then global) — exactly where a `set` block would write it — and any script reading the variable
+## (e.g. `go to x: (var)`) sees it change each frame. We poll the Stage / `_alive` flags so a
+## `stop "all"` or `stop "this script"` mid-animation unwinds this coroutine within a frame, leaving the
+## variable partway (we only snap it exactly onto the target when we run to completion).
+func _on_animate(block: Dictionary) -> void:
+	var name := String(_value(block, "name"))
+	var target := float(_value(block, "value"))
+	var duration := float(_value(block, "seconds"))
+	var easing := String(block.get("inputs", {}).get("easing", "linear"))
+	var start := float(_get_variable(name))
+	if duration <= 0.0:
+		_set_variable(name, target)
+		return
+	var step := 1.0 / float(Engine.physics_ticks_per_second)
+	var elapsed := 0.0
+	while elapsed < duration and _stage.is_running() and _alive:
+		await _tree.physics_frame
+		elapsed += step
+		var t := clampf(elapsed / duration, 0.0, 1.0)
+		_set_variable(name, lerpf(start, target, _ease_fraction(easing, t)))
+	# Snap exactly onto the target only when we ran to completion (a stop mid-animation leaves it partway).
+	if _stage.is_running() and _alive:
+		_set_variable(name, target)
+
+
+## Map a normalized time `t` ∈ [0, 1] to an eased fraction ∈ [0, 1] (M41). Both eased modes are the
+## standard quadratic curves: "ease in" accelerates from rest (t²), "ease out" decelerates to a stop
+## (1 − (1 − t)²); anything else (incl. "linear") is the identity, a constant rate.
+func _ease_fraction(mode: String, t: float) -> float:
+	match mode:
+		"ease in":
+			return t * t
+		"ease out":
+			return 1.0 - (1.0 - t) * (1.0 - t)
+		_:
+			return t
 
 
 ## stop: end execution.

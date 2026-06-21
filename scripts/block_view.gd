@@ -59,6 +59,7 @@ static var _CATEGORY_COLORS := {
 	"operators": Color("#59c059"),
 	"custom": Color("#ff6680"),
 	"camera": Color("#0fbd8c"),
+	"animation": Color("#cf63cf"),
 	"unknown": Color("#7f7f7f"),
 }
 
@@ -216,11 +217,20 @@ const _OPCODES := {
 	"change_camera": {"category": "camera", "kind": "statement", "template": "change camera by x: {dx} y: {dy}", "defaults": {"dx": 0, "dy": 0}},
 	"camera_follow": {"category": "camera", "kind": "statement", "template": "camera follow {name}", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
 	"camera_stop_following": {"category": "camera", "kind": "statement", "template": "camera stop following", "defaults": {}},
+
+	# Animation (M41): smoothly interpolate a variable's value over time. `animate {name} to {value}
+	# over {seconds} secs {easing}` is a single statement that blocks for its duration (like wait /
+	# Scratch glide) while tweening the named variable from its current value to {value}. `{name}` is a
+	# data-scoped dropdown of the project's variables (the set_var/variable "variables" source — no new
+	# resolver), and `{easing}` is a fixed-choice dropdown of the interpolation curves. The interpreter
+	# owns the tween (_on_animate / _ease_fraction); this is a plain {opcode, inputs} statement, so
+	# persistence (M22) and RUN (M10) carry it untouched.
+	"animate": {"category": "animation", "kind": "statement", "template": "animate {name} to {value} over {seconds} secs {easing}", "defaults": {"name": "p1_score", "value": 100, "seconds": 1, "easing": "linear"}, "data_enums": {"name": "variables"}, "enums": {"easing": ["linear", "ease in", "ease out"]}},
 }
 
 ## Category display order for the palette (operators are all reporters, so that group is
 ## empty after filtering and simply produces no chips).
-const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "looks", "sensing", "variables", "operators", "camera"]
+const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "animation", "looks", "sensing", "variables", "operators", "camera"]
 
 
 ## A vertical run of blocks (a sprite's whole script, a hat's body, or a C-block's
