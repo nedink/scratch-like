@@ -161,6 +161,7 @@ const _OPCODES := {
 	"turn_degrees": {"category": "motion", "kind": "statement", "template": "turn {degrees} degrees", "defaults": {"degrees": 15}},
 	"point_in_direction": {"category": "motion", "kind": "statement", "template": "point in direction {direction}", "defaults": {"direction": 90}},
 	"go_to": {"category": "motion", "kind": "statement", "template": "go to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
+	"point_towards": {"category": "motion", "kind": "statement", "template": "point towards x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
 	# motion reporters (M35) — expose the sprite's motion state as data, so a reflection (the
 	# `point_in_direction "bounce"` sentinel) can be expressed as blocks. No inputs: each reads the
 	# running Target's facing / position. `direction` stands in for velocity (speed is a separate var).
@@ -169,10 +170,13 @@ const _OPCODES := {
 	"y_position": {"category": "motion", "kind": "reporter", "template": "y position", "defaults": {}},
 	# looks
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
+	"set_color": {"category": "looks", "kind": "statement", "template": "set color {color}", "defaults": {"color": "#ffffff"}},
 	# sensing
 	"touching_edge?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
 	"touching_sprite?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
 	"key_pressed?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
+	"mouse_x": {"category": "sensing", "kind": "reporter", "template": "mouse x", "defaults": {}},
+	"mouse_y": {"category": "sensing", "kind": "reporter", "template": "mouse y", "defaults": {}},
 	# variables
 	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "p1_score", "value": 0}, "data_enums": {"name": "variables"}},
 	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "p1_score", "by": 1}, "data_enums": {"name": "variables"}},
@@ -844,10 +848,14 @@ static func _enum_field(options: Array, current: String) -> OptionButton:
 	var dd := OptionButton.new()
 	dd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	dd.fit_to_longest_item = true
+	# Items are listed alphabetically (case-insensitive), regardless of the order the
+	# fixed-choice enum / project list supplied them in.
+	var sorted := options.map(func(o): return String(o))
+	sorted.sort_custom(func(a, b): return a.naturalnocasecmp_to(b) < 0)
 	var selected := -1
-	for i in options.size():
-		dd.add_item(String(options[i]))
-		if String(options[i]) == current:
+	for i in sorted.size():
+		dd.add_item(sorted[i])
+		if sorted[i] == current:
 			selected = i
 	if selected == -1:
 		dd.add_item(current)

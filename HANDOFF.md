@@ -12,6 +12,30 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
+- **In flight (on `m41-animation-blocks`):** **`zombie.json`** — a top-down zombie-survival game built
+  in the block language, plus the **four new opcodes** it required (the existing block set couldn't
+  express mouse-aim, homing, or recolouring):
+  - **`mouse_x` / `mouse_y`** (sensing reporters) — cursor position in world coords via
+    `Stage.get_global_mouse_position()`.
+  - **`point_towards x: {x} y: {y}`** (motion statement) — face a world point (`atan2(dx, -dy)`); the
+    data-form of `point_in_direction` (the block set has no trig). Drives mouse-aimed bullets *and*
+    zombies homing on the player.
+  - **`set_color {hex}`** (looks statement) — regenerate the placeholder costume as a solid fill (the
+    player's black↔white hit-flash); the costume complement of `say`.
+  - All four are the usual one-`interpreter.gd`-handler + one-`block_view.gd`-`_OPCODES`-entry step; no
+    block-data-shape change, so persistence/RUN/editor carry them untouched.
+  - **Game design** (17 sprites, no clones — `touching_sprite?` can't see clones, and collision is
+    central, so zombies/bullets are **named pooled sprites**): WASD move + screen-wrap (navigable =
+    screen + 16px margin); auto-fire toward the mouse from a **3-shot clip** (shared `ammo` + a
+    `fire_ready` token, auto-reload 1s when empty) across a **3-bullet pool**; a **Spawner** arms growing
+    waves (`spawn_count = wave + 2`) that trickle in from off-screen via a `spawn_ready` token across a
+    **10-zombie pool**, each homing on the player; on contact the zombie reports its position and the
+    player's hit-handler knocks back away from it, going **invincible + uncontrollable + flashing
+    black/white** (unrolled flash loop, since there's no `repeat`); **5 lives** shown top-left, GAME OVER
+    + `stop all` at 0.
+  - **F5-verify:** OPEN `zombie.json` → RUN. Move with WASD (wraps at the 16px margin), bullets stream
+    toward the cursor and reload after 3, green zombies trickle in from the edges and chase you; running
+    into one knocks you back flashing; the top-left counter falls 5→0 then "GAME OVER".
 - **Last shipped:** M41 — **animation blocks** (tween a variable over time). One new statement opcode,
   **`animate {name} to {value} over {seconds} secs {easing}`** (new slate-orchid `"animation"` palette
   category), with `{easing}` ∈ {`linear`, `ease in`, `ease out`}. `{name}` is a data-scoped variables

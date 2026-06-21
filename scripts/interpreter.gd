@@ -92,7 +92,9 @@ func _register_handlers() -> void:
 		"move_steps": _on_move_steps,
 		"turn_degrees": _on_turn_degrees,
 		"point_in_direction": _on_point_in_direction,
+		"point_towards": _on_point_towards,
 		"go_to": _on_go_to,
+		"set_color": _on_set_color,
 		"wait_seconds": _on_wait_seconds,
 		"set_var": _on_set_var,
 		"change_var": _on_change_var,
@@ -130,6 +132,8 @@ func _register_handlers() -> void:
 		"direction": _on_direction,
 		"x_position": _on_x_position,
 		"y_position": _on_y_position,
+		"mouse_x": _on_mouse_x,
+		"mouse_y": _on_mouse_y,
 	}
 
 
@@ -248,12 +252,36 @@ func _on_point_in_direction(block: Dictionary) -> void:
 		_target.direction = wrapf(float(_evaluate(arg)), 0.0, 360.0)
 
 
+## point_towards: face the sprite toward the world point (x, y) — Scratch's "point towards", the
+## data-form complement to point_in_direction's fixed angle (which the block set otherwise can't
+## compute, having no trig). The angle is derived the same way _bounce() converts a velocity vector
+## back to a Scratch direction, so move_steps after it steps straight at the target. With (x, y) on
+## the sprite (zero delta) atan2(0, 0) → 0 (faces up), a harmless default.
+func _on_point_towards(block: Dictionary) -> void:
+	var dx := float(_value(block, "x")) - _target.node.position.x
+	var dy := float(_value(block, "y")) - _target.node.position.y
+	_target.direction = wrapf(rad_to_deg(atan2(dx, -dy)), 0.0, 360.0)
+
+
 ## go_to: teleport the sprite to an absolute (x, y) position. Used to reset the
 ## ball to center and to clamp the paddles onto their rails.
 func _on_go_to(block: Dictionary) -> void:
 	var x := float(_value(block, "x"))
 	var y := float(_value(block, "y"))
 	_target.node.position = Vector2(x, y)
+
+
+## set_color: recolour the sprite by regenerating its placeholder costume as a solid fill of `color`
+## (a hex string like "#000000"), at the costume's current pixel size. Lets a script flash a sprite
+## (e.g. the player's black↔white hit blink) — the looks-category complement to `say`, which instead
+## paints a text costume. Nearest-neighbour filtering keeps the fill crisp if the sprite is scaled.
+func _on_set_color(block: Dictionary) -> void:
+	var sprite := _target.node as Sprite2D
+	var size := sprite.texture.get_size()
+	var image := Image.create(maxi(1, int(size.x)), maxi(1, int(size.y)), false, Image.FORMAT_RGBA8)
+	image.fill(Color(String(_value(block, "color"))))
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.texture = ImageTexture.create_from_image(image)
 
 
 ## wait_seconds: suspend this script for `seconds`, yielding cooperatively the
@@ -419,6 +447,17 @@ func _on_x_position(_block: Dictionary) -> float:
 
 func _on_y_position(_block: Dictionary) -> float:
 	return _target.node.position.y
+
+
+# Mouse-position reporters. They return the cursor's location in *world* coordinates (the same space
+# sprite x/y live in), via the Stage's get_global_mouse_position() — so it accounts for the runtime
+# camera and the 480x352 content-scale automatically. Used to aim: `point towards (mouse x) (mouse y)`.
+func _on_mouse_x(_block: Dictionary) -> float:
+	return _stage.get_global_mouse_position().x
+
+
+func _on_mouse_y(_block: Dictionary) -> float:
+	return _stage.get_global_mouse_position().y
 
 
 # Arithmetic. divide / mod guard division by zero (-> 0) so a bad script can't

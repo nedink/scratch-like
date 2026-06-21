@@ -1,0 +1,6906 @@
+{
+	"background": "#101418ff",
+	"grid": {
+		"color": "#87cefa59",
+		"show": true,
+		"snap": true,
+		"step": 8.0
+	},
+	"scripts": [
+		{
+			"color": "#ffffff",
+			"h": 16,
+			"name": "Player",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "lives",
+									"value": 5
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "ammo",
+									"value": 3
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "fire_ready",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "p_invincible",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "p_hit",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "player_x",
+									"value": 240
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "player_y",
+									"value": 176
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": 240,
+									"y": 176
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"name": "player_x",
+												"value": {
+													"inputs": {},
+													"opcode": "x_position"
+												}
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"name": "player_y",
+												"value": {
+													"inputs": {},
+													"opcode": "y_position"
+												}
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		},
+																		"y": {
+																			"inputs": {
+																				"a": {
+																					"inputs": {},
+																					"opcode": "y_position"
+																				},
+																				"b": 3
+																			},
+																			"opcode": "subtract"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"key": "W"
+																},
+																"opcode": "key_pressed?"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		},
+																		"y": {
+																			"inputs": {
+																				"a": {
+																					"inputs": {},
+																					"opcode": "y_position"
+																				},
+																				"b": 3
+																			},
+																			"opcode": "add"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"key": "S"
+																},
+																"opcode": "key_pressed?"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"a": {
+																					"inputs": {},
+																					"opcode": "x_position"
+																				},
+																				"b": 3
+																			},
+																			"opcode": "subtract"
+																		},
+																		"y": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"key": "A"
+																},
+																"opcode": "key_pressed?"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"a": {
+																					"inputs": {},
+																					"opcode": "x_position"
+																				},
+																				"b": 3
+																			},
+																			"opcode": "add"
+																		},
+																		"y": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"key": "D"
+																},
+																"opcode": "key_pressed?"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p_invincible"
+															},
+															"opcode": "variable"
+														},
+														"b": 0
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 496,
+															"y": {
+																"inputs": {},
+																"opcode": "y_position"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {},
+															"opcode": "x_position"
+														},
+														"b": -16
+													},
+													"opcode": "less_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": -16,
+															"y": {
+																"inputs": {},
+																"opcode": "y_position"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {},
+															"opcode": "x_position"
+														},
+														"b": 496
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "x_position"
+															},
+															"y": 368
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {},
+															"opcode": "y_position"
+														},
+														"b": -16
+													},
+													"opcode": "less_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "x_position"
+															},
+															"y": -16
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {},
+															"opcode": "y_position"
+														},
+														"b": 368
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"name": "fire_ready",
+												"value": 1
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"seconds": 0.28
+											},
+											"opcode": "wait_seconds"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"seconds": 1.0
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"name": "ammo",
+															"value": 3
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "ammo"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "less_than"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "p_hit",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"name": "p_invincible",
+															"value": 1
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "lives"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "hit_from_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "hit_from_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"degrees": 180
+														},
+														"opcode": "turn_degrees"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"steps": 6
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"color": "#000000"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"seconds": 0.06
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"color": "#ffffff"
+														},
+														"opcode": "set_color"
+													},
+													{
+														"inputs": {
+															"name": "p_invincible",
+															"value": 0
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p_hit"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 240,
+			"y": 176
+		},
+		{
+			"color": "#ffee55",
+			"h": 8,
+			"name": "Bullet1",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "active",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -100,
+									"y": -100
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "fire_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "ammo"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "mouse_x"
+															},
+															"y": {
+																"inputs": {},
+																"opcode": "mouse_y"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"name": "active",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "active"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "ammo"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "fire_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"steps": 9
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": -24
+																						},
+																						"opcode": "less_than"
+																					},
+																					"b": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": 504
+																						},
+																						"opcode": "greater_than"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {},
+																						"opcode": "y_position"
+																					},
+																					"b": -24
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "y_position"
+																			},
+																			"b": 376
+																		},
+																		"opcode": "greater_than"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {
+																									"a": {
+																										"inputs": {
+																											"a": {
+																												"inputs": {
+																													"a": {
+																														"inputs": {
+																															"a": {
+																																"inputs": {
+																																	"a": {
+																																		"inputs": {
+																																			"name": "Zombie1"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	},
+																																	"b": {
+																																		"inputs": {
+																																			"name": "Zombie2"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	}
+																																},
+																																"opcode": "or"
+																															},
+																															"b": {
+																																"inputs": {
+																																	"name": "Zombie3"
+																																},
+																																"opcode": "touching_sprite?"
+																															}
+																														},
+																														"opcode": "or"
+																													},
+																													"b": {
+																														"inputs": {
+																															"name": "Zombie4"
+																														},
+																														"opcode": "touching_sprite?"
+																													}
+																												},
+																												"opcode": "or"
+																											},
+																											"b": {
+																												"inputs": {
+																													"name": "Zombie5"
+																												},
+																												"opcode": "touching_sprite?"
+																											}
+																										},
+																										"opcode": "or"
+																									},
+																									"b": {
+																										"inputs": {
+																											"name": "Zombie6"
+																										},
+																										"opcode": "touching_sprite?"
+																									}
+																								},
+																								"opcode": "or"
+																							},
+																							"b": {
+																								"inputs": {
+																									"name": "Zombie7"
+																								},
+																								"opcode": "touching_sprite?"
+																							}
+																						},
+																						"opcode": "or"
+																					},
+																					"b": {
+																						"inputs": {
+																							"name": "Zombie8"
+																						},
+																						"opcode": "touching_sprite?"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Zombie9"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Zombie10"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "active"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 8,
+			"x": -100,
+			"y": -100
+		},
+		{
+			"color": "#ffee55",
+			"h": 8,
+			"name": "Bullet2",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "active",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -100,
+									"y": -100
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "fire_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "ammo"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "mouse_x"
+															},
+															"y": {
+																"inputs": {},
+																"opcode": "mouse_y"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"name": "active",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "active"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "ammo"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "fire_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"steps": 9
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": -24
+																						},
+																						"opcode": "less_than"
+																					},
+																					"b": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": 504
+																						},
+																						"opcode": "greater_than"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {},
+																						"opcode": "y_position"
+																					},
+																					"b": -24
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "y_position"
+																			},
+																			"b": 376
+																		},
+																		"opcode": "greater_than"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {
+																									"a": {
+																										"inputs": {
+																											"a": {
+																												"inputs": {
+																													"a": {
+																														"inputs": {
+																															"a": {
+																																"inputs": {
+																																	"a": {
+																																		"inputs": {
+																																			"name": "Zombie1"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	},
+																																	"b": {
+																																		"inputs": {
+																																			"name": "Zombie2"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	}
+																																},
+																																"opcode": "or"
+																															},
+																															"b": {
+																																"inputs": {
+																																	"name": "Zombie3"
+																																},
+																																"opcode": "touching_sprite?"
+																															}
+																														},
+																														"opcode": "or"
+																													},
+																													"b": {
+																														"inputs": {
+																															"name": "Zombie4"
+																														},
+																														"opcode": "touching_sprite?"
+																													}
+																												},
+																												"opcode": "or"
+																											},
+																											"b": {
+																												"inputs": {
+																													"name": "Zombie5"
+																												},
+																												"opcode": "touching_sprite?"
+																											}
+																										},
+																										"opcode": "or"
+																									},
+																									"b": {
+																										"inputs": {
+																											"name": "Zombie6"
+																										},
+																										"opcode": "touching_sprite?"
+																									}
+																								},
+																								"opcode": "or"
+																							},
+																							"b": {
+																								"inputs": {
+																									"name": "Zombie7"
+																								},
+																								"opcode": "touching_sprite?"
+																							}
+																						},
+																						"opcode": "or"
+																					},
+																					"b": {
+																						"inputs": {
+																							"name": "Zombie8"
+																						},
+																						"opcode": "touching_sprite?"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Zombie9"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Zombie10"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "active"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 8,
+			"x": -100,
+			"y": -100
+		},
+		{
+			"color": "#ffee55",
+			"h": 8,
+			"name": "Bullet3",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "active",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -100,
+									"y": -100
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "fire_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "ammo"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "mouse_x"
+															},
+															"y": {
+																"inputs": {},
+																"opcode": "mouse_y"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"name": "active",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "active"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "ammo"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "fire_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"steps": 9
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": -24
+																						},
+																						"opcode": "less_than"
+																					},
+																					"b": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {},
+																								"opcode": "x_position"
+																							},
+																							"b": 504
+																						},
+																						"opcode": "greater_than"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {},
+																						"opcode": "y_position"
+																					},
+																					"b": -24
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "y_position"
+																			},
+																			"b": 376
+																		},
+																		"opcode": "greater_than"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "active",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"x": -100,
+																		"y": -100
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"a": {
+																								"inputs": {
+																									"a": {
+																										"inputs": {
+																											"a": {
+																												"inputs": {
+																													"a": {
+																														"inputs": {
+																															"a": {
+																																"inputs": {
+																																	"a": {
+																																		"inputs": {
+																																			"name": "Zombie1"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	},
+																																	"b": {
+																																		"inputs": {
+																																			"name": "Zombie2"
+																																		},
+																																		"opcode": "touching_sprite?"
+																																	}
+																																},
+																																"opcode": "or"
+																															},
+																															"b": {
+																																"inputs": {
+																																	"name": "Zombie3"
+																																},
+																																"opcode": "touching_sprite?"
+																															}
+																														},
+																														"opcode": "or"
+																													},
+																													"b": {
+																														"inputs": {
+																															"name": "Zombie4"
+																														},
+																														"opcode": "touching_sprite?"
+																													}
+																												},
+																												"opcode": "or"
+																											},
+																											"b": {
+																												"inputs": {
+																													"name": "Zombie5"
+																												},
+																												"opcode": "touching_sprite?"
+																											}
+																										},
+																										"opcode": "or"
+																									},
+																									"b": {
+																										"inputs": {
+																											"name": "Zombie6"
+																										},
+																										"opcode": "touching_sprite?"
+																									}
+																								},
+																								"opcode": "or"
+																							},
+																							"b": {
+																								"inputs": {
+																									"name": "Zombie7"
+																								},
+																								"opcode": "touching_sprite?"
+																							}
+																						},
+																						"opcode": "or"
+																					},
+																					"b": {
+																						"inputs": {
+																							"name": "Zombie8"
+																						},
+																						"opcode": "touching_sprite?"
+																					}
+																				},
+																				"opcode": "or"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Zombie9"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Zombie10"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "active"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 8,
+			"x": -100,
+			"y": -100
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie1",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie2",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie3",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie4",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie5",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie6",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie7",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie8",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie9",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#6abf4b",
+			"h": 16,
+			"name": "Zombie10",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": -200,
+									"y": -200
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"name": "spawn_ready",
+															"value": 0
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"by": -1,
+															"name": "spawn_count"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "zombies_alive"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "e",
+															"value": {
+																"inputs": {
+																	"from": 0,
+																	"to": 4
+																},
+																"opcode": "random"
+															}
+														},
+														"opcode": "set_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": -16
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "e"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 1
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 496
+																			},
+																			"opcode": "random"
+																		},
+																		"y": 368
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 1
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 2
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": -16,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"a": {
+																						"inputs": {
+																							"name": "e"
+																						},
+																						"opcode": "variable"
+																					},
+																					"b": 2
+																				},
+																				"opcode": "less_than"
+																			}
+																		},
+																		"opcode": "not"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"x": 496,
+																		"y": {
+																			"inputs": {
+																				"from": -16,
+																				"to": 368
+																			},
+																			"opcode": "random"
+																		}
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "e"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 3
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "not"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"name": "alive",
+															"value": 1
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "alive"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "equals"
+																},
+																"b": {
+																	"inputs": {
+																		"a": {
+																			"inputs": {
+																				"name": "spawn_count"
+																			},
+																			"opcode": "variable"
+																		},
+																		"b": 0
+																	},
+																	"opcode": "greater_than"
+																}
+															},
+															"opcode": "and"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_ready"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 1
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": {
+																"inputs": {
+																	"name": "player_x"
+																},
+																"opcode": "variable"
+															},
+															"y": {
+																"inputs": {
+																	"name": "player_y"
+																},
+																"opcode": "variable"
+															}
+														},
+														"opcode": "point_towards"
+													},
+													{
+														"inputs": {
+															"steps": 0.8
+														},
+														"opcode": "move_steps"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "hit_from_x",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "x_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "hit_from_y",
+																		"value": {
+																			"inputs": {},
+																			"opcode": "y_position"
+																		}
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p_hit",
+																		"value": 1
+																	},
+																	"opcode": "set_var"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "Player"
+																		},
+																		"opcode": "touching_sprite?"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "p_invincible"
+																				},
+																				"opcode": "variable"
+																			},
+																			"b": 0
+																		},
+																		"opcode": "equals"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "alive",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": -1,
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": -200,
+																		"y": -200
+																	},
+																	"opcode": "go_to"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {
+																					"name": "Bullet1"
+																				},
+																				"opcode": "touching_sprite?"
+																			},
+																			"b": {
+																				"inputs": {
+																					"name": "Bullet2"
+																				},
+																				"opcode": "touching_sprite?"
+																			}
+																		},
+																		"opcode": "or"
+																	},
+																	"b": {
+																		"inputs": {
+																			"name": "Bullet3"
+																		},
+																		"opcode": "touching_sprite?"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "alive"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "equals"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -200,
+			"y": -200
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "LivesHud",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"size": "large",
+												"text": {
+													"inputs": {
+														"name": "lives"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "say"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 32,
+			"y": 32
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "Spawner",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "wave",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "spawn_count",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"name": "zombies_alive",
+									"value": 0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"seconds": 2.0
+														},
+														"opcode": "wait_seconds"
+													},
+													{
+														"inputs": {
+															"by": 1,
+															"name": "wave"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"name": "spawn_count",
+															"value": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "wave"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 2
+																},
+																"opcode": "add"
+															}
+														},
+														"opcode": "set_var"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "zombies_alive"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 0
+															},
+															"opcode": "equals"
+														},
+														"b": {
+															"inputs": {
+																"a": {
+																	"inputs": {
+																		"name": "spawn_count"
+																	},
+																	"opcode": "variable"
+																},
+																"b": 0
+															},
+															"opcode": "equals"
+														}
+													},
+													"opcode": "and"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"name": "spawn_ready",
+												"value": 1
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"seconds": 0.3
+											},
+											"opcode": "wait_seconds"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -400,
+			"y": -400
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "Announcer",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 240,
+															"y": 176
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"size": "large",
+															"text": "GAME OVER"
+														},
+														"opcode": "say"
+													},
+													{
+														"inputs": {
+															"mode": "all"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "lives"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "less_than"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 240,
+			"y": 176
+		}
+	],
+	"variables": [
+		{
+			"name": "lives",
+			"scope": "global",
+			"value": 5
+		},
+		{
+			"name": "ammo",
+			"scope": "global",
+			"value": 3
+		},
+		{
+			"name": "fire_ready",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "player_x",
+			"scope": "global",
+			"value": 240
+		},
+		{
+			"name": "player_y",
+			"scope": "global",
+			"value": 176
+		},
+		{
+			"name": "p_invincible",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "p_hit",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "hit_from_x",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "hit_from_y",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "wave",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "spawn_count",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "spawn_ready",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "zombies_alive",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "active",
+			"scope": "Bullet1",
+			"value": 0
+		},
+		{
+			"name": "active",
+			"scope": "Bullet2",
+			"value": 0
+		},
+		{
+			"name": "active",
+			"scope": "Bullet3",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie1",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie1",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie2",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie2",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie3",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie3",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie4",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie4",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie5",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie5",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie6",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie6",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie7",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie7",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie8",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie8",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie9",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie9",
+			"value": 0
+		},
+		{
+			"name": "alive",
+			"scope": "Zombie10",
+			"value": 0
+		},
+		{
+			"name": "e",
+			"scope": "Zombie10",
+			"value": 0
+		}
+	]
+}
