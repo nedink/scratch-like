@@ -17,11 +17,12 @@ extends RefCounted
 ## glides up and down on its own, driving `right_paddle_y` straight through the `animate` block,
 ## and the arrow keys move to the LEFT paddle (so it now answers W/S *and* the arrows).
 ##
-## Layout assumptions (matched in stage.gd, 480x352 window). These are the *script* (go_to) targets
-## that drive the runtime — distinct from the grid-aligned model starting positions in sprites():
-##   * paddles are 16x96, so their center y is clamped to [48, 312];
+## Layout assumptions (matched in stage.gd's _GAME_SIZE, the 480x352 window). These are the *script*
+## (go_to) targets that drive the runtime — distinct from the grid-aligned model starting positions
+## in sprites(). All vertical limits derive from the 352px-tall screen:
+##   * paddles are 16x96 (half-height 48), so their center y is clamped to [48, 304] (= 352 - 48);
 ##   * left paddle rides x = 24, right paddle rides x = 456;
-##   * the ball is 16x16 and serves from the center (240, 180).
+##   * the ball is 16x16 and serves from the center (240, 176) (= 480/2, 352/2).
 
 const PADDLE_SPEED := 8.0
 ## How long the auto-animated right paddle takes to glide from one end of its rail to the
@@ -29,8 +30,8 @@ const PADDLE_SPEED := 8.0
 const PADDLE_SWEEP_SECS := 1.4
 const BALL_SPEED := 6.0
 const PADDLE_TOP_Y := 48.0
-const PADDLE_BOTTOM_Y := 312.0
-const CENTER := Vector2(240, 180)
+const PADDLE_BOTTOM_Y := 304.0  # 352 (screen height) - 48 (paddle half-height)
+const CENTER := Vector2(240, 176)  # screen centre: 480/2, 352/2
 const SERVE_DELAY := 1.0
 ## Best-of-N (Milestone 5): take a round by reaching this many points, and win the
 ## match — firing `stop "all"` — by taking this many rounds. Each continuing round

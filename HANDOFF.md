@@ -27,6 +27,13 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   its rail with the `animate` block instead of answering keys, and the **arrow keys moved to the left
   paddle** (which now answers W/S *or* ↑/↓). Pure `pong_scripts.gd` change (existing blocks only, like
   M36 was for M35).
+- **Follow-up polish (on the M41 branch):** ① **paddle y-limits now track the current screen.** The
+  runtime screen is 480×**352** (`Stage._GAME_SIZE`) but `pong_scripts.gd` still carried the old 480×360
+  values — `PADDLE_BOTTOM_Y` 312→**304** (= 352−48 half-height) and serve `CENTER` y 180→**176**
+  (= 352/2). ② **block-editor layout** — palette groups now read as distinct groups (a `_GROUP_GAP`
+  spacer above each category header in `block_palette.gd`, instead of a header floating equidistant
+  between two groups), and the whole editor `Page` is inset 8px from the window edges (`editor.tscn`
+  offsets) so the bar/palette/canvas aren't flush against the frame.
 - **Git:** M41 on branch `m41-animation-blocks`. Opcode work: `interpreter.gd`, `block_view.gd`; demo
   update: `pong_scripts.gd` (+ docs).
 - **F5-verify M41 (block):** an ANIMATION group appears in the palette with the `animate` block; drag e.g.

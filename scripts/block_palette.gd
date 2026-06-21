@@ -32,6 +32,10 @@ const DRAG_THRESHOLD := 4.0
 const _IDLE := 0
 const _PENDING := 1  # pressed on a chip, not yet moved past the threshold
 
+## Extra vertical gap inserted *above* each category header (beyond the VBox's base `separation`),
+## so the palette's groups read as distinct groups. See _add_group_header.
+const _GROUP_GAP := 12
+
 ## The canvas this palette feeds. Set by the editor before any interaction.
 var _canvas: BlockCanvas
 
@@ -74,11 +78,7 @@ func _ready() -> void:
 func _build() -> void:
 	for group in BlockView.palette_groups():
 		var category := String(group["category"])
-		var header := Label.new()
-		header.text = category.to_upper()
-		header.add_theme_color_override("font_color", BlockView.category_color(category))
-		header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(header)
+		_add_group_header(category)
 		# The "Make a Variable" affordance sits atop the variables group, as in Scratch (M20). It
 		# is a real Button (not a mouse-ignored chip), so GUI handles its click normally; our
 		# _input ignores it (it carries no `palette_opcode` meta, so _chip_at misses it) and never
@@ -109,11 +109,7 @@ func _build() -> void:
 	# generic chips; this is the only place they enter the palette. Left undrawn when the editor hasn't
 	# wired the Make callback (a non-editor caller).
 	if _on_make_block.is_valid():
-		var header := Label.new()
-		header.text = "MY BLOCKS"
-		header.add_theme_color_override("font_color", BlockView.category_color("custom"))
-		header.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		add_child(header)
+		_add_group_header("custom", "MY BLOCKS")
 		var make_btn := Button.new()
 		make_btn.text = "Make a Block"
 		make_btn.pressed.connect(_on_make_block)
@@ -134,6 +130,24 @@ func _build() -> void:
 			chip.set_meta("palette_params", params)
 			_passthrough(chip)
 			add_child(chip)
+
+
+## A category header label, preceded (for every group but the first) by a blank spacer so the groups
+## read as distinct groups instead of one undifferentiated column — without it the VBox's uniform
+## `separation` leaves a header floating equidistant between the group above and the one it labels.
+## `text` overrides the default upper-cased category name (used for "MY BLOCKS", whose category is
+## "custom"). The spacer/header are mouse-ignored, so the wheel still scrolls and _chip_at skips them.
+func _add_group_header(category: String, text := "") -> void:
+	if get_child_count() > 0:
+		var spacer := Control.new()
+		spacer.custom_minimum_size = Vector2(0, _GROUP_GAP)
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(spacer)
+	var header := Label.new()
+	header.text = text if text != "" else category.to_upper()
+	header.add_theme_color_override("font_color", BlockView.category_color(category))
+	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(header)
 
 
 ## A fresh `args` dict for a `call` block (M31): one entry per parameter name, each defaulting to 0
