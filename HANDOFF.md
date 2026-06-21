@@ -23,12 +23,20 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   ease-in `t²`, ease-out `1−(1−t)²`. Pure `interpreter.gd` + `block_view.gd` (the M37 camera-block
   shape). Animating a *variable* is the general primitive — wire it into `go to`/`point in
   direction`/`say` for the actual motion.
-- **Git:** M41 on branch `m41-animation-blocks`. **2 files:** `interpreter.gd`, `block_view.gd` (+ docs).
-- **F5-verify M41:** an ANIMATION group appears in the palette with the `animate` block; drag e.g.
+- **Demo update (rides M41):** the Pong **right paddle is now a CPU paddle** — it auto-animates up/down
+  its rail with the `animate` block instead of answering keys, and the **arrow keys moved to the left
+  paddle** (which now answers W/S *or* ↑/↓). Pure `pong_scripts.gd` change (existing blocks only, like
+  M36 was for M35).
+- **Git:** M41 on branch `m41-animation-blocks`. Opcode work: `interpreter.gd`, `block_view.gd`; demo
+  update: `pong_scripts.gd` (+ docs).
+- **F5-verify M41 (block):** an ANIMATION group appears in the palette with the `animate` block; drag e.g.
   `when_flag_clicked → animate x to 400 over 2 secs ease out` plus `forever → go to x: (x) y: 100` onto a
   sprite (make an `x` variable first), RUN — the sprite glides right and decelerates to a stop over ~2s;
   swap the easing to `ease in` (slow start) / `linear` (constant) to feel the curve. `stop` mid-tween
   leaves it partway.
+- **F5-verify demo:** RUN the stock demo — the **right paddle should glide up and down on its own**
+  (easing to a stop and reversing at each end); play the **left paddle with W/S *and* the arrow keys**.
+  The ball should still bounce convex off the moving right paddle (the curved-bounce relay still works).
 
 ## Next up (candidate milestones)
 
@@ -50,6 +58,15 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 ## Recently shipped
 
 (Newest first. Move items here as they land + commit.)
+
+- Demo — **right paddle auto-animates; arrow keys move to the left paddle (rides M41).** A pure
+  `pong_scripts.gd` change exercising the M41 `animate` block (no block-language/runtime edit, like M36
+  was for M35). The right paddle gave up keys to glide top↔bottom forever via two `animate`s on
+  `right_paddle_y` (`ease out`, decelerating into each turn) in one hat, with a second hat
+  `forever → go to x: 456 y: (right_paddle_y)` doing the actual node move (animate blocks its script).
+  Animating `right_paddle_y` directly keeps the ball's curved-bounce relay correct for free. `_paddle`
+  generalized to key *lists* (`_keys_pressed` ORs them) so the left paddle answers W/S *and* ↑/↓.
+  *(committed/pushed: pending)*
 
 - M41 — **animation blocks.** One new statement opcode `animate {name} to {value} over {seconds} secs
   {easing}` (new `"animation"` palette category) that tweens a variable from its current value to a

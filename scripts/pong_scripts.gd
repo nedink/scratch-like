@@ -13,6 +13,10 @@ extends RefCounted
 ## and fire `stop "all"`. M7 replaces M4/M5's clone-built pip grids with a live
 ## numeric HUD — each player's score `say`n through the bitmap font every tick.
 ##
+## M41 makes the **right paddle auto-animate** (a CPU paddle): instead of arrow-key control it
+## glides up and down on its own, driving `right_paddle_y` straight through the `animate` block,
+## and the arrow keys move to the LEFT paddle (so it now answers W/S *and* the arrows).
+##
 ## Layout assumptions (matched in stage.gd, 480x352 window). These are the *script* (go_to) targets
 ## that drive the runtime — distinct from the grid-aligned model starting positions in sprites():
 ##   * paddles are 16x96, so their center y is clamped to [48, 312];
@@ -20,6 +24,9 @@ extends RefCounted
 ##   * the ball is 16x16 and serves from the center (240, 180).
 
 const PADDLE_SPEED := 8.0
+## How long the auto-animated right paddle takes to glide from one end of its rail to the
+## other (M41). One full sweep top->bottom (or back) takes this many seconds.
+const PADDLE_SWEEP_SECS := 1.4
 const BALL_SPEED := 6.0
 const PADDLE_TOP_Y := 48.0
 const PADDLE_BOTTOM_Y := 312.0
@@ -128,10 +135,11 @@ static func sprites() -> Array:
 	]
 
 
-## A keyboard-driven paddle: move on its vertical rail while a key is held, and
-## clamp back onto the playfield at the top and bottom. `rail_x` is the fixed x,
-## so the clamp targets are literals.
-static func _paddle(up_key: String, down_key: String, rail_x: float, y_var: String) -> Array:
+## A keyboard-driven paddle: move on its vertical rail while any of its up/down keys is
+## held, and clamp back onto the playfield at the top and bottom. `rail_x` is the fixed
+## x, so the clamp targets are literals. `up_keys`/`down_keys` are *lists* so a paddle can
+## answer more than one key (M41 gives the left paddle W/S *and* the arrows).
+static func _paddle(up_keys: Array, down_keys: Array, rail_x: float, y_var: String) -> Array:
 	return [
 		_hat([
 			_forever([
@@ -139,11 +147,11 @@ static func _paddle(up_key: String, down_key: String, rail_x: float, y_var: Stri
 				# bounce in ball()). y_position reports this running sprite — the paddle — so this
 				# global is the relay one sprite uses to tell another its position.
 				_set_var(y_var, _ypos()),
-				_if(_key_pressed(up_key), [
+				_if(_keys_pressed(up_keys), [
 					_point(0),  # up
 					_move(PADDLE_SPEED),
 				]),
-				_if(_key_pressed(down_key), [
+				_if(_keys_pressed(down_keys), [
 					_point(180),  # down
 					_move(PADDLE_SPEED),
 				]),
@@ -154,14 +162,45 @@ static func _paddle(up_key: String, down_key: String, rail_x: float, y_var: Stri
 	]
 
 
+## "Any of these keys is down" as a boolean reporter: a single key_pressed?, or an `or` chain
+## over several. Key names are Godot's canonical keycode-name strings (see
+## OS.find_keycode_from_string), so "W"/"S"/"Up"/"Down", not "w"/"s".
+static func _keys_pressed(keys: Array) -> Dictionary:
+	var cond := _key_pressed(keys[0])
+	for i in range(1, keys.size()):
+		cond = _or(cond, _key_pressed(keys[i]))
+	return cond
+
+
 static func left_paddle() -> Array:
-	# Key names are Godot's canonical keycode-name strings (see
-	# OS.find_keycode_from_string), so "W"/"S"/"Up"/"Down", not "w"/"s".
-	return _paddle("W", "S", 24.0, "left_paddle_y")
+	# The left paddle now answers both its own W/S and the arrow keys (M41): the right
+	# paddle gave up player control to auto-animate, so the arrows move here too.
+	return _paddle(["W", "Up"], ["S", "Down"], 24.0, "left_paddle_y")
 
 
+## The right paddle is a CPU paddle (M41): rather than reading keys it glides up and down its
+## rail on its own, using the animation block to tween `right_paddle_y` — the very global the
+## ball reads for the curved bounce, so animating it directly both moves the paddle and keeps
+## that relay correct. `animate` blocks its script for the sweep duration (like a glide), so the
+## sweep lives in its own hat; a second hat keeps the paddle node sitting on the value each frame
+## (the animate writes the variable, but the node only moves when a `go to` reads it — and the
+## ball needs the physical node there to register a `touching RightPaddle?`). We sweep with
+## "ease out" so the paddle decelerates into each turning point and reverses gracefully.
 static func right_paddle() -> Array:
-	return _paddle("Up", "Down", 456.0, "right_paddle_y")
+	return [
+		_hat([
+			_set_var("right_paddle_y", PADDLE_TOP_Y),  # start at the top (the var seeds to 0)
+			_forever([
+				_animate("right_paddle_y", PADDLE_BOTTOM_Y, PADDLE_SWEEP_SECS, "ease out"),
+				_animate("right_paddle_y", PADDLE_TOP_Y, PADDLE_SWEEP_SECS, "ease out"),
+			]),
+		]),
+		_hat([
+			_forever([
+				_go_to(456.0, _var("right_paddle_y")),
+			]),
+		]),
+	]
 
 
 ## The ball: serve from center, then forever move and reflect off the top/bottom
@@ -400,6 +439,12 @@ static func _set_var(var_name: String, value: Variant) -> Dictionary:
 
 static func _change(var_name: String, by: Variant) -> Dictionary:
 	return {"opcode": "change_var", "inputs": {"name": var_name, "by": by}}
+
+
+# Animation block (M41): tween a variable to a target over a duration, with
+# linear / ease in / ease out interpolation. Blocks its script for the duration.
+static func _animate(var_name: String, value: Variant, seconds: Variant, easing: String) -> Dictionary:
+	return {"opcode": "animate", "inputs": {"name": var_name, "value": value, "seconds": seconds, "easing": easing}}
 
 
 static func _var(var_name: String) -> Dictionary:

@@ -785,7 +785,11 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    the top/bottom walls and both paddles. The paddles are **convex (curved toward the
    centre)** (M36): hit the ball with the middle of a paddle and it goes nearly straight
    back, hit it with an end and it deflects steeply toward that end — so you aim by
-   positioning the paddle. **Player 1 = W/S**, **Player 2 = ↑/↓**.
+   positioning the paddle. The **left paddle is player-controlled — W/S *or* ↑/↓** (M41
+   moved the arrow keys here). The **right paddle is now a CPU paddle (M41)**: it glides
+   up and down its rail on its own, driven by the `animate` block tweening its position
+   variable (`ease out`, so it decelerates into each turning point), rather than answering
+   keys.
    Miss the ball and it pauses ~1s, then re-serves from center toward the side
    that scored. Each point increments that player's **numeric score readout** (a
    single digit, top-left for P1, top-right for P2). **First to `ROUND_POINTS` (5)
@@ -2402,6 +2406,20 @@ block** (compose it from `animate` + `go to`, or two `animate`s onto x/y vars), 
 **sprite property directly** without routing through a variable. Since the tween writes through
 `_set_variable`, **two `animate`s on the same variable race** (last write per tick wins) — fire them in
 sequence (they block) or on separate variables, as you would chain glides in Scratch.
+
+**The demo exercises it: the right paddle is now a CPU paddle.** A pure
+[`PongScripts`](scripts/pong_scripts.gd) change (like M36 was for M35), no block-language or runtime
+edit. The right paddle gave up player control to **auto-animate**: one hat `set`s `right_paddle_y` to
+the top then `forever` runs two `animate`s — down to `PADDLE_BOTTOM_Y` then back up to `PADDLE_TOP_Y`,
+each over `PADDLE_SWEEP_SECS` with `ease out` (so it decelerates into each turning point and reverses
+gracefully). Because `animate` **blocks its script for the sweep**, a *second* hat does the moving:
+`forever → go to x: 456 y: (right_paddle_y)` keeps the paddle node sitting on the value each frame (the
+tween writes the variable; the node only moves when a `go to` reads it — and the ball needs the
+physical node present to register a `touching RightPaddle?`). Animating `right_paddle_y` *directly* is
+the neat part: it is the very global the ball reads for the curved bounce (M36's relay), so the tween
+both moves the paddle and keeps that relay correct for free. With the right paddle relinquishing the
+arrows, the **left paddle now answers W/S *and* ↑/↓** — `_paddle` was generalized to take key *lists*
+(`_keys_pressed` ORs them into one condition).
 
 ## Opcodes implemented
 
