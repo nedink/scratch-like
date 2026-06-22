@@ -5,7 +5,45 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 41 — animation blocks (tween a variable over time)
+## Current state: Milestone 42 — sprite visual order in the stage editor
+
+**Goal of this milestone:** let you **control which sprite draws in front of which** from the stage
+editor — Scratch's *go to front / back layer, go forward / backward* operations. It is a pure
+**editor-side view** change ([`editor.gd`](scripts/editor.gd) + its [chrome](editor.tscn)) — **no new
+opcode, no block-data-shape change, no runtime change** — because the project model **already encodes
+z-order as sprite array order**: both the stage view's [`_render`](scripts/stage_view.gd) (later entries
+drawn last, on top) and the runtime's [`Stage._add_sprite`](scripts/stage.gd) build loop (a later child
+draws over an earlier one) walk `_scripts` in order. So "manipulate visual order" = **reorder the
+`_scripts` entries**, and the reorder *is* the edit — RUN reads array order and SAVE serialises it, so it
+rides those paths untouched (the M9 data-is-canonical idiom, at the project level).
+
+The inspector's Stage panel gains a **Layer** group — four buttons (**To Front / To Back / Forward /
+Backward**) acting on the selected sprite ([`_reorder_selected`](scripts/editor.gd)):
+
+- **It reorders the array in place.** `remove_at` + `insert` on the same `Array` object (To Front →
+  last slot, To Back → slot 0, Forward/Backward → ±1), so the stage view's `_sprites` **reference stays
+  valid** — a `set_selected` re-render shows the new z-order *without* re-pointing the model, and the
+  **pan survives** (unlike the full `_load_project_into_ui`, which recenters). The canvas is persisted
+  first (`_current` is about to move), the selector is rebuilt in the new order and the moved sprite
+  re-selected with a programmatic `select()` (which doesn't emit `item_selected`, so no `_show` / canvas
+  reload fires — the same sprite stays loaded), and `BlockView.project_sprites` is re-pointed to keep the
+  name list in step (order only; names unchanged, so no palette rebuild / canvas refresh is needed).
+- **The buttons disable at the ends** ([`_sync_inspector`](scripts/editor.gd)): To Front / Forward grey
+  out when the sprite is already frontmost (last slot), To Back / Backward when it's already backmost
+  (slot 0) — so a no-op move reads as unavailable.
+
+**Array order is the project's single ordering**, so reordering z **also reorders the sprite selector**
+(it lists `_scripts` in order). This is the honest consequence of having one ordering rather than a
+separate z field — adding an independent z-index would be a data-shape + persistence + runtime change,
+which this milestone deliberately avoids. The `go_to` caveat is unchanged: a sprite's *position* may be
+overridden by a `go_to` block at RUN, but its *layer* is pure array order, which nothing in the script
+touches — so a layer edit always takes effect at RUN.
+
+See [Sprite visual order in the stage editor (M42)](#sprite-visual-order-in-the-stage-editor-m42).
+
+---
+
+## Earlier: Milestone 41 — animation blocks (tween a variable over time)
 
 **Goal of this milestone:** add an **animation block** that takes a **variable** as its parameter and
 **animates its value over time**, supporting **linear**, **ease-in**, and **ease-out** interpolation. It
@@ -2421,7 +2459,63 @@ both moves the paddle and keeps that relay correct for free. With the right padd
 arrows, the **left paddle now answers W/S *and* ↑/↓** — `_paddle` was generalized to take key *lists*
 (`_keys_pressed` ORs them into one condition).
 
+### Sprite visual order in the stage editor (M42)
+
+Lets you **control which sprite draws on top** from the stage editor — *To Front / To Back / Forward /
+Backward*, Scratch's layer operations. It is a pure **editor-side view** change
+([`editor.gd`](scripts/editor.gd) + its [chrome](editor.tscn)) — **no new opcode, no block-data-shape
+change, no runtime change** — because the project already **encodes z-order as sprite array order**.
+
+- **Why array order already *is* the z-order.** The stage view's [`_render`](scripts/stage_view.gd)
+  draws one panel per `_scripts` entry in order, so a later entry is added to `_layer` last and sits on
+  top (and [`_hit`](scripts/stage_view.gd) takes the last match as the topmost). At RUN,
+  [`Stage._ready`](scripts/stage.gd) loops the sprite model and `_add_sprite`s each in order, so a later
+  child `CanvasItem` draws over an earlier one. Both ends walk the same array the same way, so **index 0
+  is backmost and the last index is frontmost** — there is no separate z field to add. Manipulating
+  visual order is therefore just **reordering `_scripts`**, and the reorder *is* the edit (RUN reads the
+  order, SAVE serialises it — the M9 data-is-canonical idiom, lifted to the project level).
+
+- **The chrome.** [editor.tscn](editor.tscn) adds a **Layer** group to the inspector's Stage panel
+  (between the per-sprite colour and the stage-level settings): a label plus a 2-column `GridContainer`
+  of four buttons — `%ToFrontButton` / `%ToBackButton` / `%ForwardButton` / `%BackwardButton`
+  (`unique_name_in_owner`, reached by `%` in `editor.gd`, like the rest of the inspector). They are only
+  reachable in Stage mode (the inspector is hidden in Blocks mode), so no extra mode guard is needed.
+
+- **The reorder, in place.** [`_reorder_selected(target)`](scripts/editor.gd) (wired in `_ready` via four
+  tiny lambdas: To Front → `_scripts.size() - 1`, To Back → `0`, Forward → `_current + 1`, Backward →
+  `_current - 1`) clamps `target`, no-ops if unchanged, then `_persist_current()`s the canvas (the
+  selected sprite is about to move slots) and does `remove_at` + `insert` **on the same `_scripts` Array
+  object**. Reordering in place (not reassigning the array) is load-bearing: the stage view's `_sprites`
+  is the *same* reference (`set_model` aliased it on entering Stage mode), so a re-render reflects the new
+  order **without** re-pointing the model — and the **pan survives**, unlike the full
+  `_load_project_into_ui` (which calls `set_model` → `recenter`). It then rebuilds the selector items in
+  the new order and re-selects the moved sprite with a programmatic `select()` (which does **not** emit
+  `item_selected`, so no `_show` / canvas reload fires — the same sprite stays loaded), re-points
+  `BlockView.project_sprites` (order only — names unchanged, so no palette rebuild / canvas refresh), and
+  calls `_stage_view.set_selected(_current)` (re-render in the new z-order + keep the highlight) +
+  `_sync_inspector()`.
+
+- **End-state button disabling.** [`_sync_inspector`](scripts/editor.gd) greys out To Front / Forward
+  when the sprite is already frontmost (`_current >= size - 1`) and To Back / Backward when already
+  backmost (`_current <= 0`), so a move that would do nothing reads as unavailable.
+
+**Array order is the project's single ordering**, so a z reorder **also reorders the sprite selector**
+(it lists `_scripts` in order) — the honest consequence of one ordering rather than two. An independent
+z-index would mean a block-data-shape + persistence + runtime change, which this milestone deliberately
+avoids. The `go_to` caveat (M27) is unchanged but doesn't bite here: a script may override a sprite's
+*position* at RUN, but its *layer* is pure array order, which no block touches — so a layer edit always
+takes effect.
+
+What this leaves deferred: **reordering by dragging on the stage** (the buttons are the affordance; a
+drag-to-restack gesture would compete with the move/resize/pan drags already on the stage view), and a
+**separate sprite-pane vs. layer ordering** (Scratch keeps the two independent — here they are one).
+
 ## Opcodes implemented
+
+**M42 added no opcodes** — it is a pure **editor-side view** change (reorder a sprite within the project's
+sprite array, which is the z-order, via four Layer buttons in the stage inspector), touching neither the
+block language nor the runtime; the notes below are kept as written for earlier milestones.
+
 
 **M41 added one opcode** — `animate` (the animation block: tween a variable's value over a duration with
 linear / ease-in / ease-out interpolation). The usual one-`_OPCODES`-entry + one-interpreter-handler

@@ -122,6 +122,17 @@ static var _restore_path: String = ""
 ## The stage view's "Recenter view" button (M37) — re-frames the pannable world on the screen region.
 @onready var _recenter_button: Button = %RecenterButton
 
+## The layer (visual-order) buttons in the inspector (M42): move the selected sprite within the sprite
+## array, which *is* the z-order — sprites are drawn (here in _render, and at RUN by Stage._add_sprite's
+## build loop) in array order, so a later entry draws on top. To Front / To Back jump the selected
+## sprite to the end / start of the array; Forward / Backward shift it one slot. The buttons disable at
+## the ends (already front / back) via _sync_inspector. Reordering the array also reorders the sprite
+## selector (the selector lists _scripts in order) — array order is the project's single ordering.
+@onready var _to_front_button: Button = %ToFrontButton
+@onready var _to_back_button: Button = %ToBackButton
+@onready var _forward_button: Button = %ForwardButton
+@onready var _backward_button: Button = %BackwardButton
+
 ## The project's stage background colour as a hex string (M27) — a real project property, the
 ## stage-level counterpart of _scripts / _variables. Seeded from PongScripts.background(), edited via
 ## the inspector's Background picker (_on_insp_bg_color), saved under a top-level "background" key, and
@@ -305,6 +316,11 @@ func _ready() -> void:
 	_grid_step.value_changed.connect(_on_grid_step_changed)
 	# Recenter view (M37): re-frame the pannable stage world on the screen region.
 	_recenter_button.pressed.connect(_stage_view.recenter)
+	# Layer / visual-order buttons (M42): reorder the selected sprite within _scripts (= the z-order).
+	_to_front_button.pressed.connect(func(): _reorder_selected(_scripts.size() - 1))
+	_to_back_button.pressed.connect(func(): _reorder_selected(0))
+	_forward_button.pressed.connect(func(): _reorder_selected(_current + 1))
+	_backward_button.pressed.connect(func(): _reorder_selected(_current - 1))
 
 	# Wire the scene's dialogs: their confirmed signal to the handler, and Enter in the text
 	# field to confirm (register_text_enter, matching Scratch's quick flow). The delete dialog
@@ -513,6 +529,47 @@ func _sync_inspector() -> void:
 	_insp_h.value = float(entry.get("h", 1))
 	_insp_color.color = Color(String(entry.get("color", "#cccccc")))
 	_loading_inspector = false
+	# Layer buttons (M42): grey out the moves that would do nothing — Forward/To Front when the sprite is
+	# already frontmost (the last array slot), Backward/To Back when it's already backmost (slot 0).
+	var at_front := _current >= _scripts.size() - 1
+	var at_back := _current <= 0
+	_to_front_button.disabled = at_front
+	_forward_button.disabled = at_front
+	_to_back_button.disabled = at_back
+	_backward_button.disabled = at_back
+
+
+## Move the selected sprite to array index `target` (M42) — the visual-order edit. The sprite array
+## *is* the z-order: _render draws the entries in order (last on top) and Stage._add_sprite builds them
+## in order at RUN (a later child draws over an earlier one), so reordering the array reorders what
+## draws in front. We reorder **in place** (remove + insert on the same Array object), so the stage
+## view's `_sprites` reference stays valid — a refresh re-renders the new order without re-pointing it,
+## and the pan survives (unlike a full _load_project_into_ui, which recenters). We persist the canvas
+## first (the selected sprite's working edits) since `_current` is about to point at a new slot, then
+## rebuild the selector items in the new order and re-select the moved sprite without firing a reload
+## (`select()` doesn't emit `item_selected`). Reordering the array reorders the selector too — array
+## order is the project's single ordering. A no-op target (out of range, or already there) does nothing.
+func _reorder_selected(target: int) -> void:
+	if _current < 0 or _current >= _scripts.size():
+		return
+	var dest := clampi(target, 0, _scripts.size() - 1)
+	if dest == _current:
+		return
+	_persist_current()
+	var entry: Variant = _scripts[_current]
+	_scripts.remove_at(_current)
+	_scripts.insert(dest, entry)
+	_current = dest
+	# Rebuild the selector in the new order and re-select the moved sprite (programmatic select() does
+	# not emit item_selected, so this triggers no _show / canvas reload — the same sprite stays loaded).
+	_selector.clear()
+	for e in _scripts:
+		_selector.add_item(e["name"])
+	_selector.select(_current)
+	BlockView.project_sprites = _sprite_names()  # keep the name list in step (order only; names unchanged)
+	# Re-render the stage in the new z-order, keep the selection highlight + inspector on the moved sprite.
+	_stage_view.set_selected(_current)
+	_sync_inspector()
 
 
 ## Write a geometry field into the selected sprite's entry (rounded to int, the model's shape) and

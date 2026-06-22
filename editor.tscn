@@ -199,6 +199,41 @@ custom_minimum_size = Vector2(0, 28)
 layout_mode = 2
 text = "Colour"
 
+[node name="LayerSep" type="HSeparator" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786330]
+layout_mode = 2
+
+[node name="LayerLabel" type="Label" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786331]
+layout_mode = 2
+text = "Layer (front = drawn on top)"
+
+[node name="LayerButtons" type="GridContainer" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786332]
+layout_mode = 2
+columns = 2
+
+[node name="ToFrontButton" type="Button" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector/LayerButtons" unique_id=566786333]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "To Front"
+
+[node name="ToBackButton" type="Button" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector/LayerButtons" unique_id=566786334]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "To Back"
+
+[node name="ForwardButton" type="Button" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector/LayerButtons" unique_id=566786335]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Forward"
+
+[node name="BackwardButton" type="Button" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector/LayerButtons" unique_id=566786336]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Backward"
+
 [node name="StageSep" type="HSeparator" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786312]
 layout_mode = 2
 
