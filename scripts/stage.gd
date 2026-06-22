@@ -245,6 +245,39 @@ func camera_stop_following() -> void:
 	_camera_follow = null
 
 
+# --- Layer / z-order (Milestone 42) ----------------------------------------
+#
+# The runtime counterpart of the M42 stage-editor Layer buttons. Visual order is controlled here by
+# the node's `z_index` (CanvasItem's draw-order key) rather than child order: the editor's sprite-array
+# order sets the *initial* stack (every node built at z_index 0, so build order breaks the tie — a later
+# sprite draws on top), and these blocks override it at play time. z_index decouples layer from tree
+# position, so it composes cleanly with the camera / clones without reparenting anything.
+
+## go to front / back layer: set `node`'s z_index just past the current extreme over all registered
+## sprites, so it draws in front of (to_front) / behind every other sprite. Computed against the
+## registry (the addressable originals — clones share an original's name and aren't individually
+## restacked); an empty stage just lands the node at ±1 off the default 0.
+func set_layer(node: Node2D, to_front: bool) -> void:
+	var extreme := 0
+	var seen := false
+	for t in _targets.values():
+		if t.node == node or not is_instance_valid(t.node):
+			continue
+		var z := (t.node as Node2D).z_index
+		if not seen:
+			extreme = z
+			seen = true
+		else:
+			extreme = maxi(extreme, z) if to_front else mini(extreme, z)
+	node.z_index = (extreme + 1) if to_front else (extreme - 1)
+
+
+## go forward / backward N layers: shift `node`'s z_index by `by` (positive = toward the front).
+## Clamped to the engine's CanvasItem z range so a runaway loop can't push it out of bounds.
+func change_layer(node: Node2D, by: int) -> void:
+	node.z_index = clampi(node.z_index + by, RenderingServer.CANVAS_ITEM_Z_MIN, RenderingServer.CANVAS_ITEM_Z_MAX)
+
+
 ## Look up another target by the name it was registered under. Returns null if
 ## there is no such target (callers warn / no-op rather than crash).
 func find_target(target_name: String) -> Target:

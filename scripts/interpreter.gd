@@ -111,6 +111,8 @@ func _register_handlers() -> void:
 		"change_camera": _on_change_camera,
 		"camera_follow": _on_camera_follow,
 		"camera_stop_following": _on_camera_stop_following,
+		"go_to_layer": _on_go_to_layer,
+		"change_layer": _on_change_layer,
 	}
 	_reporter_handlers = {
 		"touching_edge?": _on_touching_edge,
@@ -674,6 +676,27 @@ func _on_camera_follow(block: Dictionary) -> void:
 ## camera_stop_following: release tracking; the camera holds wherever it currently is.
 func _on_camera_stop_following(_block: Dictionary) -> void:
 	_stage.camera_stop_following()
+
+
+# --- Layer / visual order (Milestone 42) -----------------------------------
+#
+# The block-language counterpart of the M42 stage-editor Layer buttons: change which sprite draws on
+# top at *play* time. The editor reorders the sprite array (the build-time z-order); these blocks
+# restack the running node. The Stage owns the mechanism (it knows every sprite, to compute the
+# front/back extreme) — the interpreter just names the intent, mirroring the camera blocks.
+
+## go_to_layer: jump the running sprite in front of / behind every other sprite ("front"/"back").
+func _on_go_to_layer(block: Dictionary) -> void:
+	_stage.set_layer(_target.node, String(_value(block, "layer")) == "front")
+
+
+## change_layer: shift the running sprite by `num` layers — "forward" toward the front (a +shift),
+## "backward" toward the back (a -shift). A non-numeric / blank count is treated as 0 (no move).
+func _on_change_layer(block: Dictionary) -> void:
+	var n := int(_value(block, "num"))
+	if String(_value(block, "direction")) == "backward":
+		n = -n
+	_stage.change_layer(_target.node, n)
 
 
 # --- Helpers ---------------------------------------------------------------

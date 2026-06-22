@@ -5,20 +5,33 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 42 — sprite visual order in the stage editor
+## Current state: Milestone 42 — sprite visual order (editor + blocks)
 
-**Goal of this milestone:** let you **control which sprite draws in front of which** from the stage
-editor — Scratch's *go to front / back layer, go forward / backward* operations. It is a pure
-**editor-side view** change ([`editor.gd`](scripts/editor.gd) + its [chrome](editor.tscn)) — **no new
-opcode, no block-data-shape change, no runtime change** — because the project model **already encodes
-z-order as sprite array order**: both the stage view's [`_render`](scripts/stage_view.gd) (later entries
-drawn last, on top) and the runtime's [`Stage._add_sprite`](scripts/stage.gd) build loop (a later child
-draws over an earlier one) walk `_scripts` in order. So "manipulate visual order" = **reorder the
-`_scripts` entries**, and the reorder *is* the edit — RUN reads array order and SAVE serialises it, so it
-rides those paths untouched (the M9 data-is-canonical idiom, at the project level).
+**Goal of this milestone:** let you **control which sprite draws in front of which** — Scratch's *go to
+front / back layer, go forward / backward layers*. It has two halves:
+
+1. **In the stage editor** — four **Layer** buttons reorder the selected sprite, a pure editor-side view
+   change ([`editor.gd`](scripts/editor.gd) + [chrome](editor.tscn)); **no opcode, no data-shape, no
+   runtime change**.
+2. **In blocks** — two new LOOKS opcodes (`go_to_layer`, `change_layer`) restack a sprite at *play*
+   time, the usual one-`_OPCODES`-entry + one-interpreter-handler each, **no block-data-shape change**.
+
+The two halves use **different mechanisms for the same concept**, because z-order is expressed
+differently at edit vs. play time. At edit/build time it is **sprite array order**: both the stage
+view's [`_render`](scripts/stage_view.gd) (later entries drawn last, on top) and the runtime's
+[`Stage._add_sprite`](scripts/stage.gd) build loop (a later child draws over an earlier one) walk
+`_scripts` in order. At play time the nodes already exist, so the blocks restack via the node's
+**`z_index`** ([`Stage.set_layer`](scripts/stage.gd) / [`change_layer`](scripts/stage.gd)) — every
+sprite is built at `z_index 0` (so the editor's array order is the initial stack), and a layer block
+overrides it. z_index decouples layer from tree position, so it composes with the camera / clones
+without reparenting.
+
+### The editor half — reorder the array
 
 The inspector's Stage panel gains a **Layer** group — four buttons (**To Front / To Back / Forward /
-Backward**) acting on the selected sprite ([`_reorder_selected`](scripts/editor.gd)):
+Backward**) acting on the selected sprite ([`_reorder_selected`](scripts/editor.gd)). The reorder *is*
+the edit (RUN reads array order, SAVE serialises it — the M9 data-is-canonical idiom at the project
+level):
 
 - **It reorders the array in place.** `remove_at` + `insert` on the same `Array` object (To Front →
   last slot, To Back → slot 0, Forward/Backward → ±1), so the stage view's `_sprites` **reference stays
@@ -32,14 +45,33 @@ Backward**) acting on the selected sprite ([`_reorder_selected`](scripts/editor.
   out when the sprite is already frontmost (last slot), To Back / Backward when it's already backmost
   (slot 0) — so a no-op move reads as unavailable.
 
-**Array order is the project's single ordering**, so reordering z **also reorders the sprite selector**
-(it lists `_scripts` in order). This is the honest consequence of having one ordering rather than a
-separate z field — adding an independent z-index would be a data-shape + persistence + runtime change,
-which this milestone deliberately avoids. The `go_to` caveat is unchanged: a sprite's *position* may be
-overridden by a `go_to` block at RUN, but its *layer* is pure array order, which nothing in the script
-touches — so a layer edit always takes effect at RUN.
+**Array order is the editor's single ordering**, so reordering z **also reorders the sprite selector**
+(it lists `_scripts` in order) — the honest consequence of one ordering rather than a separate z field
+(adding one would be a data-shape + persistence + runtime change the editor half deliberately avoids).
 
-See [Sprite visual order in the stage editor (M42)](#sprite-visual-order-in-the-stage-editor-m42).
+### The blocks half — restack at play time
+
+Two LOOKS statements, the runtime counterpart of the editor buttons:
+
+- **`go to {layer} layer`** (`go_to_layer`, `layer` ∈ {`front`, `back`}) → [`_on_go_to_layer`](scripts/interpreter.gd)
+  → [`Stage.set_layer`](scripts/stage.gd): set the node's `z_index` just past the current extreme over
+  all registered sprites, so it draws in front of / behind every other sprite.
+- **`go {direction} {num} layers`** (`change_layer`, `direction` ∈ {`forward`, `backward`}, `num` a
+  numeric slot) → [`_on_change_layer`](scripts/interpreter.gd) → [`Stage.change_layer`](scripts/stage.gd):
+  shift the node's `z_index` by `num` (forward = toward the front, a `+` shift; backward = `−`), clamped
+  to the engine's CanvasItem z range.
+
+Both are plain `{opcode, inputs}` statements (so persistence/RUN carry them untouched) and need **no
+editor change** beyond the two `_OPCODES` entries — `{layer}`/`{direction}` reuse the M13 fixed-choice
+`enums` dropdown, `{num}` is an ordinary numeric slot. The Stage owns the mechanism (it must scan every
+sprite to find the front/back extreme), the interpreter just names the intent — the camera-block
+delegation pattern (M37).
+
+The `go_to` caveat (M27) doesn't bite layers: a script may override a sprite's *position* at RUN, but
+its *layer* is z_index, which only these blocks touch — so an editor layer edit (the initial build
+order) holds at RUN until a layer block changes it.
+
+See [Sprite visual order — editor + blocks (M42)](#sprite-visual-order--editor--blocks-m42).
 
 ---
 
@@ -800,6 +832,12 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    background to pan** the world around (sprite drag/resize are unchanged — only empty space pans), and
    click **Recenter view** in the inspector to re-frame on the screen. The top bar and the right
    inspector sit on **opaque panels** so they read as distinct from the stage.
+   **Reorder which sprite draws on top** (M42) with the inspector's **Layer** buttons — **To Front** /
+   **To Back** / **Forward** / **Backward** act on the selected sprite (the buttons grey out at the
+   ends). This reorders the sprite array, which is the z-order — so it also reorders the sprite selector,
+   and RUN/SAVE keep it. To restack **at play time**, the palette's **LOOKS** group has the layer blocks
+   **`go to {front/back} layer`** and **`go {forward/backward} {num} layers`** (e.g.
+   `when_flag_clicked → go to front layer`), which move the running sprite's draw order via its z_index.
    **Scroll the runtime view with camera blocks** (M37) in the palette's **CAMERA** group: **`set camera
    to x: y:`** centres the view on a world point (camera coordinates are the same as sprite coordinates),
    **`change camera by x: y:`** scrolls it relative to where it is, **`camera follow {sprite}`** keeps the
@@ -2459,12 +2497,18 @@ both moves the paddle and keeps that relay correct for free. With the right padd
 arrows, the **left paddle now answers W/S *and* ↑/↓** — `_paddle` was generalized to take key *lists*
 (`_keys_pressed` ORs them into one condition).
 
-### Sprite visual order in the stage editor (M42)
+### Sprite visual order — editor + blocks (M42)
 
-Lets you **control which sprite draws on top** from the stage editor — *To Front / To Back / Forward /
-Backward*, Scratch's layer operations. It is a pure **editor-side view** change
-([`editor.gd`](scripts/editor.gd) + its [chrome](editor.tscn)) — **no new opcode, no block-data-shape
-change, no runtime change** — because the project already **encodes z-order as sprite array order**.
+Lets you **control which sprite draws on top** — *To Front / To Back / Forward / Backward*, Scratch's
+layer operations — two ways: **from the stage editor** (the inspector's Layer buttons, editor-side only)
+and **from blocks** (two LOOKS layer opcodes, at play time). The two use different mechanisms because
+z-order is expressed differently at edit vs. play time — array order at build, `z_index` at run.
+
+#### The editor half — reorder the array (editor-side only)
+
+A pure **editor-side view** change ([`editor.gd`](scripts/editor.gd) + its [chrome](editor.tscn)) — **no
+opcode, no block-data-shape change, no runtime change** — because the project already **encodes z-order
+as sprite array order**.
 
 - **Why array order already *is* the z-order.** The stage view's [`_render`](scripts/stage_view.gd)
   draws one panel per `_scripts` entry in order, so a later entry is added to `_layer` last and sits on
@@ -2499,22 +2543,51 @@ change, no runtime change** — because the project already **encodes z-order as
   when the sprite is already frontmost (`_current >= size - 1`) and To Back / Backward when already
   backmost (`_current <= 0`), so a move that would do nothing reads as unavailable.
 
-**Array order is the project's single ordering**, so a z reorder **also reorders the sprite selector**
+**Array order is the editor's single ordering**, so a z reorder **also reorders the sprite selector**
 (it lists `_scripts` in order) — the honest consequence of one ordering rather than two. An independent
-z-index would mean a block-data-shape + persistence + runtime change, which this milestone deliberately
-avoids. The `go_to` caveat (M27) is unchanged but doesn't bite here: a script may override a sprite's
-*position* at RUN, but its *layer* is pure array order, which no block touches — so a layer edit always
-takes effect.
+z-index *model field* would mean a block-data-shape + persistence change, which the editor half avoids.
 
-What this leaves deferred: **reordering by dragging on the stage** (the buttons are the affordance; a
-drag-to-restack gesture would compete with the move/resize/pan drags already on the stage view), and a
-**separate sprite-pane vs. layer ordering** (Scratch keeps the two independent — here they are one).
+#### The blocks half — restack at play time (two LOOKS opcodes)
+
+The runtime can't reorder the build-time array (the sprites are live nodes), so the layer blocks restack
+via the node's **`z_index`** instead. Every sprite is built at `z_index 0` ([`Stage._add_sprite`](scripts/stage.gd)
+sets none), so the editor's array order is the *initial* stack and a layer block overrides it; z_index
+decouples draw order from tree position, so it composes with the camera / clones with no reparenting.
+Two opcodes, the usual one-`_OPCODES`-entry + one-interpreter-handler each
+([`block_view.gd`](scripts/block_view.gd) / [`interpreter.gd`](scripts/interpreter.gd)), **no
+block-data-shape change**:
+
+- **`go to {layer} layer`** (`go_to_layer`, `layer` ∈ {`front`, `back`}) → [`_on_go_to_layer`](scripts/interpreter.gd)
+  → [`Stage.set_layer(node, to_front)`](scripts/stage.gd): scan the registry for the current z extreme
+  over the *other* sprites and set this node just past it (`max + 1` for front, `min − 1` for back), so
+  it draws over / under every other sprite. (Clones aren't individually addressable — the registry holds
+  originals — so front/back is computed against those.)
+- **`go {direction} {num} layers`** (`change_layer`, `direction` ∈ {`forward`, `backward`}, `num`
+  numeric) → [`_on_change_layer`](scripts/interpreter.gd) → [`Stage.change_layer(node, by)`](scripts/stage.gd):
+  shift `z_index` by `num` (`forward` = `+`, toward the front; `backward` = `−`), clamped to
+  `RenderingServer.CANVAS_ITEM_Z_MIN/MAX` so a runaway loop can't push it out of range.
+
+They need **no editor change** beyond the two entries: `{layer}`/`{direction}` reuse the M13 fixed-choice
+`enums` dropdown and `{num}` is an ordinary numeric slot (literals, arithmetic — M29 — or a dropped
+reporter). The Stage owns the mechanism (it must scan all sprites for the extreme); the interpreter just
+names the intent — the camera-block delegation pattern (M37). The `go_to` caveat (M27) doesn't bite
+layers: a script may override a sprite's *position*, but its *layer* is z_index, which only these blocks
+touch.
+
+What this leaves deferred: **reordering by dragging on the stage** (the inspector buttons are the
+editor affordance; a drag-to-restack gesture would compete with the move/resize/pan drags already there),
+a **separate sprite-pane vs. layer ordering** (Scratch keeps the two independent — the editor half makes
+them one), and **a layer *reporter*** (Scratch has none either — layer is write-only here).
 
 ## Opcodes implemented
 
-**M42 added no opcodes** — it is a pure **editor-side view** change (reorder a sprite within the project's
-sprite array, which is the z-order, via four Layer buttons in the stage inspector), touching neither the
-block language nor the runtime; the notes below are kept as written for earlier milestones.
+**M42 added two opcodes** — `go_to_layer` (go to front / back layer) and `change_layer` (go forward /
+backward N layers): the LOOKS *layer* blocks, which restack a sprite at play time via its node `z_index`
+([`Stage.set_layer`](scripts/stage.gd) / [`change_layer`](scripts/stage.gd)). Each is the usual
+one-`_OPCODES`-entry + one-interpreter-handler step, no block-data-shape change. The milestone's **editor
+half** — four Layer buttons in the stage inspector that reorder a sprite within the project's sprite
+array (the build-time z-order) — added no opcodes (a pure editor-side view change). The notes below are
+kept as written for earlier milestones.
 
 
 **M41 added one opcode** — `animate` (the animation block: tween a variable's value over a duration with
@@ -2644,6 +2717,8 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `change_camera` | statement | `dx`, `dy` | scroll the runtime view by (dx, dy) from its current centre (M37); clears any active follow |
 | `camera_follow` | statement | `name` | track the named sprite — the camera re-centres on it each frame (M37). `{name}` is a sprites dropdown; unknown → warn + no-op |
 | `camera_stop_following` | statement | — | release camera tracking (M37); the camera holds its current position |
+| `go_to_layer` | statement | `layer` | restack the sprite (M42): `"front"` → draw over every other sprite, `"back"` → behind, via node `z_index` (just past the current extreme). `{layer}` is an enum dropdown |
+| `change_layer` | statement | `direction`, `num` | shift the sprite `num` layers (M42): `"forward"` toward the front (z_index += num), `"backward"` toward the back (−num), clamped to the engine z range. `{direction}` is an enum dropdown |
 
 > Note on `"bounce"`: the `point_in_direction "bounce"` sentinel and its `_bounce()`
 > implementation **remain in the runtime** as a supported opcode value (any saved or

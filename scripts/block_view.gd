@@ -172,6 +172,8 @@ const _OPCODES := {
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	"set_color": {"category": "looks", "kind": "statement", "template": "set color {color}", "defaults": {"color": "#ffffff"}},
 	"set_size": {"category": "looks", "kind": "statement", "template": "set size to w: {w} h: {h}", "defaults": {"w": 16, "h": 16}},
+	"go_to_layer": {"category": "looks", "kind": "statement", "template": "go to {layer} layer", "defaults": {"layer": "front"}, "enums": {"layer": ["front", "back"]}},
+	"change_layer": {"category": "looks", "kind": "statement", "template": "go {direction} {num} layers", "defaults": {"direction": "forward", "num": 1}, "enums": {"direction": ["forward", "backward"]}},
 	# sensing
 	"touching_edge?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
 	"touching_sprite?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},

@@ -62,18 +62,25 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   `BlockCanvas._reflow_stacks()` flows the stacks by their **measured** heights (it `await`s one
   `process_frame` first so the freshly-built nested min-sizes have propagated), called only on the
   default-layout paths so hand-dragged positions still survive the session.
-- **Last shipped:** M42 — **sprite visual order in the stage editor.** Four **Layer** buttons (To Front /
-  To Back / Forward / Backward) in the inspector's Stage panel reorder the selected sprite within
-  `_scripts` — which **is** the z-order (both `StageView._render` and the runtime's `Stage._add_sprite`
-  build loop walk the array in order, so a later entry draws on top). `editor._reorder_selected` does an
-  in-place `remove_at`+`insert` (so the stage view's `_sprites` reference stays valid and the pan
-  survives), rebuilds the selector in the new order, and re-selects the moved sprite without firing a
-  reload; buttons grey out at the ends via `_sync_inspector`. Reordering z also reorders the selector
-  (array order is the project's single ordering — no separate z field). Pure `editor.gd` + `editor.tscn`,
-  no opcode/data-shape/runtime change. *(committed/pushed: pending)*
-  **F5-verify:** Stage mode → select the Ball → **To Back** (it slips behind the paddles/HUDs);
-  **To Front** brings it over everything; **Forward/Backward** nudge one layer; the end buttons grey out
-  at the extremes. RUN reflects the order; SAVE/OPEN round-trips it.
+- **Last shipped:** M42 — **sprite visual order (editor + blocks).** Two halves:
+  - **Editor:** four **Layer** buttons (To Front / To Back / Forward / Backward) in the inspector's Stage
+    panel reorder the selected sprite within `_scripts` — which **is** the build-time z-order (both
+    `StageView._render` and `Stage._add_sprite` walk the array in order). `editor._reorder_selected` does
+    an in-place `remove_at`+`insert` (stage view's `_sprites` reference stays valid, pan survives),
+    rebuilds the selector in the new order, re-selects the moved sprite without a reload; buttons grey out
+    at the ends. Reordering z also reorders the selector (array order is the editor's single ordering).
+  - **Blocks:** two new LOOKS opcodes restack at *play* time via the node's `z_index` — `go_to_layer`
+    (`go to {front/back} layer`) and `change_layer` (`go {forward/backward} {num} layers`). Interpreter
+    handlers delegate to `Stage.set_layer` (z just past the current extreme) / `Stage.change_layer`
+    (z_index ± num, clamped). Sprites build at z_index 0 (so editor array order = the initial stack);
+    blocks override. One `_OPCODES` entry + one handler each, no editor change (enum + numeric slots).
+  - Files: editor half `editor.gd`/`editor.tscn`; blocks half `block_view.gd`, `interpreter.gd`,
+    `stage.gd`. *(editor half committed `cdf6993`; blocks half committed/pushed: pending)*
+  - **F5-verify (editor):** Stage mode → select the Ball → **To Back** (behind paddles/HUDs), **To
+    Front** (over all), **Forward/Backward** nudge one layer; end buttons grey out. RUN/SAVE keep it.
+  - **F5-verify (blocks):** a LOOKS group block `when_flag_clicked → go to front layer` on a sprite that
+    normally renders behind another → at RUN it draws on top; `go to back layer` / `go forward/backward N
+    layers` move it the other ways.
 - **Prior shipped:** M41 — **animation blocks** (tween a variable over time). One new statement opcode,
   **`animate {name} to {value} over {seconds} secs {easing}`** (new slate-orchid `"animation"` palette
   category), with `{easing}` ∈ {`linear`, `ease in`, `ease out`}. `{name}` is a data-scoped variables
@@ -128,12 +135,14 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
-- M42 — **sprite visual order in the stage editor.** Four Layer buttons (To Front / To Back / Forward /
-  Backward) in the stage inspector reorder the selected sprite within `_scripts` (= the z-order, since
-  both `StageView._render` and `Stage._add_sprite` walk the array in order). In-place `remove_at`+`insert`
-  keeps the stage view's model reference valid and the pan intact; the selector rebuilds in the new order
-  and re-selects the moved sprite without a reload; buttons disable at the ends. Pure `editor.gd` +
-  `editor.tscn` — no opcode/data-shape/runtime change. *(committed/pushed: pending)*
+- M42 — **sprite visual order (editor + blocks).** *Editor half:* four Layer buttons (To Front / To Back
+  / Forward / Backward) in the stage inspector reorder the selected sprite within `_scripts` (= the
+  build-time z-order, since both `StageView._render` and `Stage._add_sprite` walk the array in order) —
+  in-place `remove_at`+`insert`, selector rebuilt + re-selected without a reload, buttons disable at the
+  ends; no opcode/data-shape/runtime change (`editor.gd`+`editor.tscn`, `cdf6993`). *Blocks half:* two new
+  LOOKS opcodes `go_to_layer` / `change_layer` restack at play time via node `z_index` (`Stage.set_layer`
+  / `change_layer`); one `_OPCODES` entry + one handler each, no editor change (`block_view.gd`,
+  `interpreter.gd`, `stage.gd`). *(blocks half committed/pushed: pending)*
 
 - Demo — **right paddle auto-animates; arrow keys move to the left paddle (rides M41).** A pure
   `pong_scripts.gd` change exercising the M41 `animate` block (no block-language/runtime edit, like M36
