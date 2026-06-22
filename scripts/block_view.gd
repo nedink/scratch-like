@@ -656,12 +656,33 @@ static func palette_groups() -> Array:
 	var groups: Array = []
 	for category in PALETTE_CATEGORY_ORDER:
 		var opcodes: Array = []
+		var self_state: Array = []
 		for opcode in _OPCODES:
 			if _OPCODES[opcode].get("category") == category and _OPCODES[opcode].get("palette", true):
-				opcodes.append(opcode)
+				# The running-sprite self-state reporters (position/velocity) are pushed to the end of
+				# their group so the palette can set them off behind a separator (M43 grouping). The
+				# partition is stable, so everything else keeps its declared order.
+				if opcode in _SELF_STATE_REPORTERS:
+					self_state.append(opcode)
+				else:
+					opcodes.append(opcode)
+		opcodes.append_array(self_state)
 		if not opcodes.is_empty():
 			groups.append({"category": category, "opcodes": opcodes})
 	return groups
+
+
+## The reporters that read *only the running sprite's* own state (M43 grouping): its position and
+## velocity components. palette_groups sorts them to the end of their (motion) group, and the palette
+## draws a separator before the first one (BlockPalette._build), so they read as a distinct
+## "this sprite" cluster. `direction` is deliberately left in the main run.
+const _SELF_STATE_REPORTERS := ["x_position", "y_position", "velocity_x", "velocity_y"]
+
+
+## Whether `opcode` is a running-sprite self-state reporter (see _SELF_STATE_REPORTERS) — the palette
+## uses this to place a separator before the first such chip in a group.
+static func is_self_state_reporter(opcode: String) -> bool:
+	return opcode in _SELF_STATE_REPORTERS
 
 
 ## Whether an opcode is a reporter (a value/boolean block that lives in a slot, not a stack).

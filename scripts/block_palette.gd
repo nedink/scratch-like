@@ -86,6 +86,7 @@ func _build() -> void:
 		if category == "variables" and _on_make_variable.is_valid():
 			var make_btn := Button.new()
 			make_btn.text = "Make a Variable"
+			make_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 			make_btn.pressed.connect(_on_make_variable)
 			add_child(make_btn)
 			# Beneath it, one management row per in-scope variable (M21): a button that pops a
@@ -94,7 +95,14 @@ func _build() -> void:
 			if _on_rename_variable.is_valid() or _on_delete_variable.is_valid():
 				for var_name in BlockView.project_variables:
 					add_child(_make_variable_row(String(var_name)))
+		var self_state_separated := false
 		for opcode in group["opcodes"]:
+			# The running-sprite self-state reporters (position/velocity) come last in the group
+			# (palette_groups sorts them there); set them off with a separator before the first one,
+			# so they read as a distinct "this sprite" cluster (M43 grouping).
+			if BlockView.is_self_state_reporter(opcode) and not self_state_separated:
+				_add_separator()
+				self_state_separated = true
 			var block := BlockView.make_block(opcode)
 			# A reporter chip is drawn as a pill (build_reporter) so it matches what lands in a
 			# slot; everything stackable keeps the statement/hat shape (build_block).
@@ -116,6 +124,7 @@ func _build() -> void:
 		_add_group_header("custom", "MY BLOCKS")
 		var make_btn := Button.new()
 		make_btn.text = "Make a Block"
+		make_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		make_btn.pressed.connect(_on_make_block)
 		add_child(make_btn)
 		for block_name in BlockView.project_custom_blocks:
@@ -152,6 +161,15 @@ func _add_group_header(category: String, text := "") -> void:
 	header.add_theme_color_override("font_color", BlockView.category_color(category))
 	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(header)
+
+
+## A thin horizontal rule used inside a group to set off the running-sprite self-state reporters
+## from the rest (M43 grouping). Mouse-ignored, like the headers/spacers, so the wheel still scrolls
+## and _chip_at skips it.
+func _add_separator() -> void:
+	var sep := HSeparator.new()
+	sep.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(sep)
 
 
 ## A fresh `args` dict for a `call` block (M31): one entry per parameter name, each defaulting to 0

@@ -62,7 +62,17 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   `BlockCanvas._reflow_stacks()` flows the stacks by their **measured** heights (it `await`s one
   `process_frame` first so the freshly-built nested min-sizes have propagated), called only on the
   default-layout paths so hand-dragged positions still survive the session.
-- **Last shipped:** **`while` block** — a CONTROL C-block that loops *while* a boolean condition holds
+- **Last shipped (palette polish):** in the **motion** group, the running-sprite self-state reporters
+  (`x position` / `y position` / `velocity x` / `velocity y`) are now grouped at the **end of the group
+  behind an `HSeparator`**, so they read as a distinct "this sprite" cluster (`direction` and the
+  cross-sprite `x/y position of` stay in the main run). `BlockView.palette_groups` stable-partitions
+  them last (`_SELF_STATE_REPORTERS` + `is_self_state_reporter`); `BlockPalette._build` draws the
+  separator before the first one (`_add_separator`). Also **left-justified** the *Make a Variable* /
+  *Make a Block* button labels (`alignment = HORIZONTAL_ALIGNMENT_LEFT`). Files: `block_view.gd`,
+  `block_palette.gd`. Pure editor-side; no opcode / data-shape / runtime change.
+  - **F5-verify:** open the editor, look at the MOTION palette group — the four position/velocity
+    reporters sit below a thin divider at the bottom of the group; the two Make buttons read left-aligned.
+- **Prior shipped:** **`while` block** — a CONTROL C-block that loops *while* a boolean condition holds
   (Scratch's "repeat until" sibling). The usual one-`_OPCODES`-entry + one-interpreter-handler step, no
   block-data-shape change, no editor change: it's a C-block with a `{condition}` boolean slot (`bool_inputs`)
   and a `body`, so the renderer/palette/canvas carry it like `if`/`forever`. `interpreter._on_while` is
