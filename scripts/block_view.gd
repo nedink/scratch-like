@@ -44,7 +44,7 @@ const HAT_OPCODES := ["when_flag_clicked", "when_i_start_as_a_clone", "define"]
 
 ## C-blocks wrap their body in an indented "C". (The interpreter treats both the same
 ## way — a nested body Array — so this is purely a drawing distinction.)
-const C_OPCODES := ["forever", "if"]
+const C_OPCODES := ["forever", "while", "if"]
 
 ## Scratch's category palette. Keyed by the "category" each opcode declares below.
 ## A static var (not const) because a Color built from a hex *string* is not a
@@ -151,6 +151,7 @@ const _OPCODES := {
 	"when_i_start_as_a_clone": {"category": "events", "kind": "hat", "template": "when I start as a clone", "defaults": {"body": []}},
 	# control
 	"forever": {"category": "control", "kind": "statement", "template": "forever", "defaults": {"body": []}},
+	"while": {"category": "control", "kind": "statement", "template": "while {condition}", "defaults": {"condition": true, "body": []}, "bool_inputs": ["condition"]},
 	"if": {"category": "control", "kind": "statement", "template": "if {condition} then", "defaults": {"condition": true, "body": []}, "bool_inputs": ["condition"]},
 	"wait_seconds": {"category": "control", "kind": "statement", "template": "wait {seconds} seconds", "defaults": {"seconds": 1}},
 	"stop": {"category": "control", "kind": "statement", "template": "stop {mode}", "defaults": {"mode": "all"}, "enums": {"mode": ["all", "this script"]}},

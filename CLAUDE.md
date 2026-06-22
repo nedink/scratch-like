@@ -2687,6 +2687,7 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `when_flag_clicked` | hat | `body` | entry point; each hat's body starts on play |
 | `when_i_start_as_a_clone` | hat | `body` | entry point for a freshly spawned clone |
 | `forever` | control | `body` | runs its body, yields one frame per loop |
+| `while` | control | `condition`, `body` | runs `body` while the condition reporter is true, re-checking each loop, yielding one frame per iteration; a condition that never goes false ≡ `forever` |
 | `if` | control | `condition`, `body` | runs `body` when the condition reporter is true |
 | `move_steps` | statement | `steps` | moves `steps` px along the facing direction |
 | `turn_degrees` | statement | `degrees` | rotates facing direction clockwise |

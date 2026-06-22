@@ -88,6 +88,7 @@ func _register_handlers() -> void:
 	_statement_handlers = {
 		"when_flag_clicked": _on_when_flag_clicked,
 		"forever": _on_forever,
+		"while": _on_while,
 		"if": _on_if,
 		"move_steps": _on_move_steps,
 		"turn_degrees": _on_turn_degrees,
@@ -218,6 +219,21 @@ func _on_when_flag_clicked(block: Dictionary) -> void:
 func _on_forever(block: Dictionary) -> void:
 	var body := _body(block)
 	while _stage.is_running() and _alive:
+		await _run_stack(body)
+		if not _stage.is_running() or not _alive:
+			return
+		await _tree.physics_frame
+
+
+## while condition { body }  — run the body while the condition holds, yielding one
+## tick per iteration (the same fixed-physics-frame yield as `forever`, so it can't
+## freeze the engine and runs at a constant rate). The condition is re-evaluated each
+## loop. Like `forever` it polls the Stage/`_alive` flags so a `stop` unwinds it within
+## a frame. With a condition that never goes false this is exactly `forever`.
+func _on_while(block: Dictionary) -> void:
+	var condition: Variant = block.get("inputs", {}).get("condition")
+	var body := _body(block)
+	while _stage.is_running() and _alive and _evaluate(condition):
 		await _run_stack(body)
 		if not _stage.is_running() or not _alive:
 			return

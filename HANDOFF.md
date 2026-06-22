@@ -62,7 +62,16 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   `BlockCanvas._reflow_stacks()` flows the stacks by their **measured** heights (it `await`s one
   `process_frame` first so the freshly-built nested min-sizes have propagated), called only on the
   default-layout paths so hand-dragged positions still survive the session.
-- **Last shipped:** M42 — **sprite visual order (editor + blocks).** Two halves:
+- **Last shipped:** **`while` block** — a CONTROL C-block that loops *while* a boolean condition holds
+  (Scratch's "repeat until" sibling). The usual one-`_OPCODES`-entry + one-interpreter-handler step, no
+  block-data-shape change, no editor change: it's a C-block with a `{condition}` boolean slot (`bool_inputs`)
+  and a `body`, so the renderer/palette/canvas carry it like `if`/`forever`. `interpreter._on_while` is
+  `_on_forever` with a condition re-checked each loop — yields one fixed physics frame per iteration (can't
+  freeze the engine) and polls Stage/`_alive` so `stop` unwinds it within a frame. A condition that never
+  goes false ≡ `forever`. Files: `block_view.gd` (`C_OPCODES` + the `_OPCODES` entry), `interpreter.gd`.
+  - **F5-verify:** a CONTROL `while {condition}` block appears in the palette; e.g. make an `i` variable,
+    `when_flag_clicked → set i to 0 → while (i < 5) { change i by 1 → say (i) }` counts 0→5 then stops.
+- **Prior shipped:** M42 — **sprite visual order (editor + blocks).** Two halves:
   - **Editor:** four **Layer** buttons (To Front / To Back / Forward / Backward) in the inspector's Stage
     panel reorder the selected sprite within `_scripts` — which **is** the build-time z-order (both
     `StageView._render` and `Stage._add_sprite` walk the array in order). `editor._reorder_selected` does
