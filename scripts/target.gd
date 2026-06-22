@@ -35,6 +35,13 @@ var velocity: Vector2 = Vector2.ZERO
 ## same name (Scratch semantics). The ball keeps its `speed` here.
 var variables: Dictionary = {}
 
+## Per-sprite ("for this sprite only") lists (M44): name (String) -> Array of items. The list
+## counterpart of `variables`, resolved the same local-first-then-global way (a local list shadows
+## a global of the same name). The list blocks mutate the resolved Array **in place** (add / delete /
+## insert / replace), so this dict holds the live containers. A clone inherits a deep copy of its
+## source's lists (like locals), so a clone's list edits don't bleed back into the source.
+var lists: Dictionary = {}
+
 ## True only for runtime clones (set by Stage.create_clone_of). `delete_this_clone`
 ## refuses to run on an original — matching Scratch, where the block is a no-op
 ## outside a clone.

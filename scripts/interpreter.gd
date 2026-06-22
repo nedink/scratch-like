@@ -102,6 +102,11 @@ func _register_handlers() -> void:
 		"wait_seconds": _on_wait_seconds,
 		"set_var": _on_set_var,
 		"change_var": _on_change_var,
+		"list_add": _on_list_add,
+		"list_delete": _on_list_delete,
+		"list_delete_all": _on_list_delete_all,
+		"list_insert": _on_list_insert,
+		"list_replace": _on_list_replace,
 		"animate": _on_animate,
 		"say": _on_say,
 		"stop": _on_stop,
@@ -142,6 +147,10 @@ func _register_handlers() -> void:
 		"y_position_of": _on_y_position_of,
 		"velocity_x": _on_velocity_x,
 		"velocity_y": _on_velocity_y,
+		"list_item": _on_list_item,
+		"list_item_index": _on_list_item_index,
+		"list_length": _on_list_length,
+		"list_contains?": _on_list_contains,
 		"mouse_x": _on_mouse_x,
 		"mouse_y": _on_mouse_y,
 		"mouse_down?": _on_mouse_down,
@@ -408,6 +417,107 @@ func _on_change_var(block: Dictionary) -> void:
 	_set_variable(name, float(_get_variable(name)) + float(_value(block, "by")))
 
 
+# --- Lists (Milestone 44) --------------------------------------------------
+#
+# The list block set, the ordered-collection counterpart of variables. Each block names a list by the
+# `list` input (a dropdown of the project's lists, like a variable name) and resolves it the same
+# local-first-then-global way through _get_list, which returns the live Array. The mutating blocks
+# (add / delete / delete all / insert / replace) mutate that Array **in place**; the reporters read it.
+# Indices are **1-based** (Scratch), via _resolve_index — which also accepts the string "last" and
+# "random"/"any" for the index slot. An op on an unknown list warns and no-ops (reporters return a
+# benign empty/0/false); the dropdown only ever offers real lists, so a warning means a stale name.
+
+## add {item} to {list}: append the item to the end of the list.
+func _on_list_add(block: Dictionary) -> void:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return
+	arr.append(_value(block, "item"))
+
+
+## delete {index} of {list}: remove the 1-based item at `index` (also "last" / "random"). An out-of-range
+## index is ignored (Scratch's behaviour), so a script can't crash on a bad index.
+func _on_list_delete(block: Dictionary) -> void:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return
+	var i := _resolve_index(_value(block, "index"), arr.size(), false)
+	if i >= 1 and i <= arr.size():
+		arr.remove_at(i - 1)
+
+
+## delete all of {list}: empty the list.
+func _on_list_delete_all(block: Dictionary) -> void:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return
+	arr.clear()
+
+
+## insert {item} at {index} of {list}: place `item` so it becomes the 1-based `index`-th item, shifting
+## the rest right. Valid range is 1..length+1 ("last" inserts at the end); an out-of-range index is ignored.
+func _on_list_insert(block: Dictionary) -> void:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return
+	var i := _resolve_index(_value(block, "index"), arr.size(), true)
+	if i >= 1 and i <= arr.size() + 1:
+		arr.insert(i - 1, _value(block, "item"))
+
+
+## replace item {index} of {list} with {item}: overwrite the 1-based item at `index`. Out-of-range is ignored.
+func _on_list_replace(block: Dictionary) -> void:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return
+	var i := _resolve_index(_value(block, "index"), arr.size(), false)
+	if i >= 1 and i <= arr.size():
+		arr[i - 1] = _value(block, "item")
+
+
+## item {index} of {list}: read the 1-based item at `index` ("last" / "random" accepted). An empty list
+## or an out-of-range index yields "" (Scratch's empty), so a reader degrades gracefully.
+func _on_list_item(block: Dictionary) -> Variant:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return ""
+	var i := _resolve_index(_value(block, "index"), arr.size(), false)
+	if i >= 1 and i <= arr.size():
+		return arr[i - 1]
+	return ""
+
+
+## item # of {item} in {list}: the 1-based position of the first item equal to `item`, or 0 if none —
+## the inverse of `item {index}`. Equality is Scratch's loose compare (see _items_equal).
+func _on_list_item_index(block: Dictionary) -> int:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return 0
+	var needle: Variant = _value(block, "item")
+	for i in arr.size():
+		if _items_equal(arr[i], needle):
+			return i + 1
+	return 0
+
+
+## length of {list}: the number of items.
+func _on_list_length(block: Dictionary) -> int:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	return 0 if arr == null else (arr as Array).size()
+
+
+## {list} contains {item}?: true when some item equals `item` (loose compare, _items_equal).
+func _on_list_contains(block: Dictionary) -> bool:
+	var arr: Variant = _get_list(String(_value(block, "list")))
+	if arr == null:
+		return false
+	var needle: Variant = _value(block, "item")
+	for item in arr:
+		if _items_equal(item, needle):
+			return true
+	return false
+
+
 ## animate: smoothly interpolate variable `name` from its current value to `value` over `seconds`,
 ## one step per physics tick, using the chosen easing curve. Like `wait_seconds` (and Scratch's glide)
 ## it **blocks the calling script for the duration** — the blocks after it run only once the animation
@@ -628,6 +738,47 @@ func _set_variable(name: String, value: Variant) -> void:
 	else:
 		push_warning("Interpreter: assignment to undeclared variable '%s' (creating global)" % name)
 		_stage.set_var(name, value)
+
+
+# --- List resolution (Milestone 44) ----------------------------------------
+
+## Resolve list `name` to its live Array, checking this target's locals first, then the Stage's
+## globals (the same shadowing order as variables). Returns null — not an empty array — for an unknown
+## name, so a caller no-ops (mutating blocks) or returns a benign default (reporters) rather than
+## silently creating a list. Lists are made up front in the UI, so a miss means a stale hand-edited name.
+func _get_list(name: String) -> Variant:
+	if _target.lists.has(name):
+		return _target.lists[name]
+	if _stage.has_list(name):
+		return _stage.get_list(name)
+	push_warning("Interpreter: use of undefined list '%s'" % name)
+	return null
+
+
+## Resolve a list index input to a 1-based integer (M44). Accepts a plain number, or the Scratch index
+## keywords "last" (the final slot — length, or length+1 when inserting) and "random"/"any" (a uniform
+## slot). `for_insert` widens the random range to length+1 (an insert may land just past the end). The
+## caller validates the returned index against the list's bounds.
+func _resolve_index(raw: Variant, length: int, for_insert: bool) -> int:
+	if typeof(raw) == TYPE_STRING:
+		match String(raw).strip_edges().to_lower():
+			"last":
+				return length + 1 if for_insert else length
+			"random", "any":
+				var hi := length + 1 if for_insert else length
+				return randi_range(1, hi) if hi >= 1 else 0
+	return int(raw)
+
+
+## Loose equality for list membership / search (M44), matching Scratch: compare as numbers when both
+## items read as numeric, else case-insensitively as strings. Keeps `contains?` / `item #` intuitive
+## whether the list holds numbers or text (and whether they arrive as int, float, or String).
+func _items_equal(a: Variant, b: Variant) -> bool:
+	var sa := str(a)
+	var sb := str(b)
+	if sa.is_valid_float() and sb.is_valid_float():
+		return is_equal_approx(sa.to_float(), sb.to_float())
+	return sa.nocasecmp_to(sb) == 0
 
 
 # --- Cloning (Milestone 4) -------------------------------------------------

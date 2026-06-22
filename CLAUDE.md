@@ -5,7 +5,105 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 43 — cross-sprite position reporters + built-in velocity
+## Current state: Milestone 44 — lists (ordered collections), the variable twin
+
+**Goal of this milestone:** add **lists** — Scratch's ordered, mutable collections — built as the
+direct **structural twin of variables** (M18/M20/M21). A list is a named `Array` of items with a
+**global / per-sprite-local scope**, made / renamed / deleted from the palette exactly like a
+variable, seeded into the runtime the same way, and persisted in the project `.json`. It adds **nine
+opcodes** (the full Scratch list block set) and one new `data_enums` source (`"lists"`), but — like
+every milestone since M30 — **no block-data-shape change**: each block is a plain `{opcode, inputs}`
+dict, so persistence (M22) and RUN (M10) carry it untouched, and a pre-M44 project still opens (the
+`lists` key is optional → an empty list model). Per the milestone scope, lists are **data-only** —
+created/edited from the palette, read in scripts via reporters; there is **no on-stage list monitor
+widget** (a scrollable display is a deferred milestone of its own).
+
+### The model — `{name, items, scope}`, the sibling of `variables()`
+
+[`PongScripts.lists()`](scripts/pong_scripts.gd) declares the stock list model — an Array of
+`{name, items, scope}` (`scope` ∈ {`"global"`, a sprite name}; `items` the starting Array) — the list
+counterpart of `variables()`, read by **both** the runtime and the editor. The stock demo uses no
+lists (the list blocks ship unexercised by Pong, like clones / `stop "this script"`), so it returns
+`[]`; you make a list from the editor's **Make a List** button (or add a stock entry here). The editor
+owns a mutable copy [`_lists`](scripts/editor.gd) (seeded from it, deep-copied) — the exact mirror of
+`_variables`.
+
+### Runtime — a list store on the Stage and on each Target
+
+A list resolves **local-first, then global** (Scratch's shadowing order, like a variable):
+
+- [`Target.lists`](scripts/target.gd) — per-sprite ("for this sprite only") lists. A clone inherits a
+  **deep copy** (`source.lists.duplicate(true)`), so a clone's list edits don't bleed into the source
+  (like locals / direction / velocity).
+- [`Stage._lists`](scripts/stage.gd) — global ("for all sprites") lists, with
+  [`get_list`](scripts/stage.gd) / [`has_list`](scripts/stage.gd) (the list twins of `get_var` /
+  `has_var`). [`Stage._ready`](scripts/stage.gd) seeds every entry from
+  [`_list_model()`](scripts/stage.gd) (the editor's `project_lists` when handed one, else
+  `PongScripts.lists()`) **deep-copied**, so the runtime owns its own mutable containers — the list
+  blocks mutate these Arrays **in place**.
+
+The interpreter resolves a list to its **live Array** via [`_get_list`](scripts/interpreter.gd)
+(returns `null` for an unknown name → the caller no-ops / returns a benign empty, since lists are made
+up front in the UI), with two helpers: [`_resolve_index`](scripts/interpreter.gd) (1-based, also
+accepts the index keywords `"last"` and `"random"`/`"any"`) and [`_items_equal`](scripts/interpreter.gd)
+(Scratch's loose compare — numeric when both items read numeric, else case-insensitive string — for
+`contains?` / `item #`).
+
+### The nine blocks (all category `"lists"`, the full Scratch set)
+
+Five **statements** (mutate the list in place) and four **reporters** (read it). `{list}` is a
+data-scoped dropdown (`data_enums: {list: "lists"}` → [`BlockView.project_lists`](scripts/block_view.gd),
+the list twin of the `"variables"` source — so it re-scopes per sprite for free); `{index}` is a 1-based
+numeric slot; `{item}` an ordinary value slot (literal / arithmetic / dropped reporter). Out-of-range
+indices are ignored (statements) or yield `""` (reads) — Scratch's behaviour, so a bad index can't
+crash a script.
+
+- **`add {item} to {list}`** (`list_add`) → append.
+- **`delete {index} of {list}`** (`list_delete`) → remove the 1-based item.
+- **`delete all of {list}`** (`list_delete_all`) → clear.
+- **`insert {item} at {index} of {list}`** (`list_insert`) → insert, shifting the rest right (range 1..len+1).
+- **`replace item {index} of {list} with {item}`** (`list_replace`) → overwrite.
+- **`item {index} of {list}`** (`list_item`, value) → read, else `""`.
+- **`item # of {item} in {list}`** (`list_item_index`, value) → 1-based index of the first match, else 0.
+- **`length of {list}`** (`list_length`, value) → item count.
+- **`{list} contains {item}?`** (`list_contains?`, **boolean**) → membership test.
+
+### Editor — Make a List + rename/delete, mirroring variables
+
+The palette's new **LISTS** group (after VARIABLES in `PALETTE_CATEGORY_ORDER`) renders specially like
+the variables group ([`BlockPalette`](scripts/block_palette.gd)): a **Make a List** button atop, one
+**Rename / Delete** `MenuButton` row per in-scope list, then the nine list chips. The editor side is a
+near-verbatim copy of the variable code — [`_lists_in_scope`](scripts/editor.gd) (globals + this
+sprite's locals, re-pointed into `project_lists` in [`_show`](scripts/editor.gd)),
+[`_make_list`](scripts/editor.gd) / [`_on_new_list_confirmed`](scripts/editor.gd) (append
+`{name, items: [], scope}`), and the rename/delete cascade
+([`_on_list_rename_confirmed`](scripts/editor.gd) / [`_on_list_delete_confirmed`](scripts/editor.gd))
+scoped per-referent ([`_is_list_referent_for`](scripts/editor.gd)). The cascade walkers live on
+`BlockView` beside the variable ones: [`count_list_refs`](scripts/block_view.gd) /
+[`rewrite_list_refs`](scripts/block_view.gd) / [`strip_list_refs`](scripts/block_view.gd) (keyed on the
+`{list}` input; a delete **drops** a list statement and **reverts** a list reporter's slot to its
+default — so `if (list contains x?)` becomes `if true` once the list is gone). The canvas's in-place
+halves are [`rename_list`](scripts/block_canvas.gd) / [`delete_list_refs`](scripts/block_canvas.gd).
+A **sprite** rename re-scopes its local lists and a **sprite delete** drops them (and reports them in
+the count), exactly as for local variables (M25). Three new dialogs (`ListDialog` / `ListRenameDialog` /
+`ListDeleteDialog`) are declared in [editor.tscn](editor.tscn).
+
+### Persistence + RUN
+
+The project `.json` gains a top-level **`lists`** key ([`_serialize_project`](scripts/editor.gd) /
+[`_apply_project`](scripts/editor.gd) — absent ⇒ `[]`, so a pre-M44 save still opens), and RUN hands
+`Stage.project_lists = _lists.duplicate(true)` over alongside the sprites/variables/background (stashed
+in `_restore_lists` for the ESC round trip).
+
+What this leaves deferred: an **on-stage list monitor** (the scrollable list display — lists are
+data-only this milestone), the index keywords in the slot as a **dropdown** (`"last"`/`"random"` work if
+*typed*, but the index is a plain numeric field, not Scratch's `1`/`last`/`random` menu), and a
+**list-typed reporter / "for each" loop** (compose iteration with `length` + `item` + a counter + a
+`while`).
+
+---
+
+## Earlier: Milestone 43 — cross-sprite position reporters + built-in velocity
 
 **Goal of this milestone:** two related motion additions. (1) Replace the demo's **position-relay
 globals** with real reporter blocks — read *another* sprite's x/y directly instead of having that
@@ -2660,6 +2758,16 @@ them one), and **a layer *reporter*** (Scratch has none either — layer is writ
 
 ## Opcodes implemented
 
+**M44 added nine opcodes** — the **list** block set (Scratch's ordered collections): the statements
+`list_add` / `list_delete` / `list_delete_all` / `list_insert` / `list_replace` and the reporters
+`list_item` / `list_item_index` / `list_length` / `list_contains?` (the last a boolean). Each names a
+list via the `{list}` data-scoped dropdown (the new `"lists"` source → `project_lists`, the list twin of
+`"variables"`), and the runtime stores lists local-first-then-global on `Target.lists` / `Stage._lists`,
+mutating the resolved `Array` in place. A list is the **structural twin of a variable** — same
+`{name, items, scope}` model, Make/Rename/Delete UI, seeding, persistence (`lists` key), and rename/delete
+cascade — so beyond the nine entries and the one data-enum source there is no new editor machinery. No
+block-data-shape change; a pre-M44 project opens (the `lists` key defaults to empty).
+
 **M43 added six opcodes** — the **cross-sprite position reporters** `x_position_of` / `y_position_of`
 (read another sprite's centre by name, a sprites dropdown) and the **velocity** blocks `set_velocity`
 / `change_velocity` (statements) + `velocity_x` / `velocity_y` (reporters). The position reporters
@@ -2794,6 +2902,15 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `create_clone` | statement | `target` | only `"myself"` is supported: spawns a clone that inherits locals and runs the clone hats |
 | `delete_this_clone` | statement | — | removes the running clone (frees its node, releases its interpreter); a no-op on an original |
 | `variable` | reporter | `name` | reads a variable, resolving local-first then global |
+| `list_add` | statement | `item`, `list` | append `item` to the list (M44); `{list}` is a lists dropdown, resolved local-first then global |
+| `list_delete` | statement | `index`, `list` | remove the 1-based `index`-th item (M44); `index` also accepts `"last"`/`"random"`; out-of-range ignored |
+| `list_delete_all` | statement | `list` | empty the list (M44) |
+| `list_insert` | statement | `item`, `index`, `list` | insert `item` so it becomes the 1-based `index`-th item (M44), shifting the rest right (range 1..len+1) |
+| `list_replace` | statement | `index`, `list`, `item` | overwrite the 1-based `index`-th item with `item` (M44); out-of-range ignored |
+| `list_item` | reporter | `index`, `list` | the 1-based `index`-th item (M44), or `""` if empty / out of range. Value output |
+| `list_item_index` | reporter | `item`, `list` | the 1-based position of the first item equal to `item` (M44), or 0 if none (loose compare). Value output |
+| `list_length` | reporter | `list` | the number of items (M44). Value output |
+| `list_contains?` | reporter | `list`, `item` | true when some item equals `item` (M44, loose compare). Boolean output |
 | `direction` | reporter | — | the running sprite's facing direction in degrees (M35); Scratch convention (90 = right, 0 = up). Value output |
 | `x_position` / `y_position` | reporter | — | the running sprite's centre x / y (M35); Sprite2D is centred. Value output. Together with `direction` these expose the motion state a data-form bounce needs |
 | `x_position_of` / `y_position_of` | reporter | `name` | another sprite's centre x / y (M43), resolved by name through the registry; `{name}` is a sprites dropdown, unknown → 0 + warning. Value output. Retires the demo's paddle-position relay globals |
@@ -2896,6 +3013,14 @@ CLAUDE.md                  This file
   and the Stage falls back to. `scope` is `"global"` or a sprite name (a per-sprite local). Don't seed
   a variable inline in `stage.gd` or name it in the editor separately; that is exactly the duplication
   M18 removed.
+- New list? Two ways, mirroring variables (M44). **From the UI**: click **Make a List** atop the
+  palette's LISTS group, name it, pick global/local — appended to the editor's working model and seeded
+  at RUN; **Rename / Delete** from its row's menu (rename cascades, delete strips its references). It
+  survives relaunch only if you **SAVE**. **In the stock project**: add one `{name, items, scope}` entry
+  to [`PongScripts.lists()`](scripts/pong_scripts.gd) — the seed model the editor starts from and the
+  Stage falls back to (`items` the starting Array, `scope` `"global"` or a sprite name). A list resolves
+  local-first then global at runtime (`Target.lists` / `Stage._lists`); the list blocks mutate the
+  resolved `Array` in place. Don't seed a list inline in `stage.gd`.
 - New sprite? Two ways, mirroring variables. **From the UI** (M24): **+ Sprite** in the top bar names
   a new sprite (a grey placeholder at centre with an empty script); **− Sprite** deletes the selected
   one (and its locals, and any `touching` references to it — M25); **Rename Sprite** (M25) renames it,

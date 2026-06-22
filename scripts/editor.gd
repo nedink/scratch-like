@@ -77,6 +77,7 @@ static var _restore_scripts: Array = []
 static var _restore_variables: Array = []
 static var _restore_background: String = ""
 static var _restore_grid: Dictionary = {}
+static var _restore_lists: Array = []
 static var _restore_path: String = ""
 
 ## The interactive block canvas (M9): drag/snap lives here. Reloaded on selection.
@@ -179,6 +180,27 @@ var _web_file_callback = null
 ## PongScripts.variables() live each call — fine while read-only; M20 needs a stable store to
 ## append to, so the editor now owns this copy.
 var _variables: Array = []
+
+## The project's list model (M44) — the editor-owned, mutable counterpart of _variables, an Array of
+## {name, items, scope} dicts. Seeded from PongScripts.lists() (the single declaration the runtime also
+## reads), extended by "Make a List" and edited by the per-list Rename / Delete rows. _lists_in_scope
+## filters it per sprite for the `{list}` dropdowns; _on_run hands it to the Stage so a list made here is
+## seeded at RUN. The list twin of _variables in every respect.
+var _lists: Array = []
+
+## The Make / Rename / Delete **list** dialogs (M44), declared in editor.tscn and reused — the list twins
+## of the variable dialogs. `_renaming_list` / `_deleting_list` hold the name the open dialog acts on (its
+## confirmed signal carries no payload — the same state-var idiom the variable dialogs use). The delete
+## label is rewritten per-invocation with the usage count.
+@onready var _list_dialog: ConfirmationDialog = %ListDialog
+@onready var _list_name_edit: LineEdit = %ListNameEdit
+@onready var _list_scope: OptionButton = %ListScope
+@onready var _list_rename_dialog: ConfirmationDialog = %ListRenameDialog
+@onready var _list_rename_edit: LineEdit = %ListRenameEdit
+var _renaming_list: String = ""
+@onready var _list_delete_dialog: ConfirmationDialog = %ListDeleteDialog
+@onready var _list_delete_label: Label = %ListDeleteLabel
+var _deleting_list: String = ""
 
 ## The "Make a Variable" dialog (M20) and its inputs: a name field and a scope selector
 ## ("For all sprites" → a global / "For this sprite only" → a local of the edited sprite).
@@ -289,6 +311,10 @@ func _ready() -> void:
 	_palette._on_delete_variable = _delete_variable
 	# The palette's "Make a Block" button (M30) calls back here to mint a custom block (a `define` hat).
 	_palette._on_make_block = _make_block
+	# The lists group's Make a List button + per-list Rename/Delete rows (M44) call back here.
+	_palette._on_make_list = _make_list
+	_palette._on_rename_list = _rename_list
+	_palette._on_delete_list = _delete_list
 	# Renaming a `define` in place (M32) cascades to its `call`s in the canvas; this hook lets us then
 	# re-derive the sprite's custom-block names so the palette chips and `call` dropdowns track the rename.
 	_canvas.on_custom_block_renamed = _on_custom_block_renamed
@@ -330,6 +356,13 @@ func _ready() -> void:
 	_rename_dialog.confirmed.connect(_on_rename_confirmed)
 	_rename_dialog.register_text_enter(_rename_edit)
 	_delete_dialog.confirmed.connect(_on_delete_confirmed)
+
+	# Make / Rename / Delete list dialogs (M44), the list twins of the variable dialogs.
+	_list_dialog.confirmed.connect(_on_new_list_confirmed)
+	_list_dialog.register_text_enter(_list_name_edit)
+	_list_rename_dialog.confirmed.connect(_on_list_rename_confirmed)
+	_list_rename_dialog.register_text_enter(_list_rename_edit)
+	_list_delete_dialog.confirmed.connect(_on_list_delete_confirmed)
 
 	# Add / Delete sprite (M24): the top-bar buttons and their dialogs. Add's name field confirms on
 	# Enter (matching the variable dialogs); both dialogs' confirmed signal routes to its handler.
@@ -400,6 +433,7 @@ func _seed_demo() -> void:
 	# shared PongScripts builders (background() returns a String value, so no copy needed there).
 	_scripts = PongScripts.sprites().duplicate(true)
 	_variables = PongScripts.variables().duplicate(true)
+	_lists = PongScripts.lists().duplicate(true)
 	_background = PongScripts.background()
 	_grid_settings = PongScripts.grid()
 
@@ -413,6 +447,7 @@ func _restore_project() -> void:
 	_restore_pending = false
 	_scripts = _restore_scripts
 	_variables = _restore_variables
+	_lists = _restore_lists
 	_background = _restore_background
 	_grid_settings = _restore_grid
 	_current_path = _restore_path
@@ -457,6 +492,9 @@ func _show(index: int) -> void:
 	# project_variables, so update it and rebuild the palette before the canvas renders — that
 	# way editing the Ball shows `speed` in every menu and editing a paddle hides it.
 	BlockView.project_variables = _variables_in_scope(_scripts[index]["name"])
+	# Re-scope the `{list}` dropdowns to this sprite too (M44): globals + this sprite's local lists,
+	# the list twin of project_variables. Set before the palette rebuild / canvas render below.
+	BlockView.project_lists = _lists_in_scope(_scripts[index]["name"])
 	# Re-derive the sprite's custom blocks (M30) — the `define` hats in its script — so the palette's
 	# `call` chips and any `call {name}` dropdown list this sprite's procedures (the per-sprite
 	# custom-block twin of project_variables). Derived from the script being loaded, the same way the
@@ -727,6 +765,9 @@ func _del_sprite_pressed() -> void:
 	for v in _variables:
 		if String(v.get("scope", "global")) == sprite_name:
 			locals += 1
+	for l in _lists:  # local lists go with the sprite too (M44)
+		if String(l.get("scope", "global")) == sprite_name:
+			locals += 1
 	# Count the dangling `touching {name}?` references the delete will clear in the *surviving* scripts
 	# (the deleted sprite's own script goes wholesale, so its self-references aren't "cleared", just
 	# gone). M24 left these dangling (they resolved null/false at RUN); M25 strips them, so the dialog
@@ -737,7 +778,7 @@ func _del_sprite_pressed() -> void:
 			refs += BlockView.count_sprite_refs(_scripts[i]["script"], sprite_name)
 	var msg := "Delete sprite \"%s\"? Its script" % sprite_name
 	if locals > 0:
-		msg += " and %d local variable(s)" % locals
+		msg += " and %d local variable(s)/list(s)" % locals
 	msg += " will be removed."
 	if refs > 0:
 		msg += "\n%d \"touching\" reference(s) to it will be cleared." % refs
@@ -763,6 +804,10 @@ func _on_del_sprite_confirmed() -> void:
 	for i in range(_variables.size() - 1, -1, -1):
 		if String(_variables[i].get("scope", "global")) == _deleting_sprite:
 			_variables.remove_at(i)
+	# Drop the sprite's local lists too (M44) — they're scoped by its name, like its local variables.
+	for i in range(_lists.size() - 1, -1, -1):
+		if String(_lists[i].get("scope", "global")) == _deleting_sprite:
+			_lists.remove_at(i)
 	# Clear the references the gone sprite leaves behind in every remaining script (M25). We strip
 	# directly on each `_scripts` entry rather than in place on the canvas because the delete always
 	# navigates to a surviving neighbour, whose canvas _load_project_into_ui reloads from scratch anyway.
@@ -813,6 +858,10 @@ func _on_rename_sprite_confirmed() -> void:
 	for v in _variables:
 		if String(v.get("scope", "global")) == old_name:
 			v["scope"] = new_name
+	# A sprite's local lists are scoped by its name too (M44), so they must follow the rename.
+	for l in _lists:
+		if String(l.get("scope", "global")) == old_name:
+			l["scope"] = new_name
 	# Cascade `touching {name}?` references across every script.
 	for i in _scripts.size():
 		if i == _current:
@@ -826,6 +875,7 @@ func _on_rename_sprite_confirmed() -> void:
 	_selector.set_item_text(_current, new_name)
 	BlockView.project_sprites = _sprite_names()
 	BlockView.project_variables = _variables_in_scope(new_name)
+	BlockView.project_lists = _lists_in_scope(new_name)  # the renamed sprite's local lists, now under its new name (M44)
 	_palette.rebuild()
 	_canvas.refresh()  # after re-pointing project_sprites, so the new name is an in-scope option
 	if _stage_mode:
@@ -857,6 +907,166 @@ func _variables_in_scope(sprite_name: String) -> Array:
 		if scope == "global" or scope == sprite_name:
 			names.append(v["name"])
 	return names
+
+
+## The list names in scope for `sprite_name` (M44) — the options its `{list}` slots offer. A list is in
+## scope when it is a global or a local of this very sprite; another sprite's locals are hidden. The list
+## twin of _variables_in_scope, reading the editor-owned `_lists` model. Re-evaluated per sprite by _show.
+func _lists_in_scope(sprite_name: String) -> Array:
+	var names: Array = []
+	for l in _lists:
+		var scope := String(l.get("scope", "global"))
+		if scope == "global" or scope == sprite_name:
+			names.append(l["name"])
+	return names
+
+
+# --- Make / rename / delete a list (M44) -----------------------------------
+#
+# The list twin of Make a Variable (M20) + the variable rename/delete cascade (M21). A list carries an
+# `items` Array (vs a variable's scalar `value`), but in every other respect — scoped model, in-scope
+# guard, per-referent cascade, refresh trio — it mirrors the variable code.
+
+## Pop the Make a List dialog with a blank, all-sprites default (the palette button's callback).
+func _make_list() -> void:
+	_list_name_edit.text = ""
+	_list_scope.select(0)
+	_list_dialog.popup_centered(Vector2i(280, 150))
+	_list_name_edit.grab_focus()
+
+
+## Mint a list: append a fresh {name, items: [], scope} entry (an empty list, like a new Scratch list),
+## then re-scope the dropdowns and refresh the palette + canvas so it shows immediately. A blank name, or
+## one already in scope for this sprite, is rejected silently (same in-scope guard as Make a Variable).
+func _on_new_list_confirmed() -> void:
+	var list_name := _list_name_edit.text.strip_edges()
+	if list_name == "":
+		return
+	var sprite_name := String(_scripts[_current]["name"])
+	if list_name in _lists_in_scope(sprite_name):
+		return
+	var scope := "global" if _list_scope.selected == 0 else sprite_name
+	_lists.append({"name": list_name, "items": [], "scope": scope})
+	BlockView.project_lists = _lists_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
+
+
+## Pop the rename dialog for `list_name` (a palette row's menu callback), name pre-selected.
+func _rename_list(list_name: String) -> void:
+	_renaming_list = list_name
+	_list_rename_edit.text = list_name
+	_list_rename_dialog.popup_centered(Vector2i(280, 130))
+	_list_rename_edit.grab_focus()
+	_list_rename_edit.select_all()
+
+
+## Commit a list rename (the list twin of _on_rename_confirmed): update the model entry's name, cascade
+## the new name across every script where this list is the in-scope referent (the current sprite in place
+## via the canvas, the rest via BlockView.rewrite_list_refs), then re-scope/rebuild/refresh. Blank,
+## unchanged, or already-in-scope names are rejected silently.
+func _on_list_rename_confirmed() -> void:
+	var new_name := _list_rename_edit.text.strip_edges()
+	if new_name == "" or new_name == _renaming_list:
+		return
+	var sprite_name := String(_scripts[_current]["name"])
+	if new_name in _lists_in_scope(sprite_name):
+		return
+	var entry := _in_scope_list_entry(_renaming_list)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
+	var old_name := _renaming_list
+
+	_persist_current()  # sync the canvas into _scripts[_current] before the cascade
+	entry["name"] = new_name
+	for i in _scripts.size():
+		if not _is_list_referent_for(String(_scripts[i]["name"]), old_name, scope):
+			continue
+		if i == _current:
+			_canvas.rename_list(old_name, new_name)  # in place — preserves canvas positions
+		else:
+			BlockView.rewrite_list_refs(_scripts[i]["script"], old_name, new_name)
+
+	BlockView.project_lists = _lists_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
+
+
+## Pop the delete-confirmation dialog for `list_name`, reporting how many references it has across the
+## in-scope scripts. Persists the canvas first so the current sprite's count is current.
+func _delete_list(list_name: String) -> void:
+	_persist_current()
+	_deleting_list = list_name
+	var entry := _in_scope_list_entry(list_name)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
+	var uses := 0
+	for i in _scripts.size():
+		if _is_list_referent_for(String(_scripts[i]["name"]), list_name, scope):
+			uses += BlockView.count_list_refs(_scripts[i]["script"], list_name)
+	_list_delete_label.text = "Delete \"%s\"?\n%d reference(s) in the scripts will be removed too." % [list_name, uses]
+	_list_delete_dialog.popup_centered(Vector2i(380, 140))
+
+
+## Commit a list delete (the list twin of _on_delete_confirmed): strip every reference where this list is
+## the in-scope referent (the current sprite in place via BlockCanvas.delete_list_refs, the rest via
+## BlockView.strip_list_refs), then remove the model entry. List statements are dropped and list reporters
+## revert their slot to a default — no dangling name survives. Destructive; no undo.
+func _on_list_delete_confirmed() -> void:
+	var entry := _in_scope_list_entry(_deleting_list)
+	if entry.is_empty():
+		return
+	var scope := String(entry.get("scope", "global"))
+	var sprite_name := String(_scripts[_current]["name"])
+
+	for i in _scripts.size():
+		if not _is_list_referent_for(String(_scripts[i]["name"]), _deleting_list, scope):
+			continue
+		if i == _current:
+			_canvas.delete_list_refs(_deleting_list)  # in place — preserves canvas positions
+		else:
+			BlockView.strip_list_refs(_scripts[i]["script"], _deleting_list)
+
+	for i in _lists.size():
+		var l: Dictionary = _lists[i]
+		var s := String(l.get("scope", "global"))
+		if String(l["name"]) == _deleting_list and (s == "global" or s == sprite_name):
+			_lists.remove_at(i)
+			break
+
+	BlockView.project_lists = _lists_in_scope(sprite_name)
+	_palette.rebuild()
+	_canvas.refresh()
+
+
+## The list model entry for `list_name` that the current sprite sees (a global, or a local of this
+## sprite), or {} if none — the list twin of _in_scope_entry.
+func _in_scope_list_entry(list_name: String) -> Dictionary:
+	var sprite_name := String(_scripts[_current]["name"])
+	for l in _lists:
+		var scope := String(l.get("scope", "global"))
+		if String(l["name"]) == list_name and (scope == "global" or scope == sprite_name):
+			return l
+	return {}
+
+
+## Whether `list_name` (scope `scope`) is the referent `sprite_name`'s script sees under that name — the
+## test the list rename/delete cascade scopes on, the list twin of _is_referent_for. A local is the
+## referent only for its own sprite; a global everywhere except a sprite shadowing it with its own local.
+func _is_list_referent_for(sprite_name: String, list_name: String, scope: String) -> bool:
+	if scope == "global":
+		return not _sprite_has_local_list(sprite_name, list_name)
+	return sprite_name == scope
+
+
+## Whether `sprite_name` declares a local list named `list_name` (the list twin of _sprite_has_local).
+func _sprite_has_local_list(sprite_name: String, list_name: String) -> bool:
+	for l in _lists:
+		if String(l["name"]) == list_name and String(l.get("scope", "global")) == sprite_name:
+			return true
+	return false
 
 
 # --- Make a Variable (M20) -------------------------------------------------
@@ -1183,6 +1393,7 @@ func _serialize_project() -> String:
 	return JSON.stringify({
 		"scripts": _scripts,
 		"variables": _variables,
+		"lists": _lists,
 		"background": _background,
 		"grid": _grid_settings,
 	}, "\t")
@@ -1231,6 +1442,10 @@ func _apply_project(text: String, source: String) -> bool:
 		_normalize_sprite(entry)  # back-fill geometry for a sprite saved before it had any (M24)
 	_scripts = sprites
 	_variables = data["variables"]
+	# Lists (M44): optional, so a pre-M44 saved file (no "lists" key) opens with an empty list model.
+	# Validate it's an array if present, so a malformed value can't break the editor.
+	var saved_lists: Variant = data.get("lists", [])
+	_lists = saved_lists if typeof(saved_lists) == TYPE_ARRAY else []
 	_background = String(data.get("background", PongScripts.background()))
 	# Overlay any saved grid settings onto the stock defaults, so a partial or absent grid dict still
 	# opens with sane values (the M27 grid-overlay).
@@ -1338,14 +1553,17 @@ func _on_run() -> void:
 	# The grid is editor-only (an authoring aid), so it isn't handed to the game.
 	var sprites := _scripts.duplicate(true)
 	var variables := _variables.duplicate(true)
+	var lists := _lists.duplicate(true)
 	Stage.project_sprites = sprites
 	Stage.project_variables = variables
+	Stage.project_lists = lists
 	Stage.project_background = _background
 	# Stash the open project so the ESC return restores it instead of reseeding the demo. The game never
 	# mutates project_sprites' / project_variables' contents (the interpreter mutates Target state, not
 	# these dicts), so the editor can safely reclaim these same deep copies on the way back.
 	_restore_scripts = sprites
 	_restore_variables = variables
+	_restore_lists = lists
 	_restore_background = _background
 	_restore_grid = _grid_settings.duplicate(true)
 	_restore_path = _current_path

@@ -55,6 +55,14 @@ var _on_delete_variable: Callable
 ## non-editor caller, in which case the My-Blocks group (button + call chips) isn't drawn.
 var _on_make_block: Callable
 
+## Called for the lists group (M44), the list twin of the variable callbacks: "Make a List" mints a
+## list, and each in-scope list's row offers Rename / Delete. Set by the editor; left unset by a
+## non-editor caller, in which case the Make button / management rows aren't drawn (the list *chips*
+## still appear — they come through palette_groups like any category).
+var _on_make_list: Callable
+var _on_rename_list: Callable
+var _on_delete_list: Callable
+
 var _state: int = _IDLE
 var _press_pos: Vector2
 ## The chip pressed, held through the PENDING window so the motion handler can read its opcode and
@@ -95,6 +103,19 @@ func _build() -> void:
 			if _on_rename_variable.is_valid() or _on_delete_variable.is_valid():
 				for var_name in BlockView.project_variables:
 					add_child(_make_variable_row(String(var_name)))
+			# The "Make a List" affordance + per-list rows sit atop the lists group (M44), the exact
+			# twin of the variables group's Make button + rows — a real Button + MenuButtons, not chips,
+			# so GUI handles their clicks and _chip_at skips them. The list *chips* (the 9 list blocks)
+			# then follow via the generic loop below, since they carry palette:true like any category.
+			if category == "lists" and _on_make_list.is_valid():
+				var make_list_btn := Button.new()
+				make_list_btn.text = "Make a List"
+				make_list_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+				make_list_btn.pressed.connect(_on_make_list)
+				add_child(make_list_btn)
+				if _on_rename_list.is_valid() or _on_delete_list.is_valid():
+					for list_name in BlockView.project_lists:
+						add_child(_make_list_row(String(list_name)))
 		var self_state_separated := false
 		for opcode in group["opcodes"]:
 			# The running-sprite self-state reporters (position/velocity) come last in the group
@@ -220,6 +241,27 @@ func _on_variable_menu(id: int, var_name: String) -> void:
 		_on_rename_variable.call(var_name)
 	elif id == 1 and _on_delete_variable.is_valid():
 		_on_delete_variable.call(var_name)
+
+
+## A management row for one in-scope list (M44) — the list twin of _make_variable_row: a MenuButton
+## labelled with the list's name whose popup offers Rename / Delete, routed back to the editor.
+func _make_list_row(list_name: String) -> MenuButton:
+	var row := MenuButton.new()
+	row.text = list_name
+	row.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	var menu := row.get_popup()
+	menu.add_item("Rename", 0)
+	menu.add_item("Delete", 1)
+	menu.id_pressed.connect(_on_list_menu.bind(list_name))
+	return row
+
+
+## Route a list row's menu choice to the editor (M44): Rename (id 0) or Delete (id 1).
+func _on_list_menu(id: int, list_name: String) -> void:
+	if id == 0 and _on_rename_list.is_valid():
+		_on_rename_list.call(list_name)
+	elif id == 1 and _on_delete_list.is_valid():
+		_on_delete_list.call(list_name)
 
 
 ## Rebuild the chip list from scratch. The editor calls this on a sprite switch (M19): the

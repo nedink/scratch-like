@@ -56,6 +56,7 @@ static var _CATEGORY_COLORS := {
 	"looks": Color("#9966ff"),
 	"sensing": Color("#5cb1d6"),
 	"variables": Color("ff731aff"),
+	"lists": Color("#cc5b22"),
 	"operators": Color("#59c059"),
 	"custom": Color("#ff6680"),
 	"camera": Color("#0fbd8c"),
@@ -88,6 +89,12 @@ static var _CATEGORY_COLORS := {
 static var project_variables: Array = []
 static var project_sprites: Array = []
 static var project_custom_blocks: Array = []
+
+## `project_lists` (M44) is the list sibling of `project_variables`: the names of the lists in scope
+## for the sprite being edited (globals + that sprite's own locals). The editor re-points it on every
+## sprite switch, and the `{list}` slots of the list blocks read it as a data-scoped dropdown
+## (data_enums "lists"). Empty (no editor, or no lists made) → those slots fall back to a text field.
+static var project_lists: Array = []
 
 ## `project_custom_block_params` (M31) is the parameter sibling of `project_custom_blocks`: a map of
 ## custom-block name -> its ordered parameter-name list, for the sprite being edited. The editor
@@ -199,6 +206,20 @@ const _OPCODES := {
 	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "p1_score", "value": 0}, "data_enums": {"name": "variables"}},
 	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "p1_score", "by": 1}, "data_enums": {"name": "variables"}},
 	"variable": {"category": "variables", "kind": "reporter", "template": "{name}", "defaults": {"name": "p1_score"}, "data_enums": {"name": "variables"}},
+	# lists (M44) — the ordered-collection counterpart of variables. Each names a list via the `{list}`
+	# data-scoped dropdown (data_enums "lists" → project_lists, the list twin of the "variables" source).
+	# Five statements mutate the list, four reporters read it; `{index}` is 1-based, `{item}` an ordinary
+	# value slot (literal / arithmetic / dropped reporter). Plain {opcode, inputs}, so persistence/RUN
+	# carry them untouched. The `{list}` default "list" is just a placeholder shown when no list exists yet.
+	"list_add": {"category": "lists", "kind": "statement", "template": "add {item} to {list}", "defaults": {"item": "thing", "list": "list"}, "data_enums": {"list": "lists"}},
+	"list_delete": {"category": "lists", "kind": "statement", "template": "delete {index} of {list}", "defaults": {"index": 1, "list": "list"}, "data_enums": {"list": "lists"}},
+	"list_delete_all": {"category": "lists", "kind": "statement", "template": "delete all of {list}", "defaults": {"list": "list"}, "data_enums": {"list": "lists"}},
+	"list_insert": {"category": "lists", "kind": "statement", "template": "insert {item} at {index} of {list}", "defaults": {"item": "thing", "index": 1, "list": "list"}, "data_enums": {"list": "lists"}},
+	"list_replace": {"category": "lists", "kind": "statement", "template": "replace item {index} of {list} with {item}", "defaults": {"index": 1, "list": "list", "item": "thing"}, "data_enums": {"list": "lists"}},
+	"list_item": {"category": "lists", "kind": "reporter", "template": "item {index} of {list}", "defaults": {"index": 1, "list": "list"}, "data_enums": {"list": "lists"}},
+	"list_item_index": {"category": "lists", "kind": "reporter", "template": "item # of {item} in {list}", "defaults": {"item": "thing", "list": "list"}, "data_enums": {"list": "lists"}},
+	"list_length": {"category": "lists", "kind": "reporter", "template": "length of {list}", "defaults": {"list": "list"}, "data_enums": {"list": "lists"}},
+	"list_contains?": {"category": "lists", "kind": "reporter", "output": "boolean", "template": "{list} contains {item}?", "defaults": {"list": "list", "item": "thing"}, "data_enums": {"list": "lists"}},
 	# operators
 	"add": {"category": "operators", "kind": "reporter", "template": "{a} + {b}", "defaults": {"a": 0, "b": 0}},
 	"subtract": {"category": "operators", "kind": "reporter", "template": "{a} - {b}", "defaults": {"a": 0, "b": 0}},
@@ -252,7 +273,7 @@ const _OPCODES := {
 
 ## Category display order for the palette (operators are all reporters, so that group is
 ## empty after filtering and simply produces no chips).
-const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "animation", "looks", "sensing", "variables", "operators", "camera"]
+const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "animation", "looks", "sensing", "variables", "lists", "operators", "camera"]
 
 
 ## A vertical run of blocks (a sprite's whole script, a hat's body, or a C-block's
@@ -535,6 +556,95 @@ static func _strip_input_refs(opcode: String, inputs: Dictionary, name: String) 
 			strip_variable_refs(value, name)
 
 
+## The list opcodes whose `{list}` input names a list (M44) — the targets a list rename/delete cascade
+## walks, the list counterpart of _VARIABLE_OPCODES. Split into the **statements** (which a delete drops
+## from their stack) and the **reporters** (which a delete reverts to a slot default), since a list, like
+## a variable, has both. A list is scoped like a variable (global or sprite-local), so the editor scopes
+## its cascade the same per-referent way.
+const _LIST_STATEMENT_OPCODES := ["list_add", "list_delete", "list_delete_all", "list_insert", "list_replace"]
+const _LIST_REPORTER_OPCODES := ["list_item", "list_item_index", "list_length", "list_contains?"]
+const _LIST_OPCODES := ["list_add", "list_delete", "list_delete_all", "list_insert", "list_replace", "list_item", "list_item_index", "list_length", "list_contains?"]
+
+
+## Count how many blocks in `blocks` reference the list `name` (M44) — the list twin of
+## count_variable_refs, keyed on the `{list}` input instead of `{name}`. Recurses into nested reporter
+## inputs and `body` substacks. The editor sums this across the in-scope scripts to report a delete's usage.
+static func count_list_refs(blocks: Array, name: String) -> int:
+	var count := 0
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _LIST_OPCODES and String(inputs.get("list", "")) == name:
+			count += 1
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				count += count_list_refs([value], name)
+			elif typeof(value) == TYPE_ARRAY:
+				count += count_list_refs(value, name)
+	return count
+
+
+## Rewrite every reference to list `old_name` in `blocks` to `new_name` (M44), in place — the list twin
+## of rewrite_variable_refs. A `_LIST_OPCODES` block's `{list}` input is reassigned; nested reporter
+## inputs / `body` substacks recurse. (`blocks` and the dicts within are references, so this mutates the
+## live script the caller holds.)
+static func rewrite_list_refs(blocks: Array, old_name: String, new_name: String) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _LIST_OPCODES and String(inputs.get("list", "")) == old_name:
+			inputs["list"] = new_name
+		for key in inputs:
+			var value: Variant = inputs[key]
+			if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+				rewrite_list_refs([value], old_name, new_name)
+			elif typeof(value) == TYPE_ARRAY:
+				rewrite_list_refs(value, old_name, new_name)
+
+
+## Remove every reference to list `name` from `blocks` (M44 delete), in place — the list twin of
+## strip_variable_refs. A list **statement** naming it (add/delete/insert/replace/delete all) is dropped
+## from its array; a list **reporter** naming it reverts its slot to the host opcode's default literal
+## (M15's slot_default rule) — so `if (list contains x?)` becomes `if true` once the list is gone, and a
+## `length of (list)` in a `move` reverts to the move default. Recurses into nested reporters and `body`
+## substacks. (Mutates the live arrays/dicts the caller holds.)
+static func strip_list_refs(blocks: Array, name: String) -> void:
+	var i := 0
+	while i < blocks.size():
+		var block: Variant = blocks[i]
+		if typeof(block) != TYPE_DICTIONARY:
+			i += 1
+			continue
+		var opcode := String(block.get("opcode", ""))
+		var inputs: Dictionary = block.get("inputs", {})
+		if opcode in _LIST_STATEMENT_OPCODES and String(inputs.get("list", "")) == name:
+			blocks.remove_at(i)  # drop the statement; don't advance — the next block shifts down
+			continue
+		_strip_list_input_refs(opcode, inputs, name)
+		i += 1
+
+
+## Scrub one block's input slots of references to list `name` (helper for strip_list_refs): a
+## `_LIST_REPORTER_OPCODES` reporter naming it reverts to this opcode's default for that key; any other
+## nested reporter recurses (it may itself hold one); a `body` array recurses as a substack.
+static func _strip_list_input_refs(opcode: String, inputs: Dictionary, name: String) -> void:
+	var defaults: Dictionary = _OPCODES.get(opcode, {}).get("defaults", {})
+	for key in inputs:
+		var value: Variant = inputs[key]
+		if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
+			if String(value.get("opcode", "")) in _LIST_REPORTER_OPCODES and String(value.get("inputs", {}).get("list", "")) == name:
+				inputs[key] = defaults.get(key)
+			else:
+				_strip_list_input_refs(String(value.get("opcode", "")), value.get("inputs", {}), name)
+		elif typeof(value) == TYPE_ARRAY:
+			strip_list_refs(value, name)
+
+
 ## The opcodes whose `{name}` input names a sprite — the targets a sprite rename/delete cascade
 ## (M25) walks for: `touching_sprite?` and the M43 cross-sprite position reporters
 ## (`x_position_of` / `y_position_of`), all of which carry a `{name}` `data_enums` mapping to
@@ -719,6 +829,7 @@ static func _options_for(info: Dictionary, key: String) -> Array:
 		"variables": return project_variables
 		"sprites": return project_sprites
 		"custom_blocks": return project_custom_blocks
+		"lists": return project_lists
 		_: return []
 
 

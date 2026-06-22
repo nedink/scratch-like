@@ -12,6 +12,8 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
+- **Just shipped (on `m41-animation-blocks`):** **M44 — lists**, the variable twin (nine list opcodes +
+  Make/Rename/Delete UI + persistence; data-only). See *Recently shipped* below.
 - **In flight (on `m41-animation-blocks`):** **`zombie.json`** — a top-down zombie-survival game built
   in the block language, plus the **six new opcodes** it required (the existing block set couldn't
   express mouse-aim, homing, recolouring, click-to-fire, or a resizable costume):
@@ -154,6 +156,21 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M44 — **lists (ordered collections), the structural twin of variables.** A list is a named `Array`
+  with global / per-sprite-local scope, made / renamed / deleted from the palette's new **LISTS** group
+  exactly like a variable. **Nine opcodes** (the full Scratch set): statements `list_add` /
+  `list_delete` / `list_delete_all` / `list_insert` / `list_replace`, reporters `list_item` /
+  `list_item_index` / `list_length` / `list_contains?` (boolean). `{list}` is a data-scoped dropdown
+  (new `"lists"` `data_enums` source → `BlockView.project_lists`); `{index}` is 1-based (also accepts
+  typed `"last"`/`"random"`); out-of-range is ignored / yields `""`. Runtime stores lists local-first-
+  then-global on `Target.lists` / `Stage._lists` (`get_list`/`has_list`), seeded deep-copied in
+  `Stage._ready`, mutated **in place**; clones inherit a deep copy. Model is `PongScripts.lists()`
+  (stock `[]` — unexercised by Pong, like clones) → editor-owned `_lists`, persisted under a new `lists`
+  JSON key (absent ⇒ `[]`, pre-M44 saves still open). Editor / palette / cascade
+  (`count`/`rewrite`/`strip_list_refs`, `rename_list`/`delete_list_refs`) are near-verbatim copies of the
+  variable code (M20/M21); sprite rename/delete carry local lists like local variables (M25). Three new
+  dialogs in `editor.tscn`. **No block-data-shape change.** Deferred: an on-stage list monitor widget,
+  an index dropdown, a `for each` loop. **Data-only** this milestone (read via reporters).
 - M43 — **cross-sprite position reporters + built-in velocity.** *(1)* `x position of {name}` /
   `y position of {name}` (`x_position_of` / `y_position_of`, motion reporters, sprites dropdown) read
   another sprite's centre through the registry — retiring the demo's `left_paddle_y` / `right_paddle_y`

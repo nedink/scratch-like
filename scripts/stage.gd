@@ -39,6 +39,11 @@ var _movables: Array[Target] = []
 ## script. M3's scores live here; per-sprite locals live on each Target instead.
 var _variables: Dictionary = {}
 
+## name (String) -> Array of items. Global ("for all sprites") lists (M44), the list counterpart of
+## `_variables`; per-sprite locals live on each Target instead. The list blocks mutate the resolved
+## Array in place, so these are the live containers.
+var _lists: Dictionary = {}
+
 ## Cleared by the `stop "all"` block. Every forever / run-stack polls this and
 ## bails when it goes false, so the whole game halts within a frame — the
 ## game-over freeze. As of M6 the Announcer paints the winner's banner in the
@@ -62,6 +67,12 @@ static var project_sprites: Array = []
 ## _ready (a "global" entry to the Stage store, a sprite-scoped one to that target's locals). Falls
 ## back to PongScripts.variables() on a direct launch.
 static var project_variables: Array = []
+
+## The project's list model (M44): an Array of {name, items, scope} dicts the Stage seeds at _ready
+## (a "global" entry to the Stage's `_lists`, a sprite-scoped one to that target's locals — each
+## deep-copied so the seeded list is the runtime's own mutable container, not the editor's). Falls
+## back to PongScripts.lists() on a direct launch. The list twin of project_variables.
+static var project_lists: Array = []
 
 ## The project's stage background colour as a hex string (M27). Falls back to PongScripts.background().
 static var project_background: String = ""
@@ -148,6 +159,22 @@ func _ready() -> void:
 			else:
 				push_warning("Stage: variable '%s' scoped to unknown sprite '%s'" % [v["name"], v["scope"]])
 
+	# Seed every list (M44) from the project's list model — the same {name, items, scope} declaration
+	# the editor reads its `{list}` dropdown options from (the list twin of the variable seed above). A
+	# "global" list lands on the Stage's `_lists`; a sprite-scoped one on that target's locals. The
+	# items are deep-copied so the runtime owns its own mutable containers — the list blocks mutate
+	# these in place, and we must not mutate the editor's / PongScripts' source arrays.
+	for l in _list_model():
+		var items: Array = (l.get("items", []) as Array).duplicate(true)
+		if l["scope"] == "global":
+			_lists[l["name"]] = items
+		else:
+			var host := find_target(l["scope"])
+			if host:
+				host.lists[l["name"]] = items
+			else:
+				push_warning("Stage: list '%s' scoped to unknown sprite '%s'" % [l["name"], l["scope"]])
+
 	# "Press the green flag" on the first *rendered* frame, not during scene
 	# construction. A script's first `forever` iteration runs synchronously the
 	# moment it starts (the interpreter only yields at the first `await`), so
@@ -224,6 +251,12 @@ func _sprite_model() -> Array:
 ## (Stage.project_variables), else PongScripts.variables().
 func _variable_model() -> Array:
 	return project_variables if not project_variables.is_empty() else PongScripts.variables()
+
+
+## The list model to seed from (M44): the editor's model when handed one over (Stage.project_lists),
+## else PongScripts.lists(). The list twin of _variable_model.
+func _list_model() -> Array:
+	return project_lists if not project_lists.is_empty() else PongScripts.lists()
 
 
 ## The background colour hex to paint (M27): the editor's when handed one over (Stage.project_background),
@@ -335,6 +368,18 @@ func has_var(var_name: String) -> bool:
 	return _variables.has(var_name)
 
 
+## Read a global list's Array (M44), or null when unset. The interpreter resolves a target's locals
+## first, then falls back here; the returned Array is the live container the list blocks mutate.
+func get_list(list_name: String) -> Variant:
+	return _lists.get(list_name)
+
+
+## Whether a global list by this name exists (M44) — the list twin of has_var, used by the
+## interpreter's local-first list resolution.
+func has_list(list_name: String) -> bool:
+	return _lists.has(list_name)
+
+
 ## True until `stop "all"` runs. Scripts poll this to know when to unwind.
 func is_running() -> bool:
 	return _running
@@ -387,6 +432,7 @@ func create_clone_of(source: Target, script: Array) -> void:
 	var clone := Target.new(clone_node, source.name)
 	clone.direction = source.direction
 	clone.variables = source.variables.duplicate()
+	clone.lists = source.lists.duplicate(true)  # deep so a clone's list edits don't bleed into the source (M44)
 	clone.velocity = source.velocity  # inherit built-in velocity, like direction / locals (M43)
 	clone.is_clone = true
 	_movables.append(clone)  # moved by its velocity each tick, then released in remove_clone

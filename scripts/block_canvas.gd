@@ -205,6 +205,27 @@ func delete_variable_refs(var_name: String) -> void:
 	_render()
 
 
+## Rewrite every reference to list `old_name` in the working stacks to `new_name`, in place, then
+## re-render (M44) — the list counterpart of rename_variable. The walk lives on BlockView (shared with
+## the editor, which rewrites the other sprites' _scripts directly). In place to preserve canvas positions.
+func rename_list(old_name: String, new_name: String) -> void:
+	for stack in _stacks:
+		BlockView.rewrite_list_refs(stack["blocks"], old_name, new_name)
+	_render()
+
+
+## Remove every reference to list `list_name` from the working stacks (M44 delete), in place, then
+## re-render — the list counterpart of delete_variable_refs. A top-level stack left empty (a loose list
+## statement that was the whole stack) is dropped.
+func delete_list_refs(list_name: String) -> void:
+	for stack in _stacks:
+		BlockView.strip_list_refs(stack["blocks"], list_name)
+	for s in range(_stacks.size() - 1, -1, -1):
+		if (_stacks[s]["blocks"] as Array).is_empty():
+			_stacks.remove_at(s)
+	_render()
+
+
 ## Rewrite every reference to sprite `old_name` in the working stacks to `new_name`, in place, then
 ## re-render (M25) — the sprite counterpart of rename_variable. The canvas holds the authoritative
 ## working copy of the edited sprite, so a sprite rename has to rewrite *these* block dicts (the editor

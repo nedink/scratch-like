@@ -433,6 +433,70 @@ unique_name_in_owner = true
 custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 
+[node name="ListDialog" type="ConfirmationDialog" parent="." unique_id=700000001]
+unique_name_in_owner = true
+title = "New List"
+
+[node name="VBox" type="VBoxContainer" parent="ListDialog" unique_id=700000002]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="ListDialog/VBox" unique_id=700000003]
+layout_mode = 2
+text = "List name:"
+
+[node name="ListNameEdit" type="LineEdit" parent="ListDialog/VBox" unique_id=700000004]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
+[node name="ListScope" type="OptionButton" parent="ListDialog/VBox" unique_id=700000005]
+unique_name_in_owner = true
+layout_mode = 2
+selected = 0
+item_count = 2
+popup/item_0/text = "For all sprites"
+popup/item_0/id = 0
+popup/item_1/text = "For this sprite only"
+popup/item_1/id = 1
+
+[node name="ListRenameDialog" type="ConfirmationDialog" parent="." unique_id=700000006]
+unique_name_in_owner = true
+title = "Rename List"
+
+[node name="VBox" type="VBoxContainer" parent="ListRenameDialog" unique_id=700000007]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="NameLabel" type="Label" parent="ListRenameDialog/VBox" unique_id=700000008]
+layout_mode = 2
+text = "New name:"
+
+[node name="ListRenameEdit" type="LineEdit" parent="ListRenameDialog/VBox" unique_id=700000009]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(220, 0)
+layout_mode = 2
+
+[node name="ListDeleteDialog" type="ConfirmationDialog" parent="." unique_id=700000010]
+unique_name_in_owner = true
+title = "Delete List"
+
+[node name="ListDeleteLabel" type="Label" parent="ListDeleteDialog" unique_id=700000011]
+unique_name_in_owner = true
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
 [node name="FileDialog" type="FileDialog" parent="." unique_id=1499754084]
 unique_name_in_owner = true
 title = "Save Project"

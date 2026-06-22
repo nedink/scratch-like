@@ -82,6 +82,17 @@ static func variables() -> Array:
 	]
 
 
+## The project's list model (Milestone 44): the single declaration of every list's name, initial
+## items, and scope — the list counterpart of variables(), read by both the runtime (Stage seeds each
+## list's items, deep-copied, into its global store or a target's locals) and the editor (its `{list}`
+## dropdowns list these names, scoped per sprite). `scope` is "global" or a sprite name (a per-sprite
+## local), and `items` is the starting Array (numbers or text). The stock Pong demo uses no lists — like
+## clones / stop-this-script, the list blocks ship unexercised by the demo — so this is empty; make a
+## list from the editor (the palette's "Make a List"), or add a stock one here.
+static func lists() -> Array:
+	return []
+
+
 ## The project's stage background colour (Milestone 27): a single stage-level setting — the
 ## colour the stage view draws behind the sprites and the game paints its viewport with at RUN.
 ## A **hex string** like the sprite colours, so it serialises straight to JSON for SAVE/OPEN (the
