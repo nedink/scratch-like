@@ -95,6 +95,8 @@ func _register_handlers() -> void:
 		"point_in_direction": _on_point_in_direction,
 		"point_towards": _on_point_towards,
 		"go_to": _on_go_to,
+		"set_velocity": _on_set_velocity,
+		"change_velocity": _on_change_velocity,
 		"set_color": _on_set_color,
 		"set_size": _on_set_size,
 		"wait_seconds": _on_wait_seconds,
@@ -136,6 +138,10 @@ func _register_handlers() -> void:
 		"direction": _on_direction,
 		"x_position": _on_x_position,
 		"y_position": _on_y_position,
+		"x_position_of": _on_x_position_of,
+		"y_position_of": _on_y_position_of,
+		"velocity_x": _on_velocity_x,
+		"velocity_y": _on_velocity_y,
 		"mouse_x": _on_mouse_x,
 		"mouse_y": _on_mouse_y,
 		"mouse_down?": _on_mouse_down,
@@ -289,6 +295,19 @@ func _on_go_to(block: Dictionary) -> void:
 	var x := float(_value(block, "x"))
 	var y := float(_value(block, "y"))
 	_target.node.position = Vector2(x, y)
+
+
+## set_velocity: set this sprite's built-in velocity (M43) to (x, y) px/tick — the Stage then drifts
+## the node by it every physics frame, with no further blocks. The motion counterpart of go_to: go_to
+## sets position once, set_velocity sets a *continuous* motion. (0, 0) parks the sprite.
+func _on_set_velocity(block: Dictionary) -> void:
+	_target.velocity = Vector2(float(_value(block, "x")), float(_value(block, "y")))
+
+
+## change_velocity: add (dx, dy) to the current velocity — accelerate / steer the drift, the velocity
+## twin of change_var. Wire it into a forever with a constant dy for gravity, or flip its sign to bounce.
+func _on_change_velocity(block: Dictionary) -> void:
+	_target.velocity += Vector2(float(_value(block, "dx")), float(_value(block, "dy")))
 
 
 ## set_color: recolour the sprite by regenerating its placeholder costume as a solid fill of `color`
@@ -486,6 +505,38 @@ func _on_x_position(_block: Dictionary) -> float:
 
 func _on_y_position(_block: Dictionary) -> float:
 	return _target.node.position.y
+
+
+# Cross-sprite position reporters (M43): read *another* sprite's centre x / y, resolved through the
+# Stage registry by name (like touching_sprite?). These replace the global-variable relay the demo
+# used to expose a paddle's position to the ball — `y position of (RightPaddle)` reads the node
+# directly, so no `set right_paddle_y to (y position)` plumbing is needed. An unknown name warns and
+# yields 0. (Clones share their original's name, so this resolves the registered original.)
+func _on_x_position_of(block: Dictionary) -> float:
+	var other := _stage.find_target(String(_value(block, "name")))
+	if other == null:
+		push_warning("Interpreter: x position of unknown sprite '%s'" % String(_value(block, "name")))
+		return 0.0
+	return other.node.position.x
+
+
+func _on_y_position_of(block: Dictionary) -> float:
+	var other := _stage.find_target(String(_value(block, "name")))
+	if other == null:
+		push_warning("Interpreter: y position of unknown sprite '%s'" % String(_value(block, "name")))
+		return 0.0
+	return other.node.position.y
+
+
+# Velocity reporters (M43): read the running sprite's built-in velocity components — the data form of
+# the motion the Stage applies each tick, so a script can compute against its own drift (e.g. flip
+# `set velocity y: (0 - (velocity y))` to bounce, or read it for a speed readout).
+func _on_velocity_x(_block: Dictionary) -> float:
+	return _target.velocity.x
+
+
+func _on_velocity_y(_block: Dictionary) -> float:
+	return _target.velocity.y
 
 
 # Mouse-position reporters. They return the cursor's location in *world* coordinates (the same space

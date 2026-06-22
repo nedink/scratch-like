@@ -13,9 +13,11 @@ extends RefCounted
 ## and fire `stop "all"`. M7 replaces M4/M5's clone-built pip grids with a live
 ## numeric HUD — each player's score `say`n through the bitmap font every tick.
 ##
-## M41 makes the **right paddle auto-animate** (a CPU paddle): instead of arrow-key control it
-## glides up and down on its own, driving `right_paddle_y` straight through the `animate` block,
-## and the arrow keys move to the LEFT paddle (so it now answers W/S *and* the arrows).
+## M41 made the **right paddle a CPU paddle** (instead of arrow-key control), and moved the arrow
+## keys to the LEFT paddle (so it answers W/S *and* the arrows). M43 reworks the CPU paddle to drive
+## itself with the **built-in velocity** feature — it sets a velocity and the Stage drifts it up and
+## down its rail, reversing at the ends — and replaces the paddle-position **relay globals** the ball
+## used for the curved bounce with the cross-sprite **`y position of (paddle)`** reporter.
 ##
 ## Layout assumptions (matched in stage.gd's _GAME_SIZE, the 480x352 window). These are the *script*
 ## (go_to) targets that drive the runtime — distinct from the grid-aligned model starting positions
@@ -25,9 +27,10 @@ extends RefCounted
 ##   * the ball is 16x16 and serves from the center (240, 176) (= 480/2, 352/2).
 
 const PADDLE_SPEED := 8.0
-## How long the auto-animated right paddle takes to glide from one end of its rail to the
-## other (M41). One full sweep top->bottom (or back) takes this many seconds.
-const PADDLE_SWEEP_SECS := 1.4
+## The CPU (right) paddle's built-in velocity (M43), px per physics tick: it drifts up and down its
+## rail on its own (the Stage applies velocity each tick), reversing at the top/bottom. This replaces
+## M41's animate-driven sweep — the paddle now moves via the velocity feature instead.
+const CPU_PADDLE_SPEED := 4.0
 const BALL_SPEED := 6.0
 const PADDLE_TOP_Y := 48.0
 const PADDLE_BOTTOM_Y := 304.0  # 352 (screen height) - 48 (paddle half-height)
@@ -73,12 +76,9 @@ static func variables() -> Array:
 		{"name": "p2_rounds", "value": 0, "scope": "global"},
 		{"name": "round", "value": 0, "scope": "global"},  # only `change`d, never read (vestigial)
 		{"name": "speed", "value": 0, "scope": "Ball"},     # set to BALL_SPEED by a block in ball()
-		# Each paddle publishes its centre y here every tick (a `set` block in _paddle), so the
-		# ball — a different sprite — can read the paddle's position for the curved bounce below.
-		# (y_position reports the *running* sprite, so a global relay is how one sprite tells
-		# another where it is.) Global so the ball can see them.
-		{"name": "left_paddle_y", "value": 0, "scope": "global"},
-		{"name": "right_paddle_y", "value": 0, "scope": "global"},
+		# (M43) The `left_paddle_y` / `right_paddle_y` relay globals are gone: the ball now reads a
+		# paddle's position directly with the cross-sprite `y position of (paddle)` reporter, so there
+		# is no global to publish into.
 	]
 
 
@@ -140,14 +140,10 @@ static func sprites() -> Array:
 ## held, and clamp back onto the playfield at the top and bottom. `rail_x` is the fixed
 ## x, so the clamp targets are literals. `up_keys`/`down_keys` are *lists* so a paddle can
 ## answer more than one key (M41 gives the left paddle W/S *and* the arrows).
-static func _paddle(up_keys: Array, down_keys: Array, rail_x: float, y_var: String) -> Array:
+static func _paddle(up_keys: Array, down_keys: Array, rail_x: float) -> Array:
 	return [
 		_hat([
 			_forever([
-				# Publish our centre y so the ball can read where this paddle is (see the curved
-				# bounce in ball()). y_position reports this running sprite — the paddle — so this
-				# global is the relay one sprite uses to tell another its position.
-				_set_var(y_var, _ypos()),
 				_if(_keys_pressed(up_keys), [
 					_point(0),  # up
 					_move(PADDLE_SPEED),
@@ -175,30 +171,24 @@ static func _keys_pressed(keys: Array) -> Dictionary:
 
 static func left_paddle() -> Array:
 	# The left paddle now answers both its own W/S and the arrow keys (M41): the right
-	# paddle gave up player control to auto-animate, so the arrows move here too.
-	return _paddle(["W", "Up"], ["S", "Down"], 24.0, "left_paddle_y")
+	# paddle gave up player control to the CPU, so the arrows move here too.
+	return _paddle(["W", "Up"], ["S", "Down"], 24.0)
 
 
-## The right paddle is a CPU paddle (M41): rather than reading keys it glides up and down its
-## rail on its own, using the animation block to tween `right_paddle_y` — the very global the
-## ball reads for the curved bounce, so animating it directly both moves the paddle and keeps
-## that relay correct. `animate` blocks its script for the sweep duration (like a glide), so the
-## sweep lives in its own hat; a second hat keeps the paddle node sitting on the value each frame
-## (the animate writes the variable, but the node only moves when a `go to` reads it — and the
-## ball needs the physical node there to register a `touching RightPaddle?`). We sweep with
-## "ease out" so the paddle decelerates into each turning point and reverses gracefully.
+## The right paddle is a CPU paddle, now driven by the **built-in velocity** feature (M43): it sets a
+## downward velocity and the Stage drifts the node up/down its rail every physics tick — no animate,
+## no per-frame `go to`. The forever just watches the rail ends: at the bottom it flips to an upward
+## velocity (and snaps onto the rail so it never visibly overshoots), at the top it flips back down.
+## The ball reads this paddle's live node position for the curved bounce via `y position of
+## (RightPaddle)`, so there's no relay variable to keep in step — the node *is* the position.
 static func right_paddle() -> Array:
 	return [
 		_hat([
-			_set_var("right_paddle_y", PADDLE_TOP_Y),  # start at the top (the var seeds to 0)
+			_go_to(456.0, PADDLE_TOP_Y),          # start at the top of its rail
+			_set_velocity(0, CPU_PADDLE_SPEED),   # drift downward; the Stage moves it each tick
 			_forever([
-				_animate("right_paddle_y", PADDLE_BOTTOM_Y, PADDLE_SWEEP_SECS, "ease out"),
-				_animate("right_paddle_y", PADDLE_TOP_Y, PADDLE_SWEEP_SECS, "ease out"),
-			]),
-		]),
-		_hat([
-			_forever([
-				_go_to(456.0, _var("right_paddle_y")),
+				_if(_edge("bottom"), [_set_velocity(0, -CPU_PADDLE_SPEED), _go_to(456.0, PADDLE_BOTTOM_Y)]),
+				_if(_edge("top"), [_set_velocity(0, CPU_PADDLE_SPEED), _go_to(456.0, PADDLE_TOP_Y)]),
 			]),
 		]),
 	]
@@ -250,11 +240,11 @@ static func ball() -> Array:
 					_go_to(_xpos(), 344),
 				]),
 				_if(_touching("LeftPaddle"), [
-					_if(_gt(_dir(), 180), [_point(_add(90, _paddle_bounce_dir("left_paddle_y")))]),
+					_if(_gt(_dir(), 180), [_point(_add(90, _paddle_bounce_dir("LeftPaddle")))]),
 					_go_to(48, _ypos()),
 				]),
 				_if(_touching("RightPaddle"), [
-					_if(_lt(_dir(), 180), [_point(_sub(270, _paddle_bounce_dir("right_paddle_y")))]),
+					_if(_lt(_dir(), 180), [_point(_sub(270, _paddle_bounce_dir("RightPaddle")))]),
 					_go_to(432, _ypos()),
 				]),
 				_if(_edge("left"), [  # passed left -> Player 2 scores, re-serve right
@@ -292,14 +282,15 @@ static func _serve_left() -> Dictionary:
 
 ## The curved-paddle deflection (an expression, like the serve angles): how far off
 ## straight-back the bounce should aim, given where the ball struck the paddle. It is the
-## ball's centre offset from the paddle's centre (ball y_position minus the paddle's relayed
-## centre y, read from `paddle_y_var`) times PADDLE_BOUNCE_CURVE. A hit above the paddle
+## ball's centre offset from the paddle's centre (ball y_position minus the paddle's centre y,
+## read straight off the paddle node with the cross-sprite `y position of (paddle_name)` reporter
+## — M43, replacing the old relay global) times PADDLE_BOUNCE_CURVE. A hit above the paddle
 ## centre is a negative offset (the screen y grows downward), so for the LEFT paddle
 ## `90 + offset*curve` aims up-right, and a hit below aims down-right; the RIGHT paddle uses
 ## `270 - offset*curve` for the mirror. This is what makes the paddle act convex: the angle
 ## tracks the contact point, not the incoming direction.
-static func _paddle_bounce_dir(paddle_y_var: String) -> Dictionary:
-	return _mul(_sub(_ypos(), _var(paddle_y_var)), PADDLE_BOUNCE_CURVE)
+static func _paddle_bounce_dir(paddle_name: String) -> Dictionary:
+	return _mul(_sub(_ypos(), _ypos_of(paddle_name)), PADDLE_BOUNCE_CURVE)
 
 
 ## The blocks that run when a player takes a round (the body of the round-end `if`).
@@ -416,6 +407,11 @@ static func _go_to(x: Variant, y: Variant) -> Dictionary:
 	return {"opcode": "go_to", "inputs": {"x": x, "y": y}}
 
 
+# Built-in velocity (M43): set a continuous per-tick drift the Stage applies behind the scenes.
+static func _set_velocity(x: Variant, y: Variant) -> Dictionary:
+	return {"opcode": "set_velocity", "inputs": {"x": x, "y": y}}
+
+
 static func _wait(seconds: float) -> Dictionary:
 	return {"opcode": "wait_seconds", "inputs": {"seconds": seconds}}
 
@@ -484,6 +480,12 @@ static func _xpos() -> Dictionary:
 
 static func _ypos() -> Dictionary:
 	return {"opcode": "y_position", "inputs": {}}
+
+
+# Cross-sprite position reporter (M43): read another sprite's centre y by name (the curved bounce
+# reads each paddle's y this way, replacing the relay global it used through M41).
+static func _ypos_of(sprite_name: String) -> Dictionary:
+	return {"opcode": "y_position_of", "inputs": {"name": sprite_name}}
 
 
 static func _random(from: float, to: float) -> Dictionary:

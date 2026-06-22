@@ -144,6 +144,18 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M43 — **cross-sprite position reporters + built-in velocity.** *(1)* `x position of {name}` /
+  `y position of {name}` (`x_position_of` / `y_position_of`, motion reporters, sprites dropdown) read
+  another sprite's centre through the registry — retiring the demo's `left_paddle_y` / `right_paddle_y`
+  **relay globals** (the ball now reads `y position of (paddle)` directly in `_paddle_bounce_dir`).
+  Added to `_SPRITE_OPCODES` so the M25 sprite rename/delete cascade covers them. *(2)* **Velocity is
+  built-in**: `Target.velocity: Vector2` (px/tick), applied by `Stage._physics_process`
+  (`node.position += velocity`) to a `_movables` list (registered sprites + clones), with blocks
+  `set_velocity` / `change_velocity` (statements) + `velocity_x` / `velocity_y` (reporters). Zero
+  velocity is a no-op, so existing projects are unchanged. *Demo:* the CPU right paddle was rewritten
+  from M41's `animate` sweep to velocity-driven (flips sign + snaps at the rail ends). No
+  block-data-shape change, no editor change. (`target.gd`, `stage.gd`, `interpreter.gd`,
+  `block_view.gd`, `pong_scripts.gd`) *(committed/pushed: pending)*
 - M42 — **sprite visual order (editor + blocks).** *Editor half:* four Layer buttons (To Front / To Back
   / Forward / Backward) in the stage inspector reorder the selected sprite within `_scripts` (= the
   build-time z-order, since both `StageView._render` and `Stage._add_sprite` walk the array in order) —

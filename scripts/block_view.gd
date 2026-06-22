@@ -163,12 +163,25 @@ const _OPCODES := {
 	"point_in_direction": {"category": "motion", "kind": "statement", "template": "point in direction {direction}", "defaults": {"direction": 90}},
 	"go_to": {"category": "motion", "kind": "statement", "template": "go to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
 	"point_towards": {"category": "motion", "kind": "statement", "template": "point towards x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
+	# velocity (M43) — built-in continuous motion: the Stage drifts every sprite by its velocity once a
+	# physics tick (px/tick, the move_steps unit). `set velocity` assigns it, `change velocity` adds to
+	# it (gravity / steering). Plain {opcode, inputs} statements — no data-shape change.
+	"set_velocity": {"category": "motion", "kind": "statement", "template": "set velocity to x: {x} y: {y}", "defaults": {"x": 0, "y": 0}},
+	"change_velocity": {"category": "motion", "kind": "statement", "template": "change velocity by x: {dx} y: {dy}", "defaults": {"dx": 0, "dy": 0}},
 	# motion reporters (M35) — expose the sprite's motion state as data, so a reflection (the
 	# `point_in_direction "bounce"` sentinel) can be expressed as blocks. No inputs: each reads the
 	# running Target's facing / position. `direction` stands in for velocity (speed is a separate var).
 	"direction": {"category": "motion", "kind": "reporter", "template": "direction", "defaults": {}},
 	"x_position": {"category": "motion", "kind": "reporter", "template": "x position", "defaults": {}},
 	"y_position": {"category": "motion", "kind": "reporter", "template": "y position", "defaults": {}},
+	# cross-sprite position reporters (M43) — read *another* sprite's centre, picked from a sprites
+	# dropdown (the touching_sprite? "sprites" source). They retire the demo's relay-global pattern: the
+	# ball reads `y position of (RightPaddle)` instead of a `right_paddle_y` global the paddle published.
+	"x_position_of": {"category": "motion", "kind": "reporter", "template": "x position of {name}", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
+	"y_position_of": {"category": "motion", "kind": "reporter", "template": "y position of {name}", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
+	# velocity reporters (M43) — the running sprite's built-in velocity components (value output).
+	"velocity_x": {"category": "motion", "kind": "reporter", "template": "velocity x", "defaults": {}},
+	"velocity_y": {"category": "motion", "kind": "reporter", "template": "velocity y", "defaults": {}},
 	# looks
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	"set_color": {"category": "looks", "kind": "statement", "template": "set color {color}", "defaults": {"color": "#ffffff"}},
@@ -523,11 +536,12 @@ static func _strip_input_refs(opcode: String, inputs: Dictionary, name: String) 
 
 
 ## The opcodes whose `{name}` input names a sprite — the targets a sprite rename/delete cascade
-## (M25) walks for. Only `touching_sprite?` names another sprite (its `data_enums` maps
-## `name -> "sprites"`); it is the sprite analog of _VARIABLE_OPCODES. Unlike a variable, a sprite
-## name is globally unique, so the cascade is unscoped — it rewrites/strips every match in every
-## script (any sprite may touch any other), with no global-vs-local distinction.
-const _SPRITE_OPCODES := ["touching_sprite?"]
+## (M25) walks for: `touching_sprite?` and the M43 cross-sprite position reporters
+## (`x_position_of` / `y_position_of`), all of which carry a `{name}` `data_enums` mapping to
+## "sprites". They are the sprite analog of _VARIABLE_OPCODES. Unlike a variable, a sprite name is
+## globally unique, so the cascade is unscoped — it rewrites/strips every match in every script (any
+## sprite may reference any other), with no global-vs-local distinction.
+const _SPRITE_OPCODES := ["touching_sprite?", "x_position_of", "y_position_of"]
 
 
 ## Count how many blocks in `blocks` reference the sprite `name` (M25) — the sprite counterpart of
@@ -573,11 +587,12 @@ static func rewrite_sprite_refs(blocks: Array, old_name: String, new_name: Strin
 
 
 ## Remove every dangling reference to the deleted sprite `name` from `blocks` (M25 delete), in place —
-## the sprite counterpart of strip_variable_refs. The only block naming another sprite is
-## `touching_sprite?`, always a **reporter** (never a statement), so this never drops a block; it
-## reverts a `touching {name}?` reporter to its host opcode's default literal for that slot (M15's
-## slot_default rule), so `if (touching Ghost?)` becomes `if true` once `Ghost` is gone. Recurses into
-## nested reporters and `body` substacks. (Mutates the live arrays/dicts the caller holds.)
+## the sprite counterpart of strip_variable_refs. Every block naming another sprite (the
+## `_SPRITE_OPCODES`: `touching_sprite?` and the M43 position-of reporters) is a **reporter** (never a
+## statement), so this never drops a block; it reverts the reporter to its host opcode's default
+## literal for that slot (M15's slot_default rule), so `if (touching Ghost?)` becomes `if true` and
+## `(y position of Ghost)` reverts to its default once `Ghost` is gone. Recurses into nested reporters
+## and `body` substacks. (Mutates the live arrays/dicts the caller holds.)
 static func strip_sprite_refs(blocks: Array, name: String) -> void:
 	for block in blocks:
 		if typeof(block) != TYPE_DICTIONARY:
@@ -586,15 +601,15 @@ static func strip_sprite_refs(blocks: Array, name: String) -> void:
 
 
 ## Scrub one block's input slots of references to sprite `name` (helper for strip_sprite_refs): a
-## `touching_sprite?` reporter naming it reverts to this opcode's default for that key; any other
-## nested reporter recurses (it may itself hold a `touching_sprite?`, e.g. `not (touching Ghost?)`);
-## a `body` array recurses as a substack.
+## `_SPRITE_OPCODES` reporter naming it reverts to this opcode's default for that key; any other
+## nested reporter recurses (it may itself hold one, e.g. `not (touching Ghost?)`); a `body` array
+## recurses as a substack.
 static func _strip_sprite_input_refs(opcode: String, inputs: Dictionary, name: String) -> void:
 	var defaults: Dictionary = _OPCODES.get(opcode, {}).get("defaults", {})
 	for key in inputs:
 		var value: Variant = inputs[key]
 		if typeof(value) == TYPE_DICTIONARY and value.has("opcode"):
-			if String(value.get("opcode", "")) == "touching_sprite?" and String(value.get("inputs", {}).get("name", "")) == name:
+			if String(value.get("opcode", "")) in _SPRITE_OPCODES and String(value.get("inputs", {}).get("name", "")) == name:
 				inputs[key] = defaults.get(key)
 			else:
 				_strip_sprite_input_refs(String(value.get("opcode", "")), value.get("inputs", {}), name)

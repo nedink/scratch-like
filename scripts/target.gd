@@ -21,6 +21,15 @@ var name: String
 ##   90 = right (+x), 0 = up (-y on screen), and the angle increases clockwise.
 var direction: float = 90.0
 
+## Built-in velocity (M43), in pixels per *physics tick* (the same fixed-rate unit move_steps
+## uses, so a velocity of 6 covers the same ground per tick as `move 6` in a forever). The Stage
+## applies it automatically once per physics frame — `node.position += velocity` — so a sprite with
+## a non-zero velocity drifts on its own, "behind the scenes", without a per-frame block. Defaults to
+## zero, so every existing script (which never touches it) is unaffected. The `set velocity` /
+## `change velocity` blocks write it and the `velocity x` / `velocity y` reporters read it; clones
+## inherit it from their source (like direction / locals).
+var velocity: Vector2 = Vector2.ZERO
+
 ## Per-sprite ("for this sprite only") variables: name (String) -> value.
 ## Resolved *before* the Stage's globals, so a local shadows a global of the
 ## same name (Scratch semantics). The ball keeps its `speed` here.

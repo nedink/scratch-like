@@ -29,6 +29,12 @@ var _targets: Dictionary = {}
 ## interpreters themselves) outlive _ready() and keep running.
 var _interpreters: Array[Interpreter] = []
 
+## Every live Target whose node should be moved by its built-in velocity (M43): all registered
+## sprites *plus* clones (which aren't in the name registry). _physics_process walks this each tick
+## and applies `node.position += velocity`. A clone is appended in create_clone_of and removed in
+## remove_clone, so this stays in step with what's actually on stage.
+var _movables: Array[Target] = []
+
 ## name (String) -> value. Global ("for all sprites") variables, shared by every
 ## script. M3's scores live here; per-sprite locals live on each Target instead.
 var _variables: Dictionary = {}
@@ -166,6 +172,20 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if _camera_follow != null and is_instance_valid(_camera_follow.node):
 		_camera.position = _camera_follow.node.position
+
+
+## Apply every sprite's built-in velocity (M43): the "modifies position once a frame behind the
+## scenes" half of the velocity feature. We run on the **physics** tick (not _process's render
+## frame) and add the raw per-tick velocity with no delta scaling — the same fixed-tick model
+## move_steps uses, so `set velocity y: 6` and `move 6` in a forever cover the same ground. Godot
+## emits `physics_frame` (which the script coroutines await) *after* all _physics_process calls, so
+## each tick velocity moves the sprite first, then its script runs (reading the moved position) — a
+## consistent order. A zero velocity (every sprite that never sets it) is a no-op, so existing
+## projects render unchanged.
+func _physics_process(_delta: float) -> void:
+	for t in _movables:
+		if t.velocity != Vector2.ZERO and is_instance_valid(t.node):
+			t.node.position += t.velocity
 
 
 ## ESC returns to the editor (the inverse of RUN's editor→game hand-off). Unhandled-input,
@@ -337,6 +357,7 @@ func _add_sprite(target_name: String, pos: Vector2, w: int, h: int, color: Color
 
 	var target := Target.new(sprite, target_name)
 	_targets[target_name] = target
+	_movables.append(target)  # so _physics_process applies its built-in velocity (M43)
 	return target
 
 
@@ -366,7 +387,9 @@ func create_clone_of(source: Target, script: Array) -> void:
 	var clone := Target.new(clone_node, source.name)
 	clone.direction = source.direction
 	clone.variables = source.variables.duplicate()
+	clone.velocity = source.velocity  # inherit built-in velocity, like direction / locals (M43)
 	clone.is_clone = true
+	_movables.append(clone)  # moved by its velocity each tick, then released in remove_clone
 
 	var interpreter := Interpreter.new(self, clone)
 	_interpreters.append(interpreter)
@@ -381,6 +404,7 @@ func create_clone_of(source: Target, script: Array) -> void:
 func remove_clone(interpreter: Interpreter, clone: Target) -> void:
 	clone.node.queue_free()
 	_interpreters.erase(interpreter)
+	_movables.erase(clone)  # stop applying velocity to a freed clone (M43)
 
 
 ## Generate a plain colored rectangle in code so the project has no dependency

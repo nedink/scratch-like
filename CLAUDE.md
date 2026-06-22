@@ -5,7 +5,86 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 42 — sprite visual order (editor + blocks)
+## Current state: Milestone 43 — cross-sprite position reporters + built-in velocity
+
+**Goal of this milestone:** two related motion additions. (1) Replace the demo's **position-relay
+globals** with real reporter blocks — read *another* sprite's x/y directly instead of having that
+sprite publish its position into a custom variable. (2) Make **velocity a built-in property** that
+the runtime applies every frame "behind the scenes," with blocks to set / change / read it. Both are
+the project's usual symmetric extension (one `_OPCODES` entry + one interpreter handler each), **no
+block-data-shape change, no editor change** — the renderer reuses the existing sprites dropdown and
+plain numeric slots.
+
+### Cross-sprite position reporters — `x/y position of {sprite}`
+
+Through M42 the only position reporters were the input-less **`x position` / `y position`** (M35),
+which read the **running** sprite. A sprite that needed *another* sprite's position — the Pong ball,
+for its curved paddle bounce — couldn't ask for it, so the demo used a **relay global**: each paddle
+ran `set {paddle}_y to (y position)` every tick and the ball read that variable (M36). M43 retires
+that pattern with two reporters that read any sprite by name:
+
+- **`x position of {name}` / `y position of {name}`** (`x_position_of` / `y_position_of`, motion
+  reporters, value output) → [`_on_x_position_of`](scripts/interpreter.gd) /
+  [`_on_y_position_of`](scripts/interpreter.gd): resolve the named sprite through the Stage registry
+  (`find_target`, like `touching_sprite?`) and return its node centre; an unknown name warns and
+  yields 0. `{name}` is the M17 `data_enums: {name: "sprites"}` dropdown — the same `touching_sprite?`
+  / camera source, so it re-scopes per project with **no new resolver and no editor change**.
+
+They join `_SPRITE_OPCODES` ([`block_view.gd`](scripts/block_view.gd)), so a sprite **rename/delete
+cascade** (M25) rewrites/reverts them like `touching_sprite?` — `strip_sprite_refs` reverts a
+`y position of (Gone)` to its slot default once the sprite is deleted (the strip helper now keys off
+`in _SPRITE_OPCODES` instead of the single hardcoded `touching_sprite?`).
+
+The demo rewrite ([`PongScripts`](scripts/pong_scripts.gd)): the `left_paddle_y` / `right_paddle_y`
+globals and the paddles' `set ..._y to (y position)` relay lines are **gone**; the ball's
+[`_paddle_bounce_dir`](scripts/pong_scripts.gd) now reads `y position of (LeftPaddle)` /
+`y position of (RightPaddle)` directly (the node *is* the position, so there's nothing to keep in
+step).
+
+### Built-in velocity — applied each tick, with set / change / read blocks
+
+Velocity becomes first-class motion state on the [`Target`](scripts/target.gd): a `velocity: Vector2`
+in **px per physics tick** (the `move_steps` unit). The [`Stage`](scripts/stage.gd) applies it to
+every live sprite once per **physics frame** in [`_physics_process`](scripts/stage.gd) —
+`node.position += velocity` — so a sprite with a non-zero velocity drifts on its own with no
+per-frame block. It is applied to a `_movables` list (every registered sprite **plus clones**, which
+aren't in the name registry); clones inherit their source's velocity (like direction / locals). A
+zero velocity is skipped, so **every existing project renders unchanged**.
+
+Why physics frame, not render frame: the script coroutines already `await physics_frame`, and Godot
+emits that signal **after** all `_physics_process` calls — so each tick velocity moves the sprite
+first, then its script runs reading the moved position (a consistent order). Raw per-tick add, no
+delta scaling, matching the fixed-tick model (`set velocity y: 6` covers the same ground as `move 6`
+in a `forever`).
+
+The blocks (all motion category, plain `{opcode, inputs}`):
+
+- **`set velocity to x: {x} y: {y}`** (`set_velocity`) → [`_on_set_velocity`](scripts/interpreter.gd):
+  assign the velocity vector. The continuous-motion counterpart of `go_to` (which sets position once).
+- **`change velocity by x: {dx} y: {dy}`** (`change_velocity`) →
+  [`_on_change_velocity`](scripts/interpreter.gd): add to it — accelerate / steer (a constant `dy` in
+  a `forever` is gravity), the velocity twin of `change_var`.
+- **`velocity x` / `velocity y`** (`velocity_x` / `velocity_y`, value reporters) →
+  [`_on_velocity_x`](scripts/interpreter.gd) / [`_on_velocity_y`](scripts/interpreter.gd): read the
+  running sprite's velocity components.
+
+The demo exercises it: the **CPU right paddle** ([`right_paddle`](scripts/pong_scripts.gd)) is
+rewritten from M41's `animate`-driven sweep to **velocity-driven** — it `set velocity to y:
+CPU_PADDLE_SPEED`, the Stage drifts it down its rail, and its `forever` flips the velocity sign (and
+snaps onto the rail) at the top/bottom edges. This both demonstrates velocity and removes the second
+relay global (`right_paddle_y` was M41's `animate` target). The CPU paddle no longer eases at the
+turns (constant speed); the `animate` block is untouched in the language, just unused by the demo.
+
+What this leaves deferred: a **velocity *direction/speed* form** (today it's a raw `(vx, vy)` vector —
+no "set speed" / "set heading" decomposition; compose with `direction` + trig), velocity that
+**couples to `direction`** (move-along-facing is still `move_steps`), and any **drag / friction /
+max-speed** built-ins (a `forever` with `change velocity` expresses them).
+
+See [Cross-sprite position reporters + built-in velocity (M43)](#cross-sprite-position-reporters--built-in-velocity-m43).
+
+---
+
+## Earlier: Milestone 42 — sprite visual order (editor + blocks)
 
 **Goal of this milestone:** let you **control which sprite draws in front of which** — Scratch's *go to
 front / back layer, go forward / backward layers*. It has two halves:
@@ -2581,6 +2660,14 @@ them one), and **a layer *reporter*** (Scratch has none either — layer is writ
 
 ## Opcodes implemented
 
+**M43 added six opcodes** — the **cross-sprite position reporters** `x_position_of` / `y_position_of`
+(read another sprite's centre by name, a sprites dropdown) and the **velocity** blocks `set_velocity`
+/ `change_velocity` (statements) + `velocity_x` / `velocity_y` (reporters). The position reporters
+retire the demo's relay-global pattern (the ball reads `y position of (paddle)` directly); velocity is
+a built-in `Target` property the Stage applies each physics tick (`node.position += velocity`). Each is
+the usual one-`_OPCODES`-entry + one-interpreter-handler step, no block-data-shape change and no editor
+change. The CPU right paddle was rewritten from M41's `animate` sweep to velocity-driven.
+
 **M42 added two opcodes** — `go_to_layer` (go to front / back layer) and `change_layer` (go forward /
 backward N layers): the LOOKS *layer* blocks, which restack a sprite at play time via its node `z_index`
 ([`Stage.set_layer`](scripts/stage.gd) / [`change_layer`](scripts/stage.gd)). Each is the usual
@@ -2693,6 +2780,8 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `turn_degrees` | statement | `degrees` | rotates facing direction clockwise |
 | `point_in_direction` | statement | `direction` | number sets direction absolutely; `"bounce"` reflects off whatever is touched (see below) |
 | `go_to` | statement | `x`, `y` | sets position (inputs may be expressions); resets the ball, clamps paddles, parks the announcer/HUD |
+| `set_velocity` | statement | `x`, `y` | set the sprite's built-in velocity (M43), px/tick; the Stage drifts the node by it each physics frame (continuous motion — the `go_to` counterpart) |
+| `change_velocity` | statement | `dx`, `dy` | add to the built-in velocity (M43) — accelerate / steer (constant `dy` in a forever ≈ gravity); the `change_var` twin |
 | `wait_seconds` | statement | `seconds` | awaits a SceneTree timer; the serve delay |
 | `touching_edge?` | reporter | `side` | true at a viewport edge; `side` ∈ {top,bottom,left,right,any}, default `any` |
 | `touching_sprite?` | reporter | `name` | AABB overlap with the named sprite, resolved through the registry |
@@ -2707,6 +2796,8 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 | `variable` | reporter | `name` | reads a variable, resolving local-first then global |
 | `direction` | reporter | — | the running sprite's facing direction in degrees (M35); Scratch convention (90 = right, 0 = up). Value output |
 | `x_position` / `y_position` | reporter | — | the running sprite's centre x / y (M35); Sprite2D is centred. Value output. Together with `direction` these expose the motion state a data-form bounce needs |
+| `x_position_of` / `y_position_of` | reporter | `name` | another sprite's centre x / y (M43), resolved by name through the registry; `{name}` is a sprites dropdown, unknown → 0 + warning. Value output. Retires the demo's paddle-position relay globals |
+| `velocity_x` / `velocity_y` | reporter | — | the running sprite's built-in velocity components (M43). Value output |
 | `add` / `subtract` / `multiply` / `divide` / `mod` | reporter | `a`, `b` | arithmetic; `divide`/`mod` guard ÷0 → 0 |
 | `equals` / `greater_than` / `less_than` | reporter | `a`, `b` | numeric comparison → bool |
 | `and` / `or` / `not` | reporter | `a`, `b` (`not`: `a`) | boolean combinators → bool |
