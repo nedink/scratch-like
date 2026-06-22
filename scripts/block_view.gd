@@ -171,12 +171,14 @@ const _OPCODES := {
 	# looks
 	"say": {"category": "looks", "kind": "statement", "template": "say {text} in {size}", "defaults": {"text": "Hello", "size": "small"}, "enums": {"size": ["small", "large"]}},
 	"set_color": {"category": "looks", "kind": "statement", "template": "set color {color}", "defaults": {"color": "#ffffff"}},
+	"set_size": {"category": "looks", "kind": "statement", "template": "set size to w: {w} h: {h}", "defaults": {"w": 16, "h": 16}},
 	# sensing
 	"touching_edge?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {side} edge?", "defaults": {"side": "any"}, "enums": {"side": ["any", "top", "bottom", "left", "right"]}},
 	"touching_sprite?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "touching {name}?", "defaults": {"name": "Ball"}, "data_enums": {"name": "sprites"}},
 	"key_pressed?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "key {key} pressed?", "defaults": {"key": "Space"}},
 	"mouse_x": {"category": "sensing", "kind": "reporter", "template": "mouse x", "defaults": {}},
 	"mouse_y": {"category": "sensing", "kind": "reporter", "template": "mouse y", "defaults": {}},
+	"mouse_down?": {"category": "sensing", "kind": "reporter", "output": "boolean", "template": "mouse down?", "defaults": {}},
 	# variables
 	"set_var": {"category": "variables", "kind": "statement", "template": "set {name} to {value}", "defaults": {"name": "p1_score", "value": 0}, "data_enums": {"name": "variables"}},
 	"change_var": {"category": "variables", "kind": "statement", "template": "change {name} by {by}", "defaults": {"name": "p1_score", "by": 1}, "data_enums": {"name": "variables"}},

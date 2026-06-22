@@ -95,6 +95,7 @@ func _register_handlers() -> void:
 		"point_towards": _on_point_towards,
 		"go_to": _on_go_to,
 		"set_color": _on_set_color,
+		"set_size": _on_set_size,
 		"wait_seconds": _on_wait_seconds,
 		"set_var": _on_set_var,
 		"change_var": _on_change_var,
@@ -134,6 +135,7 @@ func _register_handlers() -> void:
 		"y_position": _on_y_position,
 		"mouse_x": _on_mouse_x,
 		"mouse_y": _on_mouse_y,
+		"mouse_down?": _on_mouse_down,
 	}
 
 
@@ -280,6 +282,25 @@ func _on_set_color(block: Dictionary) -> void:
 	var size := sprite.texture.get_size()
 	var image := Image.create(maxi(1, int(size.x)), maxi(1, int(size.y)), false, Image.FORMAT_RGBA8)
 	image.fill(Color(String(_value(block, "color"))))
+	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	sprite.texture = ImageTexture.create_from_image(image)
+
+
+## set_size: regenerate the sprite's placeholder costume at a new pixel size (w x h), keeping its
+## current fill colour (sampled from the existing costume's top-left pixel). The looks-category
+## complement to set_color that changes *size* rather than colour — used to draw the zombies' floating
+## health bars, whose width tracks remaining HP. Nearest-neighbour filtering keeps the fill crisp.
+func _on_set_size(block: Dictionary) -> void:
+	var sprite := _target.node as Sprite2D
+	var w := maxi(1, int(_value(block, "w")))
+	var h := maxi(1, int(_value(block, "h")))
+	var color := Color(1, 1, 1, 1)
+	if sprite.texture != null:
+		var old := sprite.texture.get_image()
+		if old != null and old.get_width() > 0 and old.get_height() > 0:
+			color = old.get_pixel(0, 0)
+	var image := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	image.fill(color)
 	sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	sprite.texture = ImageTexture.create_from_image(image)
 
@@ -458,6 +479,12 @@ func _on_mouse_x(_block: Dictionary) -> float:
 
 func _on_mouse_y(_block: Dictionary) -> float:
 	return _stage.get_global_mouse_position().y
+
+
+## mouse_down?: true while the left mouse button is held. A reporter (polled inside forever/if), the
+## mouse twin of key_pressed? — lets a script fire on click.
+func _on_mouse_down(_block: Dictionary) -> bool:
+	return Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
 
 
 # Arithmetic. divide / mod guard division by zero (-> 0) so a bad script can't
