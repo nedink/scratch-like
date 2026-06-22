@@ -65,28 +65,28 @@
 										"opcode": "variable"
 									}
 								},
+								"opcode": "set_camera"
+							},
+							{
+								"inputs": {
+									"x": {
+										"inputs": {
+											"name": "px"
+										},
+										"opcode": "variable"
+									},
+									"y": {
+										"inputs": {
+											"name": "py"
+										},
+										"opcode": "variable"
+									}
+								},
 								"opcode": "go_to"
 							},
 							{
 								"inputs": {
 									"body": [
-										{
-											"inputs": {
-												"x": {
-													"inputs": {
-														"name": "px"
-													},
-													"opcode": "variable"
-												},
-												"y": {
-													"inputs": {
-														"name": "py"
-													},
-													"opcode": "variable"
-												}
-											},
-											"opcode": "set_camera"
-										},
 										{
 											"inputs": {
 												"name": "on_ground",

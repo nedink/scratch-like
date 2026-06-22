@@ -4,12 +4,12 @@
 		"color": "#87cefa59",
 		"show": true,
 		"snap": true,
-		"step": 8
+		"step": 8.0
 	},
 	"scripts": [
 		{
 			"color": "#ffffff",
-			"h": 16,
+			"h": 16.0,
 			"name": "Player",
 			"script": [
 				{
@@ -18,63 +18,63 @@
 							{
 								"inputs": {
 									"name": "lives",
-									"value": 5
+									"value": 5.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "ammo",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "fire_ready",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "p_invincible",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "p_hit",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "zombie_pause",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "player_x",
-									"value": 240
+									"value": 240.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "player_y",
-									"value": 176
+									"value": 176.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": 240,
-									"y": 176
+									"x": 240.0,
+									"y": 176.0
 								},
 								"opcode": "go_to"
 							},
@@ -119,7 +119,7 @@
 																					"inputs": {},
 																					"opcode": "y_position"
 																				},
-																				"b": 3
+																				"b": 3.0
 																			},
 																			"opcode": "subtract"
 																		}
@@ -151,7 +151,7 @@
 																					"inputs": {},
 																					"opcode": "y_position"
 																				},
-																				"b": 3
+																				"b": 3.0
 																			},
 																			"opcode": "add"
 																		}
@@ -179,7 +179,7 @@
 																					"inputs": {},
 																					"opcode": "x_position"
 																				},
-																				"b": 3
+																				"b": 3.0
 																			},
 																			"opcode": "subtract"
 																		},
@@ -211,7 +211,7 @@
 																					"inputs": {},
 																					"opcode": "x_position"
 																				},
-																				"b": 3
+																				"b": 3.0
 																			},
 																			"opcode": "add"
 																		},
@@ -370,7 +370,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 0
+														"b": 0.0
 													},
 													"opcode": "equals"
 												}
@@ -382,7 +382,7 @@
 												"body": [
 													{
 														"inputs": {
-															"x": 496,
+															"x": 496.0,
 															"y": {
 																"inputs": {},
 																"opcode": "y_position"
@@ -397,7 +397,7 @@
 															"inputs": {},
 															"opcode": "x_position"
 														},
-														"b": -16
+														"b": -16.0
 													},
 													"opcode": "less_than"
 												}
@@ -409,7 +409,7 @@
 												"body": [
 													{
 														"inputs": {
-															"x": -16,
+															"x": -16.0,
 															"y": {
 																"inputs": {},
 																"opcode": "y_position"
@@ -424,7 +424,7 @@
 															"inputs": {},
 															"opcode": "x_position"
 														},
-														"b": 496
+														"b": 496.0
 													},
 													"opcode": "greater_than"
 												}
@@ -440,7 +440,7 @@
 																"inputs": {},
 																"opcode": "x_position"
 															},
-															"y": 368
+															"y": 368.0
 														},
 														"opcode": "go_to"
 													}
@@ -451,7 +451,7 @@
 															"inputs": {},
 															"opcode": "y_position"
 														},
-														"b": -16
+														"b": -16.0
 													},
 													"opcode": "less_than"
 												}
@@ -467,7 +467,7 @@
 																"inputs": {},
 																"opcode": "x_position"
 															},
-															"y": -16
+															"y": -16.0
 														},
 														"opcode": "go_to"
 													}
@@ -478,7 +478,7 @@
 															"inputs": {},
 															"opcode": "y_position"
 														},
-														"b": 368
+														"b": 368.0
 													},
 													"opcode": "greater_than"
 												}
@@ -505,7 +505,7 @@
 													{
 														"inputs": {
 															"name": "fire_ready",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													},
@@ -543,27 +543,27 @@
 													{
 														"inputs": {
 															"name": "p_hit",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
 															"name": "p_invincible",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
 															"name": "zombie_pause",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "lives"
 														},
 														"opcode": "change_var"
@@ -587,13 +587,13 @@
 													},
 													{
 														"inputs": {
-															"degrees": 180
+															"degrees": 180.0
 														},
 														"opcode": "turn_degrees"
 													},
 													{
 														"inputs": {
-															"steps": 3
+															"steps": 3.0
 														},
 														"opcode": "move_steps"
 													},
@@ -623,7 +623,7 @@
 													},
 													{
 														"inputs": {
-															"steps": 3
+															"steps": 3.0
 														},
 														"opcode": "move_steps"
 													},
@@ -653,7 +653,7 @@
 													},
 													{
 														"inputs": {
-															"steps": 3
+															"steps": 3.0
 														},
 														"opcode": "move_steps"
 													},
@@ -683,7 +683,7 @@
 													},
 													{
 														"inputs": {
-															"steps": 3
+															"steps": 3.0
 														},
 														"opcode": "move_steps"
 													},
@@ -720,14 +720,14 @@
 													{
 														"inputs": {
 															"name": "zombie_pause",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
 															"name": "p_invincible",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													}
@@ -740,7 +740,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -773,7 +773,7 @@
 													{
 														"inputs": {
 															"name": "ammo",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													}
@@ -786,7 +786,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "less_than"
 												}
@@ -802,13 +802,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": 240,
-			"y": 176
+			"w": 16.0,
+			"x": 240.0,
+			"y": 176.0
 		},
 		{
 			"color": "#ffee55",
-			"h": 8,
+			"h": 8.0,
 			"name": "Bullet1",
 			"script": [
 				{
@@ -817,14 +817,14 @@
 							{
 								"inputs": {
 									"name": "active",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -100,
-									"y": -100
+									"x": -100.0,
+									"y": -100.0
 								},
 								"opcode": "go_to"
 							},
@@ -837,13 +837,13 @@
 													{
 														"inputs": {
 															"name": "fire_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "ammo"
 														},
 														"opcode": "change_var"
@@ -881,7 +881,7 @@
 													{
 														"inputs": {
 															"name": "active",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -898,7 +898,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -910,7 +910,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -925,7 +925,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -940,7 +940,7 @@
 												"body": [
 													{
 														"inputs": {
-															"steps": 9
+															"steps": 9.0
 														},
 														"opcode": "move_steps"
 													},
@@ -950,14 +950,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -974,7 +974,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": -24
+																							"b": -24.0
 																						},
 																						"opcode": "less_than"
 																					},
@@ -984,7 +984,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": 504
+																							"b": 504.0
 																						},
 																						"opcode": "greater_than"
 																					}
@@ -997,7 +997,7 @@
 																						"inputs": {},
 																						"opcode": "y_position"
 																					},
-																					"b": -24
+																					"b": -24.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -1010,7 +1010,7 @@
 																				"inputs": {},
 																				"opcode": "y_position"
 																			},
-																			"b": 376
+																			"b": 376.0
 																		},
 																		"opcode": "greater_than"
 																	}
@@ -1025,7 +1025,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z1_hp"
 																	},
 																	"opcode": "change_var"
@@ -1033,14 +1033,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1055,7 +1055,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1076,7 +1076,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z2_hp"
 																	},
 																	"opcode": "change_var"
@@ -1084,14 +1084,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1106,7 +1106,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1127,7 +1127,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z3_hp"
 																	},
 																	"opcode": "change_var"
@@ -1135,14 +1135,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1157,7 +1157,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1178,7 +1178,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z4_hp"
 																	},
 																	"opcode": "change_var"
@@ -1186,14 +1186,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1208,7 +1208,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1229,7 +1229,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z5_hp"
 																	},
 																	"opcode": "change_var"
@@ -1237,14 +1237,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1259,7 +1259,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1280,7 +1280,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z6_hp"
 																	},
 																	"opcode": "change_var"
@@ -1288,14 +1288,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1310,7 +1310,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1331,7 +1331,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z7_hp"
 																	},
 																	"opcode": "change_var"
@@ -1339,14 +1339,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1361,7 +1361,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1382,7 +1382,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z8_hp"
 																	},
 																	"opcode": "change_var"
@@ -1390,14 +1390,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1412,7 +1412,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1433,7 +1433,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z9_hp"
 																	},
 																	"opcode": "change_var"
@@ -1441,14 +1441,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1463,7 +1463,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1484,7 +1484,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z10_hp"
 																	},
 																	"opcode": "change_var"
@@ -1492,14 +1492,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1514,7 +1514,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1539,7 +1539,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -1555,13 +1555,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 8,
-			"x": -100,
-			"y": -100
+			"w": 8.0,
+			"x": -100.0,
+			"y": -100.0
 		},
 		{
 			"color": "#ffee55",
-			"h": 8,
+			"h": 8.0,
 			"name": "Bullet2",
 			"script": [
 				{
@@ -1570,14 +1570,14 @@
 							{
 								"inputs": {
 									"name": "active",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -100,
-									"y": -100
+									"x": -100.0,
+									"y": -100.0
 								},
 								"opcode": "go_to"
 							},
@@ -1590,13 +1590,13 @@
 													{
 														"inputs": {
 															"name": "fire_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "ammo"
 														},
 														"opcode": "change_var"
@@ -1634,7 +1634,7 @@
 													{
 														"inputs": {
 															"name": "active",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -1651,7 +1651,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -1663,7 +1663,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -1678,7 +1678,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -1693,7 +1693,7 @@
 												"body": [
 													{
 														"inputs": {
-															"steps": 9
+															"steps": 9.0
 														},
 														"opcode": "move_steps"
 													},
@@ -1703,14 +1703,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1727,7 +1727,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": -24
+																							"b": -24.0
 																						},
 																						"opcode": "less_than"
 																					},
@@ -1737,7 +1737,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": 504
+																							"b": 504.0
 																						},
 																						"opcode": "greater_than"
 																					}
@@ -1750,7 +1750,7 @@
 																						"inputs": {},
 																						"opcode": "y_position"
 																					},
-																					"b": -24
+																					"b": -24.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -1763,7 +1763,7 @@
 																				"inputs": {},
 																				"opcode": "y_position"
 																			},
-																			"b": 376
+																			"b": 376.0
 																		},
 																		"opcode": "greater_than"
 																	}
@@ -1778,7 +1778,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z1_hp"
 																	},
 																	"opcode": "change_var"
@@ -1786,14 +1786,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1808,7 +1808,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1829,7 +1829,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z2_hp"
 																	},
 																	"opcode": "change_var"
@@ -1837,14 +1837,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1859,7 +1859,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1880,7 +1880,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z3_hp"
 																	},
 																	"opcode": "change_var"
@@ -1888,14 +1888,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1910,7 +1910,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1931,7 +1931,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z4_hp"
 																	},
 																	"opcode": "change_var"
@@ -1939,14 +1939,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -1961,7 +1961,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -1982,7 +1982,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z5_hp"
 																	},
 																	"opcode": "change_var"
@@ -1990,14 +1990,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2012,7 +2012,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2033,7 +2033,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z6_hp"
 																	},
 																	"opcode": "change_var"
@@ -2041,14 +2041,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2063,7 +2063,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2084,7 +2084,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z7_hp"
 																	},
 																	"opcode": "change_var"
@@ -2092,14 +2092,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2114,7 +2114,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2135,7 +2135,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z8_hp"
 																	},
 																	"opcode": "change_var"
@@ -2143,14 +2143,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2165,7 +2165,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2186,7 +2186,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z9_hp"
 																	},
 																	"opcode": "change_var"
@@ -2194,14 +2194,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2216,7 +2216,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2237,7 +2237,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z10_hp"
 																	},
 																	"opcode": "change_var"
@@ -2245,14 +2245,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2267,7 +2267,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2292,7 +2292,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -2308,13 +2308,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 8,
-			"x": -100,
-			"y": -100
+			"w": 8.0,
+			"x": -100.0,
+			"y": -100.0
 		},
 		{
 			"color": "#ffee55",
-			"h": 8,
+			"h": 8.0,
 			"name": "Bullet3",
 			"script": [
 				{
@@ -2323,14 +2323,14 @@
 							{
 								"inputs": {
 									"name": "active",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -100,
-									"y": -100
+									"x": -100.0,
+									"y": -100.0
 								},
 								"opcode": "go_to"
 							},
@@ -2343,13 +2343,13 @@
 													{
 														"inputs": {
 															"name": "fire_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "ammo"
 														},
 														"opcode": "change_var"
@@ -2387,7 +2387,7 @@
 													{
 														"inputs": {
 															"name": "active",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -2404,7 +2404,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -2416,7 +2416,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -2431,7 +2431,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -2446,7 +2446,7 @@
 												"body": [
 													{
 														"inputs": {
-															"steps": 9
+															"steps": 9.0
 														},
 														"opcode": "move_steps"
 													},
@@ -2456,14 +2456,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2480,7 +2480,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": -24
+																							"b": -24.0
 																						},
 																						"opcode": "less_than"
 																					},
@@ -2490,7 +2490,7 @@
 																								"inputs": {},
 																								"opcode": "x_position"
 																							},
-																							"b": 504
+																							"b": 504.0
 																						},
 																						"opcode": "greater_than"
 																					}
@@ -2503,7 +2503,7 @@
 																						"inputs": {},
 																						"opcode": "y_position"
 																					},
-																					"b": -24
+																					"b": -24.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -2516,7 +2516,7 @@
 																				"inputs": {},
 																				"opcode": "y_position"
 																			},
-																			"b": 376
+																			"b": 376.0
 																		},
 																		"opcode": "greater_than"
 																	}
@@ -2531,7 +2531,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z1_hp"
 																	},
 																	"opcode": "change_var"
@@ -2539,14 +2539,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2561,7 +2561,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2582,7 +2582,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z2_hp"
 																	},
 																	"opcode": "change_var"
@@ -2590,14 +2590,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2612,7 +2612,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2633,7 +2633,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z3_hp"
 																	},
 																	"opcode": "change_var"
@@ -2641,14 +2641,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2663,7 +2663,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2684,7 +2684,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z4_hp"
 																	},
 																	"opcode": "change_var"
@@ -2692,14 +2692,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2714,7 +2714,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2735,7 +2735,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z5_hp"
 																	},
 																	"opcode": "change_var"
@@ -2743,14 +2743,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2765,7 +2765,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2786,7 +2786,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z6_hp"
 																	},
 																	"opcode": "change_var"
@@ -2794,14 +2794,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2816,7 +2816,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2837,7 +2837,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z7_hp"
 																	},
 																	"opcode": "change_var"
@@ -2845,14 +2845,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2867,7 +2867,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2888,7 +2888,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z8_hp"
 																	},
 																	"opcode": "change_var"
@@ -2896,14 +2896,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2918,7 +2918,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2939,7 +2939,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z9_hp"
 																	},
 																	"opcode": "change_var"
@@ -2947,14 +2947,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -2969,7 +2969,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -2990,7 +2990,7 @@
 															"body": [
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "z10_hp"
 																	},
 																	"opcode": "change_var"
@@ -2998,14 +2998,14 @@
 																{
 																	"inputs": {
 																		"name": "active",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"x": -100,
-																		"y": -100
+																		"x": -100.0,
+																		"y": -100.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -3020,7 +3020,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 1
+																			"b": 1.0
 																		},
 																		"opcode": "equals"
 																	},
@@ -3045,7 +3045,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -3061,13 +3061,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 8,
-			"x": -100,
-			"y": -100
+			"w": 8.0,
+			"x": -100.0,
+			"y": -100.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie1",
 			"script": [
 				{
@@ -3076,35 +3076,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z1_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z1_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z1_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -3117,20 +3117,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -3138,7 +3138,7 @@
 													{
 														"inputs": {
 															"name": "z1_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -3147,8 +3147,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -3162,12 +3162,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -3180,7 +3180,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -3194,12 +3194,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -3216,7 +3216,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -3231,7 +3231,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3246,11 +3246,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -3270,7 +3270,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -3285,7 +3285,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3300,11 +3300,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -3322,7 +3322,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3335,7 +3335,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -3352,7 +3352,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -3364,7 +3364,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -3379,7 +3379,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -3464,7 +3464,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -3485,7 +3485,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -3630,7 +3630,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -3643,35 +3643,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z1_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z1_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -3684,7 +3684,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -3700,7 +3700,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -3716,13 +3716,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie2",
 			"script": [
 				{
@@ -3731,35 +3731,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z2_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z2_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z2_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -3772,20 +3772,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -3793,7 +3793,7 @@
 													{
 														"inputs": {
 															"name": "z2_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -3802,8 +3802,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -3817,12 +3817,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -3835,7 +3835,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -3849,12 +3849,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -3871,7 +3871,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -3886,7 +3886,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3901,11 +3901,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -3925,7 +3925,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -3940,7 +3940,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3955,11 +3955,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -3977,7 +3977,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -3990,7 +3990,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -4007,7 +4007,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -4019,7 +4019,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -4034,7 +4034,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -4119,7 +4119,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -4140,7 +4140,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -4285,7 +4285,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -4298,35 +4298,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z2_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z2_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -4339,7 +4339,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -4355,7 +4355,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -4371,13 +4371,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie3",
 			"script": [
 				{
@@ -4386,35 +4386,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z3_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z3_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z3_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -4427,20 +4427,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -4448,7 +4448,7 @@
 													{
 														"inputs": {
 															"name": "z3_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -4457,8 +4457,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -4472,12 +4472,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -4490,7 +4490,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -4504,12 +4504,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -4526,7 +4526,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -4541,7 +4541,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -4556,11 +4556,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -4580,7 +4580,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -4595,7 +4595,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -4610,11 +4610,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -4632,7 +4632,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -4645,7 +4645,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -4662,7 +4662,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -4674,7 +4674,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -4689,7 +4689,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -4774,7 +4774,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -4795,7 +4795,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -4940,7 +4940,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -4953,35 +4953,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z3_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z3_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -4994,7 +4994,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -5010,7 +5010,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -5026,13 +5026,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie4",
 			"script": [
 				{
@@ -5041,35 +5041,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z4_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z4_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z4_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -5082,20 +5082,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -5103,7 +5103,7 @@
 													{
 														"inputs": {
 															"name": "z4_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -5112,8 +5112,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -5127,12 +5127,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -5145,7 +5145,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -5159,12 +5159,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -5181,7 +5181,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -5196,7 +5196,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5211,11 +5211,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -5235,7 +5235,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -5250,7 +5250,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5265,11 +5265,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -5287,7 +5287,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5300,7 +5300,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -5317,7 +5317,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -5329,7 +5329,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -5344,7 +5344,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -5429,7 +5429,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -5450,7 +5450,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -5595,7 +5595,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -5608,35 +5608,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z4_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z4_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -5649,7 +5649,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -5665,7 +5665,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -5681,13 +5681,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie5",
 			"script": [
 				{
@@ -5696,35 +5696,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z5_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z5_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z5_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -5737,20 +5737,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -5758,7 +5758,7 @@
 													{
 														"inputs": {
 															"name": "z5_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -5767,8 +5767,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -5782,12 +5782,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -5800,7 +5800,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -5814,12 +5814,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -5836,7 +5836,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -5851,7 +5851,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5866,11 +5866,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -5890,7 +5890,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -5905,7 +5905,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5920,11 +5920,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -5942,7 +5942,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -5955,7 +5955,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -5972,7 +5972,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -5984,7 +5984,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -5999,7 +5999,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -6084,7 +6084,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -6105,7 +6105,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -6250,7 +6250,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -6263,35 +6263,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z5_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z5_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -6304,7 +6304,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -6320,7 +6320,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -6336,13 +6336,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie6",
 			"script": [
 				{
@@ -6351,35 +6351,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z6_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z6_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z6_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -6392,20 +6392,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -6413,7 +6413,7 @@
 													{
 														"inputs": {
 															"name": "z6_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -6422,8 +6422,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -6437,12 +6437,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -6455,7 +6455,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -6469,12 +6469,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -6491,7 +6491,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -6506,7 +6506,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -6521,11 +6521,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -6545,7 +6545,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -6560,7 +6560,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -6575,11 +6575,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -6597,7 +6597,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -6610,7 +6610,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -6627,7 +6627,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -6639,7 +6639,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -6654,7 +6654,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -6739,7 +6739,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -6760,7 +6760,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -6905,7 +6905,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -6918,35 +6918,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z6_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z6_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -6959,7 +6959,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -6975,7 +6975,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -6991,13 +6991,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie7",
 			"script": [
 				{
@@ -7006,35 +7006,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z7_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z7_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z7_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -7047,20 +7047,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -7068,7 +7068,7 @@
 													{
 														"inputs": {
 															"name": "z7_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -7077,8 +7077,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -7092,12 +7092,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -7110,7 +7110,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -7124,12 +7124,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -7146,7 +7146,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -7161,7 +7161,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7176,11 +7176,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -7200,7 +7200,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -7215,7 +7215,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7230,11 +7230,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -7252,7 +7252,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7265,7 +7265,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -7282,7 +7282,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -7294,7 +7294,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -7309,7 +7309,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -7394,7 +7394,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -7415,7 +7415,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -7560,7 +7560,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -7573,35 +7573,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z7_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z7_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -7614,7 +7614,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -7630,7 +7630,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -7646,13 +7646,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie8",
 			"script": [
 				{
@@ -7661,35 +7661,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z8_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z8_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z8_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -7702,20 +7702,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -7723,7 +7723,7 @@
 													{
 														"inputs": {
 															"name": "z8_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -7732,8 +7732,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -7747,12 +7747,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -7765,7 +7765,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -7779,12 +7779,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -7801,7 +7801,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -7816,7 +7816,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7831,11 +7831,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -7855,7 +7855,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -7870,7 +7870,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7885,11 +7885,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -7907,7 +7907,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -7920,7 +7920,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -7937,7 +7937,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -7949,7 +7949,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -7964,7 +7964,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -8049,7 +8049,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -8070,7 +8070,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -8215,7 +8215,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -8228,35 +8228,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z8_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z8_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -8269,7 +8269,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -8285,7 +8285,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -8301,13 +8301,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie9",
 			"script": [
 				{
@@ -8316,35 +8316,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z9_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z9_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z9_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -8357,20 +8357,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -8378,7 +8378,7 @@
 													{
 														"inputs": {
 															"name": "z9_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -8387,8 +8387,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -8402,12 +8402,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -8420,7 +8420,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -8434,12 +8434,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -8456,7 +8456,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -8471,7 +8471,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -8486,11 +8486,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -8510,7 +8510,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -8525,7 +8525,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -8540,11 +8540,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -8562,7 +8562,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -8575,7 +8575,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -8592,7 +8592,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -8604,7 +8604,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -8619,7 +8619,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -8704,7 +8704,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -8725,7 +8725,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -8870,7 +8870,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -8883,35 +8883,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z9_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z9_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -8924,7 +8924,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -8940,7 +8940,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -8956,13 +8956,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#6abf4b",
-			"h": 16,
+			"h": 16.0,
 			"name": "Zombie10",
 			"script": [
 				{
@@ -8971,35 +8971,35 @@
 							{
 								"inputs": {
 									"name": "alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z10_hp",
-									"value": 3
+									"value": 3.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z10_x",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "z10_y",
-									"value": -300
+									"value": -300.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
-									"x": -200,
-									"y": -200
+									"x": -200.0,
+									"y": -200.0
 								},
 								"opcode": "go_to"
 							},
@@ -9012,20 +9012,20 @@
 													{
 														"inputs": {
 															"name": "spawn_ready",
-															"value": 0
+															"value": 0.0
 														},
 														"opcode": "set_var"
 													},
 													{
 														"inputs": {
-															"by": -1,
+															"by": -1.0,
 															"name": "spawn_count"
 														},
 														"opcode": "change_var"
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "zombies_alive"
 														},
 														"opcode": "change_var"
@@ -9033,7 +9033,7 @@
 													{
 														"inputs": {
 															"name": "z10_hp",
-															"value": 3
+															"value": 3.0
 														},
 														"opcode": "set_var"
 													},
@@ -9042,8 +9042,8 @@
 															"name": "e",
 															"value": {
 																"inputs": {
-																	"from": 0,
-																	"to": 4
+																	"from": 0.0,
+																	"to": 4.0
 																},
 																"opcode": "random"
 															}
@@ -9057,12 +9057,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": -16
+																		"y": -16.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -9075,7 +9075,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -9089,12 +9089,12 @@
 																	"inputs": {
 																		"x": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 496
+																				"from": -16.0,
+																				"to": 496.0
 																			},
 																			"opcode": "random"
 																		},
-																		"y": 368
+																		"y": 368.0
 																	},
 																	"opcode": "go_to"
 																}
@@ -9111,7 +9111,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 1
+																					"b": 1.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -9126,7 +9126,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 2
+																			"b": 2.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -9141,11 +9141,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": -16,
+																		"x": -16.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -9165,7 +9165,7 @@
 																						},
 																						"opcode": "variable"
 																					},
-																					"b": 2
+																					"b": 2.0
 																				},
 																				"opcode": "less_than"
 																			}
@@ -9180,7 +9180,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -9195,11 +9195,11 @@
 															"body": [
 																{
 																	"inputs": {
-																		"x": 496,
+																		"x": 496.0,
 																		"y": {
 																			"inputs": {
-																				"from": -16,
-																				"to": 368
+																				"from": -16.0,
+																				"to": 368.0
 																			},
 																			"opcode": "random"
 																		}
@@ -9217,7 +9217,7 @@
 																				},
 																				"opcode": "variable"
 																			},
-																			"b": 3
+																			"b": 3.0
 																		},
 																		"opcode": "less_than"
 																	}
@@ -9230,7 +9230,7 @@
 													{
 														"inputs": {
 															"name": "alive",
-															"value": 1
+															"value": 1.0
 														},
 														"opcode": "set_var"
 													}
@@ -9247,7 +9247,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "equals"
 																},
@@ -9259,7 +9259,7 @@
 																			},
 																			"opcode": "variable"
 																		},
-																		"b": 0
+																		"b": 0.0
 																	},
 																	"opcode": "greater_than"
 																}
@@ -9274,7 +9274,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 1
+																"b": 1.0
 															},
 															"opcode": "equals"
 														}
@@ -9359,7 +9359,7 @@
 																			{
 																				"inputs": {
 																					"name": "p_hit",
-																					"value": 1
+																					"value": 1.0
 																				},
 																				"opcode": "set_var"
 																			}
@@ -9380,7 +9380,7 @@
 																							},
 																							"opcode": "variable"
 																						},
-																						"b": 0
+																						"b": 0.0
 																					},
 																					"opcode": "equals"
 																				}
@@ -9525,7 +9525,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 0
+																	"b": 0.0
 																},
 																"opcode": "equals"
 															}
@@ -9538,35 +9538,35 @@
 																{
 																	"inputs": {
 																		"name": "alive",
-																		"value": 0
+																		"value": 0.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
-																		"by": -1,
+																		"by": -1.0,
 																		"name": "zombies_alive"
 																	},
 																	"opcode": "change_var"
 																},
 																{
 																	"inputs": {
-																		"x": -200,
-																		"y": -200
+																		"x": -200.0,
+																		"y": -200.0
 																	},
 																	"opcode": "go_to"
 																},
 																{
 																	"inputs": {
 																		"name": "z10_x",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																},
 																{
 																	"inputs": {
 																		"name": "z10_y",
-																		"value": -300
+																		"value": -300.0
 																	},
 																	"opcode": "set_var"
 																}
@@ -9579,7 +9579,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 1
+																	"b": 1.0
 																},
 																"opcode": "less_than"
 															}
@@ -9595,7 +9595,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "equals"
 												}
@@ -9611,13 +9611,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -200,
-			"y": -200
+			"w": 16.0,
+			"x": -200.0,
+			"y": -200.0
 		},
 		{
 			"color": "#ffffff00",
-			"h": 16,
+			"h": 16.0,
 			"name": "LivesHud",
 			"script": [
 				{
@@ -9647,13 +9647,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": 32,
-			"y": 32
+			"w": 16.0,
+			"x": 32.0,
+			"y": 32.0
 		},
 		{
 			"color": "#ffffff00",
-			"h": 16,
+			"h": 16.0,
 			"name": "Spawner",
 			"script": [
 				{
@@ -9662,21 +9662,21 @@
 							{
 								"inputs": {
 									"name": "wave",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "spawn_count",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
 							{
 								"inputs": {
 									"name": "zombies_alive",
-									"value": 0
+									"value": 0.0
 								},
 								"opcode": "set_var"
 							},
@@ -9694,7 +9694,7 @@
 													},
 													{
 														"inputs": {
-															"by": 1,
+															"by": 1.0,
 															"name": "wave"
 														},
 														"opcode": "change_var"
@@ -9710,7 +9710,7 @@
 																		},
 																		"opcode": "variable"
 																	},
-																	"b": 2
+																	"b": 2.0
 																},
 																"opcode": "add"
 															}
@@ -9728,7 +9728,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 0
+																"b": 0.0
 															},
 															"opcode": "equals"
 														},
@@ -9740,7 +9740,7 @@
 																	},
 																	"opcode": "variable"
 																},
-																"b": 0
+																"b": 0.0
 															},
 															"opcode": "equals"
 														}
@@ -9767,7 +9767,7 @@
 										{
 											"inputs": {
 												"name": "spawn_ready",
-												"value": 1
+												"value": 1.0
 											},
 											"opcode": "set_var"
 										},
@@ -9786,13 +9786,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -400,
-			"y": -400
+			"w": 16.0,
+			"x": -400.0,
+			"y": -400.0
 		},
 		{
 			"color": "#ffffff00",
-			"h": 16,
+			"h": 16.0,
 			"name": "Announcer",
 			"script": [
 				{
@@ -9806,8 +9806,8 @@
 												"body": [
 													{
 														"inputs": {
-															"x": 240,
-															"y": 176
+															"x": 240.0,
+															"y": 176.0
 														},
 														"opcode": "go_to"
 													},
@@ -9833,7 +9833,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 1
+														"b": 1.0
 													},
 													"opcode": "less_than"
 												}
@@ -9849,13 +9849,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": 240,
-			"y": 176
+			"w": 16.0,
+			"x": 240.0,
+			"y": 176.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar1",
 			"script": [
 				{
@@ -9880,7 +9880,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -9889,7 +9889,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -9898,7 +9898,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -9914,13 +9914,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar2",
 			"script": [
 				{
@@ -9945,7 +9945,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -9954,7 +9954,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -9963,7 +9963,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -9979,13 +9979,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar3",
 			"script": [
 				{
@@ -10010,7 +10010,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10019,7 +10019,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10028,7 +10028,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10044,13 +10044,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar4",
 			"script": [
 				{
@@ -10075,7 +10075,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10084,7 +10084,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10093,7 +10093,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10109,13 +10109,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar5",
 			"script": [
 				{
@@ -10140,7 +10140,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10149,7 +10149,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10158,7 +10158,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10174,13 +10174,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar6",
 			"script": [
 				{
@@ -10205,7 +10205,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10214,7 +10214,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10223,7 +10223,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10239,13 +10239,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar7",
 			"script": [
 				{
@@ -10270,7 +10270,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10279,7 +10279,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10288,7 +10288,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10304,13 +10304,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar8",
 			"script": [
 				{
@@ -10335,7 +10335,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10344,7 +10344,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10353,7 +10353,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10369,13 +10369,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar9",
 			"script": [
 				{
@@ -10400,7 +10400,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10409,7 +10409,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10418,7 +10418,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10434,13 +10434,13 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		},
 		{
 			"color": "#46d65a",
-			"h": 3,
+			"h": 3.0,
 			"name": "HealthBar10",
 			"script": [
 				{
@@ -10465,7 +10465,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 12
+														"b": 12.0
 													},
 													"opcode": "subtract"
 												}
@@ -10474,7 +10474,7 @@
 										},
 										{
 											"inputs": {
-												"h": 3,
+												"h": 3.0,
 												"w": {
 													"inputs": {
 														"a": {
@@ -10483,7 +10483,7 @@
 															},
 															"opcode": "variable"
 														},
-														"b": 5.333333333333333
+														"b": 5.33333333333333
 													},
 													"opcode": "multiply"
 												}
@@ -10499,346 +10499,346 @@
 					"opcode": "when_flag_clicked"
 				}
 			],
-			"w": 16,
-			"x": -300,
-			"y": -312
+			"w": 16.0,
+			"x": -300.0,
+			"y": -312.0
 		}
 	],
 	"variables": [
 		{
 			"name": "lives",
 			"scope": "global",
-			"value": 5
+			"value": 5.0
 		},
 		{
 			"name": "ammo",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "fire_ready",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "player_x",
 			"scope": "global",
-			"value": 240
+			"value": 240.0
 		},
 		{
 			"name": "player_y",
 			"scope": "global",
-			"value": 176
+			"value": 176.0
 		},
 		{
 			"name": "p_invincible",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "p_hit",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "zombie_pause",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "hit_from_x",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "hit_from_y",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "wave",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "spawn_count",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "spawn_ready",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "zombies_alive",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "z1_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z1_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z1_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z2_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z2_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z2_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z3_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z3_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z3_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z4_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z4_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z4_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z5_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z5_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z5_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z6_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z6_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z6_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z7_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z7_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z7_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z8_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z8_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z8_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z9_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z9_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z9_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "z10_x",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z10_y",
 			"scope": "global",
-			"value": -300
+			"value": -300.0
 		},
 		{
 			"name": "z10_hp",
 			"scope": "global",
-			"value": 3
+			"value": 3.0
 		},
 		{
 			"name": "active",
 			"scope": "Bullet1",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "active",
 			"scope": "Bullet2",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "active",
 			"scope": "Bullet3",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie1",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie1",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie2",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie2",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie3",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie3",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie4",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie4",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie5",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie5",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie6",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie6",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie7",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie7",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie8",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie8",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie9",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie9",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "alive",
 			"scope": "Zombie10",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "e",
 			"scope": "Zombie10",
-			"value": 0
+			"value": 0.0
 		}
 	]
 }

@@ -223,11 +223,11 @@ var _renaming_sprite: String = ""
 ## the draggable parameter pills in the define hat, both derive from this list.
 @onready var _block_params_edit: LineEdit = %BlockParamsEdit
 
-## A freshly added sprite's placeholder geometry (M24): a small grey square at the stage center. It is
+## A freshly added sprite's placeholder geometry (M24): a small white square at the stage center. It is
 ## just a starting placeholder — real positioning is blocks (a `go_to` in the sprite's script, as the
 ## ball does), so there is no UI yet to move/resize/recolour it (M25 added rename but left geometry
 ## editing deferred). Also the fill values _read_project defaults a pre-M24 saved entry to.
-const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 24, "h": 24, "color": "#cccccc"}
+const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 16, "h": 16, "color": "#ffffff"}
 
 
 func _ready() -> void:

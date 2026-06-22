@@ -1,0 +1,1095 @@
+{
+	"background": "#000000ff",
+	"grid": {
+		"color": "#87cefa59",
+		"show": true,
+		"snap": true,
+		"step": 8
+	},
+	"scripts": [
+		{
+			"color": "#e6e6f2",
+			"h": 96,
+			"name": "LeftPaddle",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"name": "left_paddle_y",
+												"value": {
+													"inputs": {},
+													"opcode": "y_position"
+												}
+											},
+											"opcode": "set_var"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"direction": 0
+														},
+														"opcode": "point_in_direction"
+													},
+													{
+														"inputs": {
+															"steps": 8.0
+														},
+														"opcode": "move_steps"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"key": "W"
+															},
+															"opcode": "key_pressed?"
+														},
+														"b": {
+															"inputs": {
+																"key": "Up"
+															},
+															"opcode": "key_pressed?"
+														}
+													},
+													"opcode": "or"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"direction": 180
+														},
+														"opcode": "point_in_direction"
+													},
+													{
+														"inputs": {
+															"steps": 8.0
+														},
+														"opcode": "move_steps"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"key": "S"
+															},
+															"opcode": "key_pressed?"
+														},
+														"b": {
+															"inputs": {
+																"key": "Down"
+															},
+															"opcode": "key_pressed?"
+														}
+													},
+													"opcode": "or"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 24.0,
+															"y": 48.0
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "top"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 24.0,
+															"y": 304.0
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "bottom"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 32,
+			"y": 176
+		},
+		{
+			"color": "#e6e6f2",
+			"h": 96,
+			"name": "RightPaddle",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "right_paddle_y",
+									"value": 48.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"easing": "ease out",
+												"name": "right_paddle_y",
+												"seconds": 1.4,
+												"value": 304.0
+											},
+											"opcode": "animate"
+										},
+										{
+											"inputs": {
+												"easing": "ease out",
+												"name": "right_paddle_y",
+												"seconds": 1.4,
+												"value": 48.0
+											},
+											"opcode": "animate"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"x": 456.0,
+												"y": {
+													"inputs": {
+														"name": "right_paddle_y"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "go_to"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 448,
+			"y": 176
+		},
+		{
+			"color": "#ffcc40",
+			"h": 16,
+			"name": "Ball",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "speed",
+									"value": 6.0
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"x": 240.0,
+									"y": 176.0
+								},
+								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"direction": {
+										"inputs": {
+											"a": 90.0,
+											"b": {
+												"inputs": {
+													"from": -45.0,
+													"to": 45.0
+												},
+												"opcode": "random"
+											}
+										},
+										"opcode": "add"
+									}
+								},
+								"opcode": "point_in_direction"
+							},
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"steps": {
+													"inputs": {
+														"name": "speed"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "move_steps"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 180,
+																				"b": {
+																					"inputs": {},
+																					"opcode": "direction"
+																				}
+																			},
+																			"opcode": "subtract"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "direction"
+																			},
+																			"b": 90
+																		},
+																		"opcode": "less_than"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "direction"
+																			},
+																			"b": 270
+																		},
+																		"opcode": "greater_than"
+																	}
+																},
+																"opcode": "or"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "x_position"
+															},
+															"y": 8
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "top"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 180,
+																				"b": {
+																					"inputs": {},
+																					"opcode": "direction"
+																				}
+																			},
+																			"opcode": "subtract"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "direction"
+																			},
+																			"b": 90
+																		},
+																		"opcode": "greater_than"
+																	},
+																	"b": {
+																		"inputs": {
+																			"a": {
+																				"inputs": {},
+																				"opcode": "direction"
+																			},
+																			"b": 270
+																		},
+																		"opcode": "less_than"
+																	}
+																},
+																"opcode": "and"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"x": {
+																"inputs": {},
+																"opcode": "x_position"
+															},
+															"y": 344
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "bottom"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 90,
+																				"b": {
+																					"inputs": {
+																						"a": {
+																							"inputs": {
+																								"a": {
+																									"inputs": {},
+																									"opcode": "y_position"
+																								},
+																								"b": {
+																									"inputs": {
+																										"name": "left_paddle_y"
+																									},
+																									"opcode": "variable"
+																								}
+																							},
+																							"opcode": "subtract"
+																						},
+																						"b": 0.9
+																					},
+																					"opcode": "multiply"
+																				}
+																			},
+																			"opcode": "add"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {},
+																		"opcode": "direction"
+																	},
+																	"b": 180
+																},
+																"opcode": "greater_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"x": 48,
+															"y": {
+																"inputs": {},
+																"opcode": "y_position"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "LeftPaddle"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 270,
+																				"b": {
+																					"inputs": {
+																						"a": {
+																							"inputs": {
+																								"a": {
+																									"inputs": {},
+																									"opcode": "y_position"
+																								},
+																								"b": {
+																									"inputs": {
+																										"name": "right_paddle_y"
+																									},
+																									"opcode": "variable"
+																								}
+																							},
+																							"opcode": "subtract"
+																						},
+																						"b": 0.9
+																					},
+																					"opcode": "multiply"
+																				}
+																			},
+																			"opcode": "subtract"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {},
+																		"opcode": "direction"
+																	},
+																	"b": 180
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													},
+													{
+														"inputs": {
+															"x": 432,
+															"y": {
+																"inputs": {},
+																"opcode": "y_position"
+															}
+														},
+														"opcode": "go_to"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"name": "RightPaddle"
+													},
+													"opcode": "touching_sprite?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1,
+															"name": "p2_score"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": 240.0,
+															"y": 176.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"direction": {
+																"inputs": {
+																	"a": 90.0,
+																	"b": {
+																		"inputs": {
+																			"from": -45.0,
+																			"to": 45.0
+																		},
+																		"opcode": "random"
+																	}
+																},
+																"opcode": "add"
+															}
+														},
+														"opcode": "point_in_direction"
+													},
+													{
+														"inputs": {
+															"seconds": 1.0
+														},
+														"opcode": "wait_seconds"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "left"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1,
+															"name": "p1_score"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"x": 240.0,
+															"y": 176.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"direction": {
+																"inputs": {
+																	"a": 270.0,
+																	"b": {
+																		"inputs": {
+																			"from": -45.0,
+																			"to": 45.0
+																		},
+																		"opcode": "random"
+																	}
+																},
+																"opcode": "add"
+															}
+														},
+														"opcode": "point_in_direction"
+													},
+													{
+														"inputs": {
+															"seconds": 1.0
+														},
+														"opcode": "wait_seconds"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"side": "right"
+													},
+													"opcode": "touching_edge?"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1,
+															"name": "p1_rounds"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "p1_score",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p2_score",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": 1,
+																		"name": "round"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": 240.0,
+																		"y": 176.0
+																	},
+																	"opcode": "go_to"
+																},
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 90.0,
+																				"b": {
+																					"inputs": {
+																						"from": -45.0,
+																						"to": 45.0
+																					},
+																					"opcode": "random"
+																				}
+																			},
+																			"opcode": "add"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																},
+																{
+																	"inputs": {
+																		"seconds": 1.0
+																	},
+																	"opcode": "wait_seconds"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "p1_rounds"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 2
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p1_score"
+															},
+															"opcode": "variable"
+														},
+														"b": 4
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"by": 1,
+															"name": "p2_rounds"
+														},
+														"opcode": "change_var"
+													},
+													{
+														"inputs": {
+															"body": [
+																{
+																	"inputs": {
+																		"name": "p1_score",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"name": "p2_score",
+																		"value": 0
+																	},
+																	"opcode": "set_var"
+																},
+																{
+																	"inputs": {
+																		"by": 1,
+																		"name": "round"
+																	},
+																	"opcode": "change_var"
+																},
+																{
+																	"inputs": {
+																		"x": 240.0,
+																		"y": 176.0
+																	},
+																	"opcode": "go_to"
+																},
+																{
+																	"inputs": {
+																		"direction": {
+																			"inputs": {
+																				"a": 270.0,
+																				"b": {
+																					"inputs": {
+																						"from": -45.0,
+																						"to": 45.0
+																					},
+																					"opcode": "random"
+																				}
+																			},
+																			"opcode": "add"
+																		}
+																	},
+																	"opcode": "point_in_direction"
+																},
+																{
+																	"inputs": {
+																		"seconds": 1.0
+																	},
+																	"opcode": "wait_seconds"
+																}
+															],
+															"condition": {
+																"inputs": {
+																	"a": {
+																		"inputs": {
+																			"name": "p2_rounds"
+																		},
+																		"opcode": "variable"
+																	},
+																	"b": 2
+																},
+																"opcode": "less_than"
+															}
+														},
+														"opcode": "if"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p2_score"
+															},
+															"opcode": "variable"
+														},
+														"b": 4
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 240,
+			"y": 176
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "P1Hud",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"size": "large",
+												"text": {
+													"inputs": {
+														"name": "p1_score"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "say"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 32,
+			"y": 32
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "P2Hud",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"size": "large",
+												"text": {
+													"inputs": {
+														"name": "p2_score"
+													},
+													"opcode": "variable"
+												}
+											},
+											"opcode": "say"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": 448,
+			"y": 32
+		},
+		{
+			"color": "#ffffff00",
+			"h": 16,
+			"name": "Announcer",
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"body": [
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 240.0,
+															"y": 176.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"size": "large",
+															"text": "P1 WINS"
+														},
+														"opcode": "say"
+													},
+													{
+														"inputs": {
+															"mode": "all"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p1_rounds"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										},
+										{
+											"inputs": {
+												"body": [
+													{
+														"inputs": {
+															"x": 240.0,
+															"y": 176.0
+														},
+														"opcode": "go_to"
+													},
+													{
+														"inputs": {
+															"size": "large",
+															"text": "P2 WINS"
+														},
+														"opcode": "say"
+													},
+													{
+														"inputs": {
+															"mode": "all"
+														},
+														"opcode": "stop"
+													}
+												],
+												"condition": {
+													"inputs": {
+														"a": {
+															"inputs": {
+																"name": "p2_rounds"
+															},
+															"opcode": "variable"
+														},
+														"b": 1
+													},
+													"opcode": "greater_than"
+												}
+											},
+											"opcode": "if"
+										}
+									]
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				}
+			],
+			"w": 16,
+			"x": -400,
+			"y": -400
+		}
+	],
+	"variables": [
+		{
+			"name": "p1_score",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "p2_score",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "p1_rounds",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "p2_rounds",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "round",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "speed",
+			"scope": "Ball",
+			"value": 0
+		},
+		{
+			"name": "left_paddle_y",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "right_paddle_y",
+			"scope": "global",
+			"value": 0
+		}
+	]
+}

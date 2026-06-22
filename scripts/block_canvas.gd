@@ -138,13 +138,12 @@ func _ready() -> void:
 func load_script(script: Array) -> void:
 	_cancel_drag()
 	_stacks.clear()
-	var y := 12.0
 	for block in script:
 		if typeof(block) != TYPE_DICTIONARY:
 			continue
-		_stacks.append({"blocks": [block.duplicate(true)], "pos": Vector2(12, y)})
-		y += 150.0  # rough vertical spread; the user drags from here
+		_stacks.append({"blocks": [block.duplicate(true)], "pos": Vector2(12, 12)})
 	_render()
+	_reflow_stacks()  # flow by measured height so tall hats don't overlap
 
 
 ## Serialize the edited canvas back to the runtime's script shape: a flat Array of
@@ -167,11 +166,9 @@ func export_script() -> Array:
 ## placed below the existing stacks; the user drags it wherever they like, exactly as for a hat
 ## dropped from the palette. `block` must be freshly made (BlockView.make_block) so it owns its data.
 func add_definition(block: Dictionary) -> void:
-	var y := 12.0
-	for stack in _stacks:
-		y = maxf(y, stack["pos"].y + 120.0)
-	_stacks.append({"blocks": [block], "pos": Vector2(12, y)})
+	_stacks.append({"blocks": [block], "pos": Vector2(12, 12)})
 	_render()
+	_reflow_stacks()  # place it below the existing stacks, using their measured heights
 
 
 ## Re-render every stack from the current data without otherwise touching it. The editor
@@ -250,6 +247,31 @@ func _fit_to_content(extent: Vector2) -> void:
 	if view != null:
 		floor_size = view.size
 	custom_minimum_size = (extent + Vector2(_CONTENT_MARGIN, _CONTENT_MARGIN)).max(floor_size)
+
+
+## Flow the top-level stacks top-to-bottom using their *rendered* heights, so a tall hat
+## (a when-flag-clicked with several blocks, or a forever) never overlaps the group below
+## it. Used only on the default-layout paths (load_script / add_definition); a grab/drop
+## re-render keeps each stack's stored position, so a user's hand-placed layout survives.
+## Awaits one frame first: a freshly built block tree doesn't have its nested minimum sizes
+## propagated until the next layout pass, so measuring immediately reads heights too small
+## (the under-spacing that left the groups overlapping). After the frame, each ctrl.size is
+## final; we write the flowed positions back into _stacks and re-apply them to the controls.
+const _FLOW_GAP := 24.0
+func _reflow_stacks() -> void:
+	await get_tree().process_frame
+	var children := _layer.get_children()
+	if children.size() != _stacks.size():
+		return  # rendered tree out of step with the data (e.g. re-rendered meanwhile)
+	var y := 12.0
+	var extent := Vector2.ZERO
+	for i in range(_stacks.size()):
+		var ctrl := children[i] as Control
+		ctrl.position = Vector2(12, y)
+		_stacks[i]["pos"] = ctrl.position
+		extent = extent.max(ctrl.position + ctrl.size)
+		y += ctrl.size.y + _FLOW_GAP
+	_fit_to_content(extent)
 
 
 ## Make a rendered subtree transparent to mouse picking, so this canvas's _input sees
@@ -378,16 +400,24 @@ func _input(event: InputEvent) -> void:
 			# in progress legitimately travels off-canvas, e.g. onto the palette trash, M16.)
 			if not _in_view(event.position):
 				return
+			# Scope every press-time hit-test to the front-most stack actually under the cursor, so
+			# a click never reaches a field, dropdown, or block belonging to a stack drawn *behind*
+			# it. Block bodies are mouse-transparent (_passthrough leaves only literal fields
+			# interactive), so without this an occluded field would catch the press — see
+			# _front_stack_at. null means empty canvas: nothing to grab, let the event fall through.
+			var root := _front_stack_at(event.position)
+			if root == null:
+				return
 			# A press on an editable literal field (M12) belongs to that field: let it
 			# fall through to GUI focus/editing rather than grabbing the block.
-			if _over_literal(event.position):
+			if _over_literal(root, event.position):
 				return
 			# Grabbing anything else commits whatever field was being edited.
 			get_viewport().gui_release_focus()
 			# A press on a define hat's prototype parameter pill (M31) spawns a *fresh copy* of
 			# that `param` reporter (Scratch's "drag a copy of the argument out"), checked before
 			# _reporter_at / _block_at so it wins over the hat it sits in.
-			var spawn := _spawn_at(event.position)
+			var spawn := _spawn_at(root, event.position)
 			if not spawn.is_empty():
 				_state = _PENDING
 				_press_pos = event.position
@@ -398,8 +428,8 @@ func _input(event: InputEvent) -> void:
 			# A press on a reporter pill grabs *that reporter* out of its slot (M15), checked
 			# before _block_at so the pill wins over the statement it sits in; otherwise grab
 			# the statement block under the cursor (M9).
-			var rep := _reporter_at(event.position)
-			var hit: Dictionary = rep if not rep.is_empty() else _block_at(event.position)
+			var rep := _reporter_at(root, event.position)
+			var hit: Dictionary = rep if not rep.is_empty() else _block_at(root, event.position)
 			if not hit.is_empty():
 				_state = _PENDING
 				_press_pos = event.position
@@ -422,13 +452,32 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 
-## The deepest statement block under a global point: among every tagged panel whose
-## rect contains the point, the smallest-area one — so a click inside a forever's body
-## grabs the inner block, not the forever. Returns {array, index} or {} if none.
-func _block_at(global_point: Vector2) -> Dictionary:
+## The front-most top-level stack actually under a global point — the highest-z (last) child of
+## _layer one of whose rendered block panels contains the point. Press-time hit-testing is scoped
+## to this stack (see _input), so a press never reaches a field, dropdown, or block of a stack drawn
+## behind the one under the cursor: the block bodies are mouse-transparent (_passthrough), so without
+## this an occluded field would catch the press. Tested against the actual panels, not the stack
+## root's bounding rect, so a click in a short stack's empty right-hand margin correctly falls through
+## to whatever sits behind it there. Returns null when no stack covers the point (empty canvas).
+func _front_stack_at(global_point: Vector2) -> Control:
+	var children := _layer.get_children()
+	for i in range(children.size() - 1, -1, -1):
+		var root := children[i] as Control
+		if root == null:
+			continue
+		for panel in _tagged_panels(root):
+			if (panel as Control).get_global_rect().has_point(global_point):
+				return root
+	return null
+
+
+## The deepest statement block under a global point, within `root` (the front stack): among every
+## tagged panel whose rect contains the point, the smallest-area one — so a click inside a forever's
+## body grabs the inner block, not the forever. Returns {array, index} or {} if none.
+func _block_at(root: Node, global_point: Vector2) -> Dictionary:
 	var best: Control = null
 	var best_area := INF
-	for panel in _tagged_panels(_layer):
+	for panel in _tagged_panels(root):
 		var rect: Rect2 = panel.get_global_rect()
 		if rect.has_point(global_point):
 			var area := rect.size.x * rect.size.y
@@ -459,9 +508,10 @@ func _in_view(global_point: Vector2) -> bool:
 ## True when a global point lands on an editable input widget — a literal field (M12) or
 ## an enum dropdown (M13). The press handler uses this to defer to the widget instead of
 ## starting a block drag (so the field takes focus / the dropdown opens). The widget is
-## always smaller than the block it sits in, so checking it first lets the inner one win.
-func _over_literal(global_point: Vector2) -> bool:
-	for field in _literal_fields(_layer):
+## always smaller than the block it sits in, so checking it first lets the inner one win. Scoped to
+## `root` (the front stack), so a field belonging to a stack drawn behind it never claims the press.
+func _over_literal(root: Node, global_point: Vector2) -> bool:
+	for field in _literal_fields(root):
 		if (field as Control).get_global_rect().has_point(global_point):
 			return true
 	return false
@@ -483,10 +533,10 @@ func _literal_fields(node: Node, out: Array = []) -> Array:
 ## _begin_reporter_drag to detach the dict, restore the slot's default, and anchor the ghost
 ## — or {} if no pill is under the point. (A press on a pill's inner literal field is taken by
 ## _over_literal first, so the field still edits; only the pill's own body/border lands here.)
-func _reporter_at(global_point: Vector2) -> Dictionary:
+func _reporter_at(root: Node, global_point: Vector2) -> Dictionary:
 	var best: Control = null
 	var best_area := INF
-	for slot in _slots(_layer):
+	for slot in _slots(root):
 		var inputs: Dictionary = slot.get_meta("slot_inputs")
 		var key := String(slot.get_meta("slot_key"))
 		if typeof(inputs.get(key)) != TYPE_DICTIONARY:
@@ -508,10 +558,10 @@ func _reporter_at(global_point: Vector2) -> Dictionary:
 ## {spawn_opcode, spawn_name} so _begin_drag can mint a fresh copy, or {} if none is under the point.
 ## Checked before _reporter_at / _block_at so pressing a prototype pill spawns a copy rather than
 ## grabbing the hat it sits in.
-func _spawn_at(global_point: Vector2) -> Dictionary:
+func _spawn_at(root: Node, global_point: Vector2) -> Dictionary:
 	var best: Control = null
 	var best_area := INF
-	for pill in _spawnables(_layer):
+	for pill in _spawnables(root):
 		var rect: Rect2 = (pill as Control).get_global_rect()
 		if rect.has_point(global_point):
 			var area := rect.size.x * rect.size.y

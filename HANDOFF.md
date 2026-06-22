@@ -55,6 +55,13 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
     health bar that drops over 3 hits; they don't pile onto each other or onto you, and the whole horde
     **freezes for a beat** each time one tags you (you flash + get knocked back); counter falls 5→0 then
     "GAME OVER".
+- **Editor fix (alongside the zombie work):** top-level stacks no longer overlap on load. `load_script`/
+  `add_definition` used a fixed vertical spread (`+150`/`+120`px) that was far shorter than a tall hat
+  (a `when flag clicked` with several blocks, or a `forever`), so groups overlapped — and re-flowed
+  that way on every sprite switch / reopen, since canvas layout isn't persisted. New
+  `BlockCanvas._reflow_stacks()` flows the stacks by their **measured** heights (it `await`s one
+  `process_frame` first so the freshly-built nested min-sizes have propagated), called only on the
+  default-layout paths so hand-dragged positions still survive the session.
 - **Last shipped:** M41 — **animation blocks** (tween a variable over time). One new statement opcode,
   **`animate {name} to {value} over {seconds} secs {easing}`** (new slate-orchid `"animation"` palette
   category), with `{easing}` ∈ {`linear`, `ease in`, `ease out`}. `{name}` is a data-scoped variables

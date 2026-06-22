@@ -4,54 +4,54 @@
 		"color": "#87cefa59",
 		"show": true,
 		"snap": true,
-		"step": 8
+		"step": 8.0
 	},
 	"scripts": [
 		{
-			"color": "#e6e6f2",
-			"h": 96,
-			"name": "LeftPaddle",
+			"color": "#ffffff",
+			"h": 16,
+			"name": "Player",
 			"script": [],
 			"w": 16,
-			"x": 32,
-			"y": 176
+			"x": 240,
+			"y": 180
 		}
 	],
 	"variables": [
 		{
 			"name": "p1_score",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "p2_score",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "p1_rounds",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "p2_rounds",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "round",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "left_paddle_y",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		},
 		{
 			"name": "right_paddle_y",
 			"scope": "global",
-			"value": 0
+			"value": 0.0
 		}
 	]
 }
