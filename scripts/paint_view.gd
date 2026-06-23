@@ -530,6 +530,10 @@ func _rebuild_swatches() -> void:
 	if _swatch_grid == null:
 		return
 	for child in _swatch_grid.get_children():
+		# remove_child immediately (queue_free alone is deferred, so the old buttons would still be
+		# children when _highlight_swatches runs below — it would colour those, freed next frame, and
+		# leave the freshly-added ones grey until the next rebuild).
+		_swatch_grid.remove_child(child)
 		child.queue_free()
 	for i in _display_palette.size():
 		var b := Button.new()
