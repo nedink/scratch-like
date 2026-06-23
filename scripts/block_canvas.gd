@@ -99,6 +99,17 @@ var _pending_spawn := false      # the pending press was on a spawnable prototyp
 var _trashing := false           # the ghost is currently over the palette -> a drop deletes it (M16)
 var _spawn_scope_body: Variant = null  # (M31) when dragging a `param`, the define body Array its drops are confined to; null otherwise
 
+## --- Multi-block selection (M46) ---
+## References to the selected *statement* block dicts (identity, via is_same). Editor-only UI state —
+## like a stack's canvas position, it is never serialized (export_script() is untouched). It survives
+## _render() because the block dicts in _stacks persist (only the Control tree is rebuilt), so a panel's
+## blk_array[blk_index] resolves back to the same dict. Reporter pills are not selectable: double-click's
+## "block + everything after it in this script" and rubber-band are statement-level gestures.
+var _selected: Array = []
+var _marquee := false            # the drag is a rubber-band selection over empty canvas (not a block drag)
+var _marquee_base: Array = []    # selection snapshot captured when an additive (Shift) marquee started
+var _marquee_panel: Panel        # the rubber-band rectangle overlay (a direct child of the canvas, not _layer)
+
 ## The palette region, set by the editor (editor.gd) — dragging a block back over it and
 ## releasing **deletes** it (Scratch's own gesture, M16). Left null when unset (no trash).
 var _trash: Control
@@ -131,12 +142,26 @@ func _ready() -> void:
 	_highlight.visible = false
 	add_child(_highlight)
 
+	# The rubber-band selection rectangle (M46): a faint sky-blue fill + thin border, shown while a
+	# marquee drag is in progress. A direct child of the canvas (not _layer), so _render never frees it.
+	_marquee_panel = Panel.new()
+	_marquee_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mq := StyleBoxFlat.new()
+	mq.bg_color = Color(0.29, 0.82, 1.0, 0.12)
+	mq.border_color = Color("#4ad0ff")
+	mq.set_border_width_all(1)
+	mq.set_corner_radius_all(2)
+	_marquee_panel.add_theme_stylebox_override("panel", mq)
+	_marquee_panel.visible = false
+	add_child(_marquee_panel)
+
 
 ## Load a sprite's script for editing. Deep-duplicated so dragging mutates only this
 ## working copy, not the array passed in. Each top-level block becomes one stack, laid
 ## out down the canvas.
 func load_script(script: Array) -> void:
 	_cancel_drag()
+	_selected = []  # a sprite switch starts with nothing selected (M46)
 	_stacks.clear()
 	for block in script:
 		if typeof(block) != TYPE_DICTIONARY:
@@ -253,6 +278,7 @@ func _render() -> void:
 		ctrl.position = stack["pos"]
 		ctrl.size = ctrl.get_combined_minimum_size()
 		extent = extent.max(ctrl.position + ctrl.size)
+	_apply_selection_highlight()  # outline the selected blocks (M46)
 	_fit_to_content(extent)
 
 
@@ -412,8 +438,14 @@ func _input(event: InputEvent) -> void:
 	# the visible surface, so a press on the stage view can't grab a stale (scrolled-off) block here.
 	if not is_visible_in_tree():
 		return
+	if event is InputEventKey:
+		_handle_key(event as InputEventKey)  # Delete / Cmd+D on the selection (M46)
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
+			# Modifier / double-click flags for selection (M46), captured before any early return.
+			var additive := event.shift_pressed or event.meta_pressed or event.ctrl_pressed
+			var double_click := event.double_click
 			# A ScrollContainer only clips *rendering*: a block scrolled above the viewport keeps a
 			# global rect that overlaps the chrome above the canvas (the top bar's sprite selector).
 			# Ignore a press outside the visible canvas region so it falls through to that chrome
@@ -428,6 +460,17 @@ func _input(event: InputEvent) -> void:
 			# _front_stack_at. null means empty canvas: nothing to grab, let the event fall through.
 			var root := _front_stack_at(event.position)
 			if root == null:
+				# A press on the ScrollContainer's scrollbar must still drive scrolling — don't start a
+				# marquee there (the old empty-canvas fall-through let the scrollbar grab it).
+				if _over_scrollbar(event.position):
+					return
+				# Empty canvas (M46): begin a rubber-band selection if the press turns into a drag;
+				# a plain click here (no drag) clears the selection. Commit any open field edit first.
+				get_viewport().gui_release_focus()
+				_state = _PENDING
+				_press_pos = event.position
+				_pending = {"marquee": true, "additive": additive}
+				get_viewport().set_input_as_handled()
 				return
 			# A press on an editable literal field (M12) belongs to that field: let it
 			# fall through to GUI focus/editing rather than grabbing the block.
@@ -455,21 +498,37 @@ func _input(event: InputEvent) -> void:
 				_state = _PENDING
 				_press_pos = event.position
 				_pending = hit
+				_pending["double"] = double_click  # (M46) click-select on release
+				_pending["additive"] = additive
 				_pending_reporter = not rep.is_empty()
 				get_viewport().set_input_as_handled()
 		elif not event.pressed:
 			if _state == _DRAGGING:
-				_drop()
+				if _marquee:
+					_finish_marquee()
+				else:
+					_drop()
 				get_viewport().set_input_as_handled()
 			elif _state == _PENDING:
-				_state = _IDLE  # a plain click, never moved — leave the block be
+				_on_pending_click()  # a press released without moving — a click (M46)
+				_pending_reporter = false
+				_pending_spawn = false
+				_pending = {}
+				_state = _IDLE
 	elif event is InputEventMouseMotion:
 		if _state == _PENDING and event.position.distance_to(_press_pos) > DRAG_THRESHOLD:
-			_begin_drag()
-			_update_drag(event.position)
+			if _pending.get("marquee", false):
+				_begin_marquee()
+				_update_marquee(event.position)
+			else:
+				_begin_drag()
+				_update_drag(event.position)
 			get_viewport().set_input_as_handled()
 		elif _state == _DRAGGING:
-			_update_drag(event.position)
+			if _marquee:
+				_update_marquee(event.position)
+			else:
+				_update_drag(event.position)
 			get_viewport().set_input_as_handled()
 
 
@@ -668,6 +727,15 @@ func _begin_drag() -> void:
 	var arr: Array = _pending["array"]
 	var index: int = _pending["index"]
 
+	# Multi-block move (M46): if the grabbed block is part of a 2+ selection, gather the whole
+	# selection (topmost-selected, in document order) and drag it as one run, leaving the rest behind.
+	var grabbed_block: Variant = arr[index] if index < arr.size() else null
+	if grabbed_block != null and _selected.size() >= 2 and _is_selected(grabbed_block):
+		_begin_multi_drag()
+		return
+	# Dragging a single / unselected block manipulates just that run — drop any standing selection.
+	_selected = []
+
 	# Anchor the ghost so the grabbed block sits exactly where it was on press.
 	var origin := _grabbed_block_top_left(arr, index)
 	_grab_offset = _press_pos - origin
@@ -795,6 +863,10 @@ func _clear_drag_overlays() -> void:
 	_pending_spawn = false
 	_trashing = false
 	_spawn_scope_body = null
+	_marquee = false
+	_marquee_base = []
+	if _marquee_panel != null:
+		_marquee_panel.visible = false
 	_state = _IDLE
 	_pending = {}
 
@@ -927,3 +999,269 @@ func _grabbed_block_top_left(arr: Array, index: int) -> Vector2:
 		if is_same(panel.get_meta("blk_array"), arr) and int(panel.get_meta("blk_index")) == index:
 			return panel.get_global_rect().position
 	return _press_pos
+
+
+# --- Multi-block selection (M46) -------------------------------------------
+#
+# Selection is a set of statement-block dicts (by identity). It is editor-only UI state, never
+# serialized. Three ways in — click (Shift/Cmd to toggle), double-click (the block + everything after
+# it in this script), and rubber-band over empty canvas — and three things you can do with it: delete
+# (Delete/Backspace, or drag onto the palette/trash), move together (drag any selected block), and
+# duplicate (Cmd/Ctrl+D). The drag and trash paths reuse the existing _begin_drag / _drop machinery.
+
+## The block dict a rendered statement panel stands for, via the blk_array/blk_index meta BlockView
+## stamps. null if the index is stale (shouldn't happen between renders).
+func _block_of(panel: Control) -> Variant:
+	var arr: Array = panel.get_meta("blk_array")
+	var idx := int(panel.get_meta("blk_index"))
+	return arr[idx] if idx >= 0 and idx < arr.size() else null
+
+
+func _is_selected(block: Variant) -> bool:
+	for b in _selected:
+		if is_same(b, block):
+			return true
+	return false
+
+
+func _toggle_selected(block: Variant) -> void:
+	for i in range(_selected.size()):
+		if is_same(_selected[i], block):
+			_selected.remove_at(i)
+			return
+	_selected.append(block)
+
+
+## The selected statement blocks in document order, excluding any whose ancestor block is also selected
+## (so a selected `forever` and a block inside it collapse to just the `forever` — its body travels with
+## it). Each entry is {array, block}: the live Array it sits in (for removal / move) and the block dict.
+## Shared by delete, multi-drag, and duplicate.
+func _topmost_selected_in_order() -> Array:
+	var out: Array = []
+	for stack in _stacks:
+		_collect_topmost(stack["blocks"], false, out)
+	return out
+
+
+func _collect_topmost(blocks: Array, ancestor_selected: bool, out: Array) -> void:
+	for block in blocks:
+		if typeof(block) != TYPE_DICTIONARY:
+			continue
+		var sel := _is_selected(block)
+		if sel and not ancestor_selected:
+			out.append({"array": blocks, "block": block})
+		var body: Variant = (block.get("inputs", {}) as Dictionary).get("body")
+		if body is Array:
+			_collect_topmost(body, ancestor_selected or sel, out)
+
+
+## Outline every selected statement panel after a render — duplicate its category stylebox and add a
+## white border, so selection reads at a glance without touching BlockView. Cheap (no rebuild); called
+## at the end of _render, so it re-applies cleanly each time the tree is rebuilt (incl. live marquee).
+func _apply_selection_highlight() -> void:
+	if _selected.is_empty():
+		return
+	for panel in _tagged_panels(_layer):
+		var block := _block_of(panel)
+		if block == null or not _is_selected(block):
+			continue
+		var sb := (panel as Control).get_theme_stylebox("panel")
+		if sb is StyleBoxFlat:
+			var hi := (sb as StyleBoxFlat).duplicate()
+			hi.set_border_width_all(3)
+			hi.border_color = Color.WHITE
+			(panel as Control).add_theme_stylebox_override("panel", hi)
+
+
+## A press released without crossing the drag threshold — a click. Updates the selection: a click on a
+## statement block selects it (Shift/Cmd toggles; double-click selects its run — the block + following
+## siblings at that body level), and a click on empty canvas clears the selection. Reporter / spawn-pill
+## / literal presses don't select (they have their own gestures, or fell through to GUI).
+func _on_pending_click() -> void:
+	if _pending.get("marquee", false):
+		if not _selected.is_empty():
+			_selected = []
+			_render()
+		return
+	if _pending_reporter or _pending_spawn or not _pending.has("array"):
+		return
+	var arr: Array = _pending["array"]
+	var index: int = _pending["index"]
+	if index < 0 or index >= arr.size():
+		return
+	var block: Variant = arr[index]
+	var additive: bool = _pending.get("additive", false)
+	if _pending.get("double", false):
+		if not additive:
+			_selected = []
+		for b in arr.slice(index):
+			if not _is_selected(b):
+				_selected.append(b)
+	elif additive:
+		_toggle_selected(block)
+	else:
+		_selected = [block]
+	_render()
+
+
+# --- Rubber-band selection -------------------------------------------------
+
+## Start a marquee drag over empty canvas. Snapshots the current selection when additive (Shift), so the
+## rubber-band adds to it; otherwise the rectangle replaces the selection.
+func _begin_marquee() -> void:
+	_marquee = true
+	_marquee_base = _selected.duplicate() if _pending.get("additive", false) else []
+	_marquee_panel.visible = true
+	_state = _DRAGGING
+
+
+## Size the rubber-band rectangle and reselect the statement panels it covers (union with the additive
+## base). Re-renders to refresh the highlights live; the marquee overlay is a direct child of the canvas
+## (not _layer), so _render leaves it alone.
+func _update_marquee(global_point: Vector2) -> void:
+	var rect := _rect_from_points(_press_pos, global_point)  # global space
+	_marquee_panel.position = rect.position - global_position
+	_marquee_panel.size = rect.size
+	var sel: Array = _marquee_base.duplicate()
+	for panel in _tagged_panels(_layer):
+		if not (panel as Control).get_global_rect().intersects(rect):
+			continue
+		var block := _block_of(panel)
+		if block != null and not _contains_same(sel, block):
+			sel.append(block)
+	_selected = sel
+	_render()
+
+
+func _finish_marquee() -> void:
+	_marquee = false
+	_marquee_base = []
+	_marquee_panel.visible = false
+	_state = _IDLE
+	_pending = {}
+
+
+## True when a global point lands on a visible scrollbar of the enclosing ScrollContainer — so an
+## empty-canvas press there is left to scroll rather than starting a marquee.
+func _over_scrollbar(global_point: Vector2) -> bool:
+	var view := get_parent()
+	if view is ScrollContainer:
+		var vb := (view as ScrollContainer).get_v_scroll_bar()
+		var hb := (view as ScrollContainer).get_h_scroll_bar()
+		if vb != null and vb.visible and vb.get_global_rect().has_point(global_point):
+			return true
+		if hb != null and hb.visible and hb.get_global_rect().has_point(global_point):
+			return true
+	return false
+
+
+func _contains_same(arr: Array, block: Variant) -> bool:
+	for b in arr:
+		if is_same(b, block):
+			return true
+	return false
+
+
+func _rect_from_points(a: Vector2, b: Vector2) -> Rect2:
+	var tl := Vector2(minf(a.x, b.x), minf(a.y, b.y))
+	return Rect2(tl, Vector2(maxf(a.x, b.x), maxf(a.y, b.y)) - tl)
+
+
+# --- Multi-block move / delete / duplicate ---------------------------------
+
+## Gather a 2+ selection into one run and drag it together (M46). Removes each topmost-selected block
+## from its array (by identity — not Array.erase, which compares dicts by value and could mis-match two
+## equal blocks), drops any emptied top-level stack, and floats the gathered blocks as a single ghost
+## stack. From there the normal _drop snaps the run into a gap, lands it free, or (over the palette,
+## M16) deletes it. Selection is cleared as part of the pickup.
+func _begin_multi_drag() -> void:
+	var picks := _topmost_selected_in_order()
+	if picks.is_empty():
+		return
+	# Anchor the ghost to the block actually under the cursor (measured before removal), so the run
+	# doesn't jump to a different selected block's position when the pickup begins.
+	var arr: Array = _pending["array"]
+	var index: int = _pending["index"]
+	var grabbed_block: Variant = arr[index] if index < arr.size() else picks[0]["block"]
+	_grab_offset = _press_pos - _panel_top_left_of(grabbed_block)
+	_grabbed = []
+	for pick in picks:
+		_grabbed.append(pick["block"])
+		_remove_block(pick["array"], pick["block"])
+	for s in range(_stacks.size() - 1, -1, -1):
+		if (_stacks[s]["blocks"] as Array).is_empty():
+			_stacks.remove_at(s)
+	_selected = []
+	_dragging_reporter = false
+	_render()
+	_ghost = BlockView.build_stack(_grabbed)
+	_passthrough(_ghost)
+	_ghost.modulate.a = 0.75
+	add_child(_ghost)
+	_ghost.size = _ghost.get_combined_minimum_size()
+	_state = _DRAGGING
+
+
+## Delete the current selection (M46) — the keyboard route (Delete/Backspace); dragging a selection onto
+## the palette deletes it via _begin_multi_drag + _drop's trash branch. Removes each topmost-selected
+## block (its body goes with it) and drops any emptied top-level stack.
+func _delete_selection() -> void:
+	for pick in _topmost_selected_in_order():
+		_remove_block(pick["array"], pick["block"])
+	for s in range(_stacks.size() - 1, -1, -1):
+		if (_stacks[s]["blocks"] as Array).is_empty():
+			_stacks.remove_at(s)
+	_selected = []
+	_render()
+
+
+## Duplicate the current selection (M46, Cmd/Ctrl+D): deep-copy the topmost-selected run into a new
+## free-floating stack offset from the originals, and select the copies so a further drag moves them.
+func _duplicate_selection() -> void:
+	var picks := _topmost_selected_in_order()
+	if picks.is_empty():
+		return
+	var copies: Array = []
+	for pick in picks:
+		copies.append((pick["block"] as Dictionary).duplicate(true))
+	var anchor := Vector2(24, 24)
+	if not _stacks.is_empty():
+		anchor = (_stacks[0]["pos"] as Vector2) + Vector2(30, 30)
+	_stacks.append({"blocks": copies, "pos": anchor})
+	_selected = copies
+	_render()
+
+
+## Remove `block` from `arr` by identity (the first is_same match).
+func _remove_block(arr: Array, block: Variant) -> void:
+	for i in range(arr.size()):
+		if is_same(arr[i], block):
+			arr.remove_at(i)
+			return
+
+
+## The on-screen top-left of the panel rendering `block`, by identity — used to anchor a multi-drag ghost
+## before the blocks are removed. Falls back to the press position if no panel is found.
+func _panel_top_left_of(block: Variant) -> Vector2:
+	for panel in _tagged_panels(_layer):
+		if is_same(_block_of(panel), block):
+			return panel.get_global_rect().position
+	return _press_pos
+
+
+# --- Keyboard -------------------------------------------------------------
+
+## Keyboard ops on the selection (M46): Delete/Backspace removes it, Cmd/Ctrl+D duplicates it. Ignored
+## while a text field is focused (so typing — incl. Delete — inside a literal is unaffected) or nothing
+## is selected. set_input_as_handled only when we actually act, so other keys propagate untouched.
+func _handle_key(event: InputEventKey) -> void:
+	if not event.pressed or event.echo or _selected.is_empty():
+		return
+	if get_viewport().gui_get_focus_owner() is LineEdit:
+		return
+	if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
+		_delete_selection()
+		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_D and (event.meta_pressed or event.ctrl_pressed):
+		_duplicate_selection()
+		get_viewport().set_input_as_handled()

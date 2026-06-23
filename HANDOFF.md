@@ -12,10 +12,22 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped (on `m41-animation-blocks`):** **M45 — pixel costume editor** (a third "Paint" editor
-  mode: pencil/eraser/fill/eyedropper on a pixel grid + palette; sprite costume stored as an optional
-  `{cw,ch,palette,pixels}` key, rendered no-stretch at RUN; falls back to flat `color`). See *Recently
-  shipped* below. (Prior: **M44 — lists**, the variable twin.)
+- **Just shipped (on `m41-animation-blocks`):** **M46 — multi-block selection in the editor canvas.**
+  Select statement blocks in the block canvas and act on them as a group: **click** (Shift/Cmd-click to
+  toggle), **double-click** (block + everything after it in that script), or **rubber-band** over empty
+  canvas; then **drag to move them together**, **Delete/Backspace** to delete, or **Cmd/Ctrl+D** to
+  duplicate. Pure editor-side, entirely in `block_canvas.gd` (`BlockView` untouched): no opcode, no
+  block-data-shape change, no runtime change. Selection is editor-only UI state (`_selected`, tracked by
+  block-dict identity, survives `_render`), never serialized; cleared on sprite switch. Repurposes the
+  two existing no-op gestures (plain click on a block; press on empty canvas) and reuses the M9 drag /
+  M16 trash machinery for move/delete. See *Recently shipped* below. (Prior: **M45 — pixel costume
+  editor**, a third "Paint" mode storing an optional `{cw,ch,palette,pixels}` costume key.)
+  - **F5-verify:** open the editor (Blocks mode). Click a block → white outline; Shift/Cmd-click more →
+    they stay outlined; double-click a mid-stack block → it + everything below it highlight; drag a box
+    over empty canvas → blocks under it highlight live (Shift-drag adds). With 2+ selected, drag one →
+    they move as one run (snap into a stack, or drop onto the palette to delete all); press Delete → all
+    gone; Cmd/Ctrl+D → a duplicate stack appears. Typing Delete inside a literal field still edits text.
+    Switch sprites → selection clears. RUN/SAVE are unaffected (selection leaves no trace in the data).
 - **In flight (on `m41-animation-blocks`):** **`zombie.json`** — a top-down zombie-survival game built
   in the block language, plus the **six new opcodes** it required (the existing block set couldn't
   express mouse-aim, homing, recolouring, click-to-fire, or a resizable costume):
