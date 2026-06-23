@@ -177,10 +177,13 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
     so a zoomed-in costume can be panned to its edges; centred when smaller than the viewport). Zoom is
     a multiplier on the fit-to-`_VIEW_BOX` base cell size (`_recompute_scale`), clamped `[0.5, 12]`,
     persisting across selection/costume changes. All in [`scripts/paint_view.gd`](scripts/paint_view.gd).
-  - **M45 bugfix:** Ctrl+wheel zoom required the cursor to be *exactly over a costume pixel*
+  - **M45 zoom bugfixes:** (1) Ctrl+wheel zoom required the cursor to be *exactly over a costume pixel*
     (`_cell_at(...).x >= 0`), so wheeling over the blank margin around a shrink-centred costume silently
-    did nothing — "zoom sometimes doesn't work." Now it tests the whole `_grid_scroll` viewport rect, so
-    a Ctrl+wheel anywhere over the grid area zooms.
+    did nothing — and zoom-OUT got stuck right at the point the grid first fits the viewport (it
+    re-centres and the cursor lands on the new margin). Now it tests the whole `_grid_scroll` viewport
+    rect, so a wheel anywhere over the grid area zooms. (2) The wheel modifier now accepts **Cmd (meta)
+    as well as Ctrl**, because macOS reserves Ctrl+scroll for system screen-zoom (so a Ctrl+wheel event
+    never reaches Godot on a Mac — Cmd+wheel is the working modifier there).
 - M44 — **lists (ordered collections), the structural twin of variables.** A list is a named `Array`
   with global / per-sprite-local scope, made / renamed / deleted from the palette's new **LISTS** group
   exactly like a variable. **Nine opcodes** (the full Scratch set): statements `list_add` /

@@ -224,7 +224,8 @@ func _build_chrome() -> void:
 
 	col.add_child(HSeparator.new())
 
-	# Zoom: − [percent] + , plus Ctrl+wheel over the grid (see _input).
+	# Zoom: − [percent] + , plus Ctrl/Cmd+wheel over the grid (see _input). The buttons always work
+	# regardless of cursor position — the reliable path when the wheel modifier is awkward.
 	var zoom_label := Label.new()
 	zoom_label.text = "Zoom"
 	col.add_child(zoom_label)
@@ -314,10 +315,12 @@ func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
 
-	# Ctrl+wheel anywhere over the grid's viewport zooms (a plain wheel falls through to scroll the
+	# Ctrl/Cmd+wheel anywhere over the grid's viewport zooms (a plain wheel falls through to scroll the
 	# ScrollContainer). We test the whole scroll rect, not just a grid cell, so wheeling over the
 	# blank margin around a shrink-centred costume still zooms instead of silently doing nothing.
-	if event is InputEventMouseButton and event.ctrl_pressed \
+	# Cmd (meta) is accepted too because macOS reserves Ctrl+scroll for system screen-zoom, so a
+	# Ctrl+wheel event never reaches us there — Cmd+wheel is the working modifier on a Mac.
+	if event is InputEventMouseButton and (event.ctrl_pressed or event.meta_pressed) \
 			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] \
 			and event.pressed and _grid_scroll != null \
 			and _grid_scroll.get_global_rect().has_point(event.position):
