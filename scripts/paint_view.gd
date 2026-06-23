@@ -314,10 +314,13 @@ func _input(event: InputEvent) -> void:
 	if not is_visible_in_tree():
 		return
 
-	# Ctrl+wheel over the grid zooms (a plain wheel falls through to scroll the ScrollContainer).
+	# Ctrl+wheel anywhere over the grid's viewport zooms (a plain wheel falls through to scroll the
+	# ScrollContainer). We test the whole scroll rect, not just a grid cell, so wheeling over the
+	# blank margin around a shrink-centred costume still zooms instead of silently doing nothing.
 	if event is InputEventMouseButton and event.ctrl_pressed \
 			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] \
-			and event.pressed and _cell_at(event.position).x >= 0:
+			and event.pressed and _grid_scroll != null \
+			and _grid_scroll.get_global_rect().has_point(event.position):
 		_on_zoom(_ZOOM_STEP if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / _ZOOM_STEP)
 		get_viewport().set_input_as_handled()
 		return

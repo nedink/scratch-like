@@ -177,6 +177,10 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
     so a zoomed-in costume can be panned to its edges; centred when smaller than the viewport). Zoom is
     a multiplier on the fit-to-`_VIEW_BOX` base cell size (`_recompute_scale`), clamped `[0.5, 12]`,
     persisting across selection/costume changes. All in [`scripts/paint_view.gd`](scripts/paint_view.gd).
+  - **M45 bugfix:** Ctrl+wheel zoom required the cursor to be *exactly over a costume pixel*
+    (`_cell_at(...).x >= 0`), so wheeling over the blank margin around a shrink-centred costume silently
+    did nothing — "zoom sometimes doesn't work." Now it tests the whole `_grid_scroll` viewport rect, so
+    a Ctrl+wheel anywhere over the grid area zooms.
 - M44 — **lists (ordered collections), the structural twin of variables.** A list is a named `Array`
   with global / per-sprite-local scope, made / renamed / deleted from the palette's new **LISTS** group
   exactly like a variable. **Nine opcodes** (the full Scratch set): statements `list_add` /
