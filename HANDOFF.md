@@ -171,6 +171,12 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
   bool widened to `enum Mode {BLOCKS, STAGE, PAINT}` + `_set_mode`. **No opcode, no block-data-shape
   change.** Deferred: multiple costumes / switching blocks, animation frames, undo, PNG import, shared
   palette, resize-canvas. *(code complete, uncommitted)*
+  - **M45 refinement (uncommitted):** the default costume palette is now the **16-colour PICO-8
+    palette** (canonical index order), and the Paint view has **zoom** — a `− [px] +` row in the tools
+    panel and **Ctrl+wheel** over the grid. The grid now lives in a `ScrollContainer` (shrink-centred,
+    so a zoomed-in costume can be panned to its edges; centred when smaller than the viewport). Zoom is
+    a multiplier on the fit-to-`_VIEW_BOX` base cell size (`_recompute_scale`), clamped `[0.5, 12]`,
+    persisting across selection/costume changes. All in [`scripts/paint_view.gd`](scripts/paint_view.gd).
 - M44 — **lists (ordered collections), the structural twin of variables.** A list is a named `Array`
   with global / per-sprite-local scope, made / renamed / deleted from the palette's new **LISTS** group
   exactly like a variable. **Nine opcodes** (the full Scratch set): statements `list_add` /

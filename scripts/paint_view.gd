@@ -47,16 +47,25 @@ const _DEFAULT_CH := 16
 const _MIN_RES := 4
 const _MAX_RES := 64
 
-## The target box (display px) the grid is scaled to fit — the zoom is derived so a small costume
-## fills it with big cells and a large one still fits (_recompute_scale).
+## The target box (display px) the grid is scaled to fit at zoom 1 — the base cell size is derived
+## so a small costume fills it with big cells and a large one still fits (_recompute_scale); the
+## user's zoom multiplies that base.
 const _VIEW_BOX := 384.0
 
-## The stock palette a fresh costume starts with — black/white/grey + a spread of distinct hues,
-## 12 entries (a tidy 4-column grid). Opaque "#rrggbb"; transparency is the -1 pixel sentinel.
+## Zoom multiplies the fit-derived base cell size; the grid lives in a ScrollContainer so a
+## zoomed-in costume can be panned to reach its edges. Stepped by _ZOOM_STEP, clamped to the range.
+const _ZOOM_MIN := 0.5
+const _ZOOM_MAX := 12.0
+const _ZOOM_STEP := 1.25
+
+## The stock palette a fresh costume starts with — the 16-colour **PICO-8** palette (the de facto
+## standard pixel-art palette), in its canonical index order (0 black … 15 peach), a tidy 4-column
+## grid. Opaque "#rrggbb"; transparency is the -1 pixel sentinel.
 const _DEFAULT_PALETTE := [
-	"#000000", "#ffffff", "#9d9d9d", "#e6194b",
-	"#3cb44b", "#4363d8", "#ffe119", "#f58231",
-	"#911eb4", "#46f0f0", "#f032e6", "#a9a9a9",
+	"#000000", "#1d2b53", "#7e2553", "#008751",
+	"#ab5236", "#5f574f", "#c2c3c7", "#fff1e8",
+	"#ff004d", "#ffa300", "#ffec27", "#00e436",
+	"#29adff", "#83769c", "#ff77a8", "#ffccaa",
 ]
 
 
@@ -120,9 +129,15 @@ var _loading: bool = false
 
 # Built-in-code chrome.
 var _grid: _PixelGrid
+var _grid_scroll: ScrollContainer
 var _swatch_grid: GridContainer
 var _color_picker: ColorPickerButton
 var _tool_group: ButtonGroup
+var _zoom_label: Label
+
+## User zoom multiplier on top of the fit-derived base cell size (see _recompute_scale). Persists
+## across selection / costume changes so the chosen zoom sticks while you work.
+var _zoom: float = 1.0
 
 # Drag state.
 var _state: int = _IDLE
@@ -147,15 +162,19 @@ func _build_chrome() -> void:
 	root.add_theme_constant_override("separation", 8)
 	add_child(root)
 
-	# Left: the grid, centred in the available space.
-	var grid_wrap := CenterContainer.new()
-	grid_wrap.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grid_wrap.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	root.add_child(grid_wrap)
+	# Left: the grid in a ScrollContainer, so zooming in past the viewport lets you pan to reach the
+	# costume's edges. The grid is shrink-centred, so when it's smaller than the viewport it sits
+	# centred (no scrollbars), and only scrolls once a zoom makes it overflow.
+	_grid_scroll = ScrollContainer.new()
+	_grid_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_grid_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	root.add_child(_grid_scroll)
 
 	_grid = _PixelGrid.new()
 	_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE  # we hit-test it manually from _input
-	grid_wrap.add_child(_grid)
+	_grid.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_grid.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_grid_scroll.add_child(_grid)
 
 	# Right: the tools panel.
 	var panel := PanelContainer.new()
@@ -205,6 +224,31 @@ func _build_chrome() -> void:
 
 	col.add_child(HSeparator.new())
 
+	# Zoom: − [percent] + , plus Ctrl+wheel over the grid (see _input).
+	var zoom_label := Label.new()
+	zoom_label.text = "Zoom"
+	col.add_child(zoom_label)
+
+	var zoom_row := HBoxContainer.new()
+	zoom_row.add_theme_constant_override("separation", 4)
+	col.add_child(zoom_row)
+	var zoom_out := Button.new()
+	zoom_out.text = "−"
+	zoom_out.custom_minimum_size = Vector2(32, 0)
+	zoom_out.pressed.connect(_on_zoom.bind(1.0 / _ZOOM_STEP))
+	zoom_row.add_child(zoom_out)
+	_zoom_label = Label.new()
+	_zoom_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_zoom_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	zoom_row.add_child(_zoom_label)
+	var zoom_in := Button.new()
+	zoom_in.text = "+"
+	zoom_in.custom_minimum_size = Vector2(32, 0)
+	zoom_in.pressed.connect(_on_zoom.bind(_ZOOM_STEP))
+	zoom_row.add_child(zoom_in)
+
+	col.add_child(HSeparator.new())
+
 	var clear_button := Button.new()
 	clear_button.text = "Clear all"
 	clear_button.pressed.connect(_on_clear)
@@ -212,6 +256,7 @@ func _build_chrome() -> void:
 
 	_rebuild_swatches()
 	_update_picker_from_active()
+	_update_zoom_label()
 
 
 # --- Editor entry points (mirroring StageView.set_model / set_selected / refresh) -------------
@@ -253,6 +298,7 @@ func _sync_from_model() -> void:
 		_active_index = 0
 	_recompute_scale()
 	_push_grid()
+	_update_zoom_label()
 	_rebuild_swatches()
 	_update_picker_from_active()
 
@@ -266,6 +312,14 @@ func _input(event: InputEvent) -> void:
 	# Shares the OS window with the other editor surfaces and still receives _input while hidden
 	# (the mode toggle); ignore events unless we're the visible surface.
 	if not is_visible_in_tree():
+		return
+
+	# Ctrl+wheel over the grid zooms (a plain wheel falls through to scroll the ScrollContainer).
+	if event is InputEventMouseButton and event.ctrl_pressed \
+			and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] \
+			and event.pressed and _cell_at(event.position).x >= 0:
+		_on_zoom(_ZOOM_STEP if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1.0 / _ZOOM_STEP)
+		get_viewport().set_input_as_handled()
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -423,6 +477,7 @@ func _ensure_costume() -> void:
 	_display_pixels = costume["pixels"]
 	_recompute_scale()
 	_push_grid()
+	_update_zoom_label()
 	_rebuild_swatches()
 
 
@@ -547,10 +602,26 @@ func _push_grid() -> void:
 
 var _scale: float = 16.0
 
-## Derive the display zoom so the costume fits _VIEW_BOX with whole-pixel cells (>= 1px).
+## Derive the display cell size: a fit-to-_VIEW_BOX base (whole pixels, >= 1px) times the user zoom.
 func _recompute_scale() -> void:
 	var longest := maxi(_display_cw, _display_ch)
-	_scale = maxf(1.0, floor(_VIEW_BOX / float(maxi(1, longest))))
+	var base := maxf(1.0, floor(_VIEW_BOX / float(maxi(1, longest))))
+	_scale = maxf(1.0, floor(base * _zoom))
+
+
+## Step the zoom by a factor (the − / + buttons and Ctrl+wheel), clamped, then re-scale the grid.
+func _on_zoom(factor: float) -> void:
+	_zoom = clampf(_zoom * factor, _ZOOM_MIN, _ZOOM_MAX)
+	_recompute_scale()
+	_push_grid()
+	_update_zoom_label()
+
+
+## Show the current zoom as the effective cell size (display px per costume pixel) — concrete and
+## avoids needing percent glyphs the editor font lacks (this is GUI-font text, so % is fine anyway).
+func _update_zoom_label() -> void:
+	if _zoom_label:
+		_zoom_label.text = str(int(_scale)) + "px"
 
 
 static func _make_empty(cw: int, ch: int) -> Array:
