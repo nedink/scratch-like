@@ -1063,12 +1063,14 @@ func _apply_selection_highlight() -> void:
 	if _selected.is_empty():
 		return
 	for panel in _tagged_panels(_layer):
-		var block := _block_of(panel)
+		var block: Variant = _block_of(panel)
 		if block == null or not _is_selected(block):
 			continue
 		var sb := (panel as Control).get_theme_stylebox("panel")
 		if sb is StyleBoxFlat:
-			var hi := (sb as StyleBoxFlat).duplicate()
+			# duplicate() is statically typed Resource, so cast back to StyleBoxFlat before touching its
+			# members (else unsafe-access warnings, which are errors here).
+			var hi := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
 			hi.set_border_width_all(3)
 			hi.border_color = Color.WHITE
 			(panel as Control).add_theme_stylebox_override("panel", hi)
@@ -1127,7 +1129,7 @@ func _update_marquee(global_point: Vector2) -> void:
 	for panel in _tagged_panels(_layer):
 		if not (panel as Control).get_global_rect().intersects(rect):
 			continue
-		var block := _block_of(panel)
+		var block: Variant = _block_of(panel)
 		if block != null and not _contains_same(sel, block):
 			sel.append(block)
 	_selected = sel
