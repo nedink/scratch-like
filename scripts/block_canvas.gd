@@ -100,11 +100,13 @@ var _trashing := false           # the ghost is currently over the palette -> a 
 var _spawn_scope_body: Variant = null  # (M31) when dragging a `param`, the define body Array its drops are confined to; null otherwise
 
 ## --- Multi-block selection (M46) ---
-## References to the selected *statement* block dicts (identity, via is_same). Editor-only UI state —
-## like a stack's canvas position, it is never serialized (export_script() is untouched). It survives
-## _render() because the block dicts in _stacks persist (only the Control tree is rebuilt), so a panel's
-## blk_array[blk_index] resolves back to the same dict. Reporter pills are not selectable: double-click's
-## "block + everything after it in this script" and rubber-band are statement-level gestures.
+## References to the selected block dicts (identity, via is_same) — statement blocks *and* reporter
+## pills. Editor-only UI state — like a stack's canvas position, it is never serialized (export_script()
+## is untouched). It survives _render() because the block dicts in _stacks persist (only the Control tree
+## is rebuilt), so a panel's blk_array[blk_index] (a statement) or a slot's inputs[key] (a pill) resolves
+## back to the same dict. A click selects a statement or a pill; double-click selects that block plus all
+## of its nested children (a C-block's body, a reporter's input pills — _select_subtree). The rubber-band
+## stays statement-level (it reselects the statement panels it covers).
 var _selected: Array = []
 var _marquee := false            # the drag is a rubber-band selection over empty canvas (not a block drag)
 var _marquee_base: Array = []    # selection snapshot captured when an additive (Shift) marquee started
@@ -1056,55 +1058,108 @@ func _collect_topmost(blocks: Array, ancestor_selected: bool, out: Array) -> voi
 			_collect_topmost(body, ancestor_selected or sel, out)
 
 
-## Outline every selected statement panel after a render — duplicate its category stylebox and add a
-## white border, so selection reads at a glance without touching BlockView. Cheap (no rebuild); called
-## at the end of _render, so it re-applies cleanly each time the tree is rebuilt (incl. live marquee).
+## Outline every selected block after a render — both statement panels and reporter pills (M46) —
+## duplicating its category stylebox and adding a white border, so selection reads at a glance without
+## touching BlockView. Cheap (no rebuild); called at the end of _render, so it re-applies cleanly each
+## time the tree is rebuilt (incl. live marquee). A pill is a slot whose inputs[key] is the selected dict.
 func _apply_selection_highlight() -> void:
 	if _selected.is_empty():
 		return
 	for panel in _tagged_panels(_layer):
 		var block: Variant = _block_of(panel)
-		if block == null or not _is_selected(block):
-			continue
-		var sb := (panel as Control).get_theme_stylebox("panel")
-		if sb is StyleBoxFlat:
-			# duplicate() is statically typed Resource, so cast back to StyleBoxFlat before touching its
-			# members (else unsafe-access warnings, which are errors here).
-			var hi := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
-			hi.set_border_width_all(3)
-			hi.border_color = Color.WHITE
-			(panel as Control).add_theme_stylebox_override("panel", hi)
+		if block != null and _is_selected(block):
+			_outline_selected(panel as Control)
+	for slot in _slots(_layer):
+		var inputs: Dictionary = slot.get_meta("slot_inputs")
+		var v: Variant = inputs.get(String(slot.get_meta("slot_key")))
+		if typeof(v) == TYPE_DICTIONARY and _is_selected(v):
+			_outline_selected(slot as Control)
+
+
+## Apply the white selection border to one block panel / pill by duplicating its "panel" stylebox.
+func _outline_selected(control: Control) -> void:
+	var sb := control.get_theme_stylebox("panel")
+	if sb is StyleBoxFlat:
+		# duplicate() is statically typed Resource, so cast back to StyleBoxFlat before touching its
+		# members (else unsafe-access warnings, which are errors here).
+		var hi := (sb as StyleBoxFlat).duplicate() as StyleBoxFlat
+		hi.set_border_width_all(3)
+		hi.border_color = Color.WHITE
+		control.add_theme_stylebox_override("panel", hi)
 
 
 ## A press released without crossing the drag threshold — a click. Updates the selection: a click on a
-## statement block selects it (Shift/Cmd toggles; double-click selects its run — the block + following
-## siblings at that body level), and a click on empty canvas clears the selection. Reporter / spawn-pill
-## / literal presses don't select (they have their own gestures, or fell through to GUI).
+## statement block or a reporter pill selects it (Shift/Cmd toggles; double-click selects it plus all of
+## its nested children — for a statement, the block + following siblings at that body level, each with its
+## subtree; for a pill, the pill plus the pills nested in its inputs), and a click on empty canvas clears
+## the selection. Spawn-pill / literal presses don't select (they have their own gestures, or fell through
+## to GUI).
 func _on_pending_click() -> void:
 	if _pending.get("marquee", false):
 		if not _selected.is_empty():
 			_selected = []
 			_render()
 		return
-	if _pending_reporter or _pending_spawn or not _pending.has("array"):
+	if _pending_spawn:
+		return  # a define-hat prototype param pill spawns on drag; a click does nothing
+	var block: Variant = _pending_clicked_block()
+	if typeof(block) != TYPE_DICTIONARY:
 		return
-	var arr: Array = _pending["array"]
-	var index: int = _pending["index"]
-	if index < 0 or index >= arr.size():
-		return
-	var block: Variant = arr[index]
 	var additive: bool = _pending.get("additive", false)
 	if _pending.get("double", false):
 		if not additive:
 			_selected = []
-		for b in arr.slice(index):
-			if not _is_selected(b):
-				_selected.append(b)
+		if _pending_reporter:
+			_select_subtree(block)
+		else:
+			# the block + every following sibling at this body level, each with its nested children
+			var arr: Array = _pending["array"]
+			for b in arr.slice(int(_pending["index"])):
+				if b is Dictionary:
+					_select_subtree(b)
 	elif additive:
 		_toggle_selected(block)
 	else:
 		_selected = [block]
 	_render()
+
+
+## The block dict the pending press is over — a reporter pill's `inputs[key]` dict (_pending_reporter) or
+## the statement at _pending {array, index}. null if the slot no longer holds a reporter / the index is
+## stale / the press wasn't over a block at all.
+func _pending_clicked_block() -> Variant:
+	if _pending_reporter:
+		var inputs: Dictionary = _pending["inputs"]
+		return inputs.get(String(_pending["key"]))
+	if not _pending.has("array"):
+		return null
+	var arr: Array = _pending["array"]
+	var index: int = int(_pending["index"])
+	return arr[index] if index >= 0 and index < arr.size() else null
+
+
+## Select `block` and everything nested inside it (M46) — the statements in its `body` substack and the
+## reporter pills in its input slots, recursively. `block` is a real block dict (it has an `opcode`); a
+## plain input map like a `call`'s `args` (no `opcode`) isn't itself selected, but is descended into for
+## the reporter dicts it holds. Used by double-click's "select children".
+func _select_subtree(block: Dictionary) -> void:
+	if not _is_selected(block):
+		_selected.append(block)
+	_select_inputs(block.get("inputs", {}))
+
+
+func _select_inputs(inputs: Dictionary) -> void:
+	for key in inputs:
+		var v: Variant = inputs[key]
+		if v is Array:  # a body substack — statement dicts
+			for child in v:
+				if child is Dictionary:
+					_select_subtree(child)
+		elif v is Dictionary:
+			if (v as Dictionary).has("opcode"):
+				_select_subtree(v)  # a reporter pill in this slot
+			else:
+				_select_inputs(v)  # a plain map (a call's args): descend for its reporter values
 
 
 # --- Rubber-band selection -------------------------------------------------
