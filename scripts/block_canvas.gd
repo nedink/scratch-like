@@ -444,8 +444,9 @@ func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed and _state == _IDLE:
 			# Modifier / double-click flags for selection (M46), captured before any early return.
-			var additive := event.shift_pressed or event.meta_pressed or event.ctrl_pressed
-			var double_click := event.double_click
+			# Typed explicitly: `event` is statically InputEvent, so these properties read as Variant.
+			var additive: bool = event.shift_pressed or event.meta_pressed or event.ctrl_pressed
+			var double_click: bool = event.double_click
 			# A ScrollContainer only clips *rendering*: a block scrolled above the viewport keeps a
 			# global rect that overlaps the chrome above the canvas (the top bar's sprite selector).
 			# Ignore a press outside the visible canvas region so it falls through to that chrome
