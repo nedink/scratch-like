@@ -5,7 +5,104 @@ drag-and-drop block editor where you snap blocks onto sprites to script them.
 We are building it runtime-first so the execution model is solid before any UI
 exists.
 
-## Current state: Milestone 44 — lists (ordered collections), the variable twin
+## Current state: Milestone 45 — pixel costume editor
+
+**Goal of this milestone:** let you **paint a sprite's costume as pixel art** instead of the flat
+placeholder colour every sprite drew through M44. It adds a **third editor mode — "Paint"** (beside
+Blocks and Stage) with a pixel grid, a palette, and the usual tools, and a runtime that builds the
+sprite's texture from the painted pixels. Like every editor-side milestone since M27 it is a **pure
+view over the data-owned sprite model** — **no new opcode, no block-data-shape change** — plus one
+optional `costume` key on a sprite dict that round-trips through SAVE/RUN and **falls back to the flat
+`color`** when absent (so a pre-M45 project opens unchanged).
+
+### The data — one optional `costume` key, the JSON-clean palette+index twin
+
+A sprite dict (the `{name, x, y, w, h, color, script}` of [`PongScripts.sprites()`](scripts/pong_scripts.gd))
+gains an optional **`costume`**:
+
+```
+"costume": { "cw": 16, "ch": 16, "palette": ["#000000", "#ffffff", …], "pixels": [-1, -1, 0, 1, …] }
+```
+
+`palette` is opaque `"#rrggbb"` hex (the existing `Color(String(hex))` parse); `pixels` is a row-major
+`Array` of palette indices of length `cw*ch`, with **`-1` = transparent** (the reserved sentinel, so the
+palette carries no transparency slot or alpha). It is **not** added to
+[`_DEFAULT_SPRITE`](scripts/editor.gd) and [`_normalize_sprite`](scripts/editor.gd) is unchanged — so an
+unpainted sprite and a pre-M45 save simply *lack* the key (the absence is meaningful: render falls back
+to flat `color`; "empty costume" never needs disambiguating from "no costume"). JSON parses numbers as
+floats, so the runtime builder and the editor both `int(...)`-coerce `cw`/`ch`/`pixels` on read (the same
+discipline as the model geometry).
+
+### Runtime — build the texture from the grid, no stretch
+
+[`Stage._make_costume_texture`](scripts/stage.gd) (the costume sibling of `_make_placeholder_texture`)
+fills an `Image` from the index grid — palette colour per pixel, transparent for `-1`/out-of-range —
+and returns an `ImageTexture`. [`Stage._add_sprite`](scripts/stage.gd) gained an optional `costume` param
+(the build loop passes `s.get("costume", {})`): when present it sets `TEXTURE_FILTER_NEAREST` (the `say`
+idiom) and uses the costume texture, else the flat fill. Rendering is **no-stretch** — Sprite2D is
+centred and draws the `cw×ch` texture at native size, so **1 costume-pixel = 1 model-pixel**, never
+scaled to fit `w/h`. The costume's resolution therefore *is* the sprite's footprint: creating a costume
+sets the entry's `w/h` to `cw/ch`, so collision (`touching_sprite?`), the inspector, and the stage
+preview all agree with the pixels drawn. (The `say` block still overwrites the live texture at runtime
+exactly as before — the painted costume stays in the data, only the live node's texture is replaced
+while speaking.)
+
+### The Paint view — a third surface mirroring StageView
+
+[`PaintView`](scripts/paint_view.gd) (`paint_view.gd`, the costume counterpart of `stage_view.gd`) holds
+a **reference** to `editor._scripts` (`set_model`) and mutates the selected entry's `costume.pixels`
+**in place** — the M9 data-is-canonical idiom. It drives painting from `_input` with the StageView
+`IDLE→PENDING→DRAGGING` machine and the `is_visible_in_tree()` guard, hit-testing the grid in global
+coordinates (cursor → the grid layer's `global_position` → divide by the display cell size → floor). A
+press paints immediately (a click = one pixel); the tools:
+
+- **pencil / eraser** — paint along the drag (Bresenham-interpolated so a fast stroke leaves no gaps),
+  writing the active palette index or `-1`.
+- **fill** — flood-fill (4-connected, queue-based) the clicked cell's contiguous region.
+- **eyedropper** — pick the clicked cell's index as the active colour (and switch to pencil).
+- **clear-all** — set every pixel to `-1` (a no-op when the sprite has no costume yet).
+
+The grid draws via an inner custom-`_draw` layer (`_PixelGrid`, like StageView's `_GridLayer`): a
+checkerboard for transparent cells, the palette colour otherwise, thin grid lines, scaled so the costume
+fits a target box. Unlike StageView's static inspector, the Paint view **builds its own tool/palette
+chrome in code** (the palette swatches are dynamic — one button per colour), so [editor.tscn](editor.tscn)
+carries only the one `PaintView` Control. A **ColorPickerButton recolours the active swatch** (every
+pixel using that index updates live, since pixels reference the index). The costume is **created lazily
+on first paint** ([`_ensure_costume`](scripts/paint_view.gd)) at the sprite's `w/h` clamped to a
+paintable range — so merely *visiting* Paint mode mutates nothing; before the first stroke the grid shows
+a transient all-transparent preview at that same resolution.
+
+### Editor wiring — a third mode
+
+[`editor.gd`](scripts/editor.gd) widened M27's `_stage_mode` bool to an `enum Mode { BLOCKS, STAGE, PAINT }`
++ [`_set_mode`](scripts/editor.gd) (one routine swapping the three workspace containers' `visible` — an
+`HBoxContainer` skips hidden children — and the two toggle buttons' labels). A new top-bar **Paint**
+button enters/leaves Paint mode beside the existing **Stage** toggle. Entering Paint folds the canvas
+(`_persist_current`) and `set_model`s the paint view; the selection paths
+([`_show`](scripts/editor.gd) / [`_load_project_into_ui`](scripts/editor.gd)) re-point it when Paint is
+up, exactly as they do StageView for Stage. [`PaintView.on_costume_changed`](scripts/paint_view.gd) →
+[`_on_costume_changed`](scripts/editor.gd) re-syncs the inspector after a paint (a costume create changes
+`w/h`); [`_sync_inspector`](scripts/editor.gd) **disables the W/H spin boxes when a costume exists** and
+[`StageView._render`](scripts/stage_view.gd) **suppresses its resize handle** for a costumed sprite —
+both because `w/h` are slaved to `cw/ch` (resolution is changed in Paint, not by a stage resize; a
+resize-canvas tool is deferred).
+
+### Persistence + RUN
+
+The `costume` key is a plain dict of ints/strings/arrays, so it serialises with `_scripts` in
+[`_serialize_project`](scripts/editor.gd) and re-parses in [`_apply_project`](scripts/editor.gd) with **no
+new code**; RUN's `Stage.project_sprites = _scripts.duplicate(true)` deep-copies it across the scene swap.
+A pre-M45 file (no `costume`) opens and renders its flat `color`.
+
+What this leaves deferred: **multiple costumes per sprite** + costume-switching blocks (`switch costume
+to` / `next costume`) and **animation frames** (one costume per sprite for now); **undo/redo** (a stroke
+is committed immediately); **PNG import/export**; a **shared project-level palette** (each costume owns
+its palette); **costume rotation / custom anchor**; and a **resize-canvas tool** (cw/ch are fixed at
+creation — which is why the stage resize handle and inspector W/H are suppressed when a costume exists).
+
+---
+
+## Earlier: Milestone 44 — lists (ordered collections), the variable twin
 
 **Goal of this milestone:** add **lists** — Scratch's ordered, mutable collections — built as the
 direct **structural twin of variables** (M18/M20/M21). A list is a named `Array` of items with a
@@ -1029,6 +1126,16 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    `when_flag_clicked → animate x to 400 over 2 secs ease out`, and a `forever → go to x: (x) y: 100`,
    glides across and eases to a stop. (Animating a variable is the general primitive — wire it into
    `go to`, `point in direction`, `say`, …)
+   **Paint a sprite's costume** (M45) with the **Paint** button in the top bar (beside **Stage**): it
+   swaps the workspace to a **pixel grid** with a tools panel. Pick a colour from the **palette**
+   swatches, choose **Pencil** / **Eraser** / **Fill** / **Eyedropper**, and **click or drag on the
+   grid** to draw (eraser paints transparent — shown as a checkerboard; fill flood-fills a region;
+   eyedropper picks a pixel's colour). **Edit colour** recolours the selected swatch (every pixel using
+   it updates live), and **Clear all** empties the costume. The sprite now renders that pixel art at
+   RUN — **crisp and never stretched** (1 costume pixel = 1 stage pixel) — and **SAVE** keeps it. A
+   sprite you never paint stays its flat **Colour** (Stage view), and a costume's resolution is fixed
+   when you first paint it (so the Stage view's resize handle and the inspector's w/h are disabled for a
+   painted sprite — resize the canvas is deferred).
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
    version, or the stock script if you didn't touch it. Press **ESC** in-game to
@@ -2758,6 +2865,12 @@ them one), and **a layer *reporter*** (Scratch has none either — layer is writ
 
 ## Opcodes implemented
 
+**M45 added no opcodes** — it is a pure **editor + runtime-texture** change (a pixel costume editor: a
+third "Paint" mode paints a sprite's costume on a pixel grid, and the runtime builds the sprite texture
+from the painted `{cw, ch, palette, pixels}` instead of a flat colour fill). One optional `costume` key
+on a sprite dict, no block-data-shape change, no interpreter change; an unpainted sprite / pre-M45 save
+renders its flat `color`. The notes below are kept as written for earlier milestones.
+
 **M44 added nine opcodes** — the **list** block set (Scratch's ordered collections): the statements
 `list_add` / `list_delete` / `list_delete_all` / `list_insert` / `list_replace` and the reporters
 `list_item` / `list_item_index` / `list_length` / `list_contains?` (the last a boolean). Each names a
@@ -2946,17 +3059,18 @@ M30 adds **custom blocks** (`define`/`call`): a "Make a Block" button mints a `d
 
 ```
 project.godot              Godot project config; main scene = editor.tscn (M8); initial window 1280x720 fullscreen (M26) — the per-scene content-scale overrides in editor.gd/stage.gd take over from there (editor 960x540 logical, game a fixed 480x360 integer-snapped viewport)
-editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + scene selector + Add/Del/Rename scene buttons (M33) + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25) and the scene name + delete-scene dialogs (M33), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.) M37 wraps the top Bar and the right Inspector in opaque-stylebox PanelContainers (BarPanel/InspectorPanel — the inner widgets keep unique_name_in_owner, so editor.gd's %Name lookups are unchanged) and adds a RecenterButton in the inspector.
+editor.tscn                Main scene (M8): the editor front door, running editor.gd. Declares the editor's fixed chrome — backdrop, top bar (title + scene selector + Add/Del/Rename scene buttons (M33) + sprite selector + Add/Del/Rename sprite buttons (M24/M25) + NEW/OPEN/SAVE + RUN, M22), the palette | canvas workspace (each in a ScrollContainer), the Make/Rename/Delete variable dialogs and the New/Delete/Rename sprite dialogs (M24/M25) and the scene name + delete-scene dialogs (M33), the project-file browser (a FileDialog, M22), the Stage/Blocks toggle + stage-editor container (StageView + the x/y/w/h SpinBoxes and Colour picker inspector, M27), and the Make-a-Block name dialog (M30, with a parameters field added in M31) — which editor.gd reaches by unique name. (The palette/canvas/stage *contents* are still generated in code.) M37 wraps the top Bar and the right Inspector in opaque-stylebox PanelContainers (BarPanel/InspectorPanel — the inner widgets keep unique_name_in_owner, so editor.gd's %Name lookups are unchanged) and adds a RecenterButton in the inspector. M45 adds a PaintToggle button (the Paint mode) and a PaintContainer holding a PaintView (the pixel costume editor, which builds its own tool/palette chrome in code).
 main.tscn                  The *game* scene: a single Node2D "Stage" running stage.gd (launched by the editor's RUN button)
 icon.svg                   Default project icon (skeleton)
 font.png                   3x5-pixel bitmap font atlas (A-Z, 0-9); baked into a PixelFont
 scripts/
   editor.gd                Editor root (M8): wires the scene-declared chrome (editor.tscn) — fills the sprite selector, connects RUN, grabs palette/canvas/dialogs by unique name; wires the palette as the canvas's trash (M16); owns the mutable variable model (M20, seeded from PongScripts.variables()), scoping it to the selected sprite — globals + that sprite's locals — for BlockView's data-scoped dropdowns (M17/M19) and rebuilding the palette on each switch; "Make a Variable" dialog appends to that model (M20); rename/delete dialogs edit it (M21) — rename cascades the new name across the in-scope scripts (_is_referent_for), delete strips its references (drop set/change, revert variable-reporter slots) and removes the entry; owns the mutable **sprite** model too (M24) — _scripts is now [{name,x,y,w,h,color,script}] seeded from PongScripts.sprites(); +Sprite/-Sprite buttons add (default placeholder + empty script) / delete (entry + its locals + dangling touching refs, M25) a sprite (_on_new_sprite_confirmed/_on_del_sprite_confirmed); a Rename Sprite button (M25, _on_rename_sprite_confirmed) cascades a new sprite name across every script's touching_sprite? refs and every variable scoped to it (globally — a sprite name is unique, so no per-scope filter); persists script edits + hands the whole sprite model and the variable model to the Stage on RUN (M24/M20, project_sprites/project_variables); saves/opens named project files via a FileDialog (full filesystem access — the user picks the location, defaulting to the project folder) and reloads the in-code demo with NEW (M22, _write_project/_read_project/_seed_demo; _normalize_sprite back-fills geometry on a pre-M24 file), keeping the demo and saved projects from clobbering each other; on _ready sets the window's content scale to the editor's own logical resolution (_EDITOR_SIZE 960x540, VIEWPORT/EXPAND/FRACTIONAL) so the chrome lays out roomy and high-res, independent of the runtime's fixed 480x360 — also resetting whatever the game left on the shared window when ESC returns here (M26); a Stage/Blocks toggle swaps the workspace between the block editor and the stage view (M27, _toggle_view), wiring StageView's on_pick (route a stage click through the normal selector/_show selection) + on_geometry_changed (track a drag in the inspector), and reading/writing the inspector's x/y/w/h/colour into the selected sprite's model entry (_sync_inspector/_write_geom/_on_insp_color) — geometry edits the same _scripts the runtime builds from; also owns the stage-level project properties — the background colour (_background, handed to the Stage at RUN) and the grid settings (_grid_settings = {show,snap,color,step}, editor-only) — both seeded from PongScripts (background()/grid()), edited via the inspector's _on_insp_bg_color/_on_grid_* handlers, synced on every project load (_sync_background/_sync_grid), and saved under the "background"/"grid" keys (M27); a "Make a Block" name dialog mints a custom block (M30, _make_block/_on_new_block_confirmed) — it adds a define {name} hat to the canvas and re-derives the sprite's custom-block names (_custom_blocks_in, the define hats in its script) into BlockView.project_custom_blocks per sprite, so a call {name} slot lists this sprite's procedures; that dialog also takes **parameters** (M31, _parse_params splits on commas/whitespace → the define's params list), and _custom_block_params_in re-derives each sprite's block→params map into BlockView.project_custom_block_params, so a call chip gets one arg slot per parameter and a param reporter can be dragged out of the define hat's prototype; renaming a define in place cascades the new name to its calls (M32, _on_custom_block_renamed re-derives the sprite's custom-block names after BlockCanvas rewrites them); owns the **scene (stage/level) model** too (M33) — _scenes is a list of {name,sprites,variables,background,grid} dicts, _scene the active index, seeded from PongScripts.scenes(); the working vars (_scripts/_variables/_background/_grid_settings) are the live editing surface for the active scene (_load_scene_into_working points them at _scenes[_scene]), persisted back via _persist_current_scene before each scene switch / SAVE / RUN; a top-bar scene selector + Add/Del/Rename Scene buttons manage the list (_load_scene/_add_scene_pressed/_rename_scene_pressed/_del_scene_pressed — a new scene gets one default placeholder sprite, delete refuses the last); persistence reshaped to {scenes,active} (_write_project), with a pre-M33 {scripts,variables,…} file wrapped into one "Scene 1" on OPEN (_read_project/_normalize_scene); runtime scene navigation (M34) — RUN now hands the Stage the **whole** scene list (Stage.project_scenes = _scenes + project_active = _scene, replacing the per-scene hand-off) so a switch_scene/next_scene block can rebuild for a different scene at play time; _scene_names feeds BlockView.project_scene_names (the switch_scene dropdown's options), re-pointed in _load_project_into_ui and on a scene rename (which now also rebuilds palette + refreshes canvas so the dropdown relabels — but does not cascade to existing switch_scene blocks, deferred)
   stage_view.gd            Stage (scene) editor (M27): draws each sprite as a rectangle (centred on its model position, scaled by _DISPLAY_SCALE into a 480x360 clipped region) from a reference to editor._scripts; select/drag/resize via _input global hit-testing (the M9/BlockCanvas pattern — IDLE/PENDING/DRAGGING + 4px threshold, _hit checks resize handles then sprite bodies), writing x/y (move) or w/h (resize anchoring the top-left corner / growing right-down, or about the fixed centre with Alt held, rounded to int) straight into the model dict; holding Shift locks a resize to the sprite's starting aspect ratio (M28, _lock_aspect over the w/h captured at _begin_drag); an alignment grid (show/snap/colour/step) the editor drives via set_grid_*; calls back to the editor (on_pick/on_geometry_changed); the geometry write *is* the edit, so RUN/SAVE carry it. M37 restructures it into a **pannable world view**: a _world container (positioned at _pan, not clipped) holds the screen region (_screen_panel — background fill + a bright guide-line border marking the 480x352 screen, grid inside it) and the sprite _layer, so off-screen sprites are visible; dragging empty background pans (a {mode:"pan"} branch in _input, guarded inside our rect; sprite drag/resize unchanged), recenter() re-frames on the screen (set_model/resized/Recenter button), and _render re-asserts but never recomputes _pan (so a pan survives a re-render). M39 replaces the clipped screen-only _screen_panel with one full-view, pan-fixed _GridLayer (a direct child of StageView, not in _world) that redraws aligned to the pan (world_origin): the origin screen fill (set_background), the fine alignment grid spanning the whole view, the 480x352 screen cells tiled in all directions (dimmed), and the highlighted default screen's bright boundary drawn last — so the grid continues indefinitely and adjacent screen spaces are visible around the highlighted default one
+  paint_view.gd            Pixel costume editor (M45): the third editor surface beside the block canvas and stage view (the M27 toggle widened to BLOCKS/STAGE/PAINT). Holds a reference to editor._scripts and edits the selected sprite's optional `costume` ({cw,ch,palette,pixels} — a palette of "#rrggbb" + a row-major index grid, -1 = transparent), mutating costume.pixels in place (the M9 data-is-canonical idiom). Paints from _input with the StageView IDLE/PENDING/DRAGGING machine + is_visible_in_tree guard, hit-testing a custom-_draw grid layer in global coords: pencil/eraser paint along a drag (Bresenham), fill flood-fills, eyedropper picks a colour, clear-all empties; a palette of swatch buttons + a ColorPickerButton recolours the active swatch (built in code since the swatches are dynamic). The costume is created lazily on first paint (_ensure_costume) at the sprite's w/h clamped to [4,64], setting the entry's w/h to cw/ch so the no-stretch render footprint, collision, and inspector agree. on_costume_changed calls back to the editor to re-sync the inspector
   block_canvas.gd          Interactive canvas (M9): drag/snap/detach — mutates block data + re-renders; begin_spawn_drag() accepts palette blocks (M11); wires editable literal fields + enum dropdowns back to the data (M12/M13); drops a dragged reporter into a value/condition slot (M14, _nearest_slot — type-filtered to matching boolean/value slots in M23) and grabs one back out of its slot (M15, _reporter_at/_begin_reporter_drag); deletes a block dragged onto the palette (M16, _over_trash/_trashing); refresh() re-renders so a newly-made variable shows in open dropdowns (M20); add_definition() appends a freshly-made define hat as a new stack (M30, "Make a Block"); _spawn_at/_pending_spawn spawn a fresh param-reporter copy when a define hat's prototype parameter pill is dragged (M31), confined to slots inside that function's body (_nearest_slot/_scoped_slots/_enclosing_define_body — also for an already-placed param grabbed out); rename_variable()/delete_variable_refs() rewrite/strip the working stacks in place on a UI rename/delete, preserving positions (M21); rename_sprite() does the same for a sprite rename (M25); an in-place define rename is detected in _commit_literal (the define_name-stamped field) and, after a uniqueness check (_other_define_named), deferred to _rename_custom_block_deferred which rewrites the sprite's calls + notifies the editor via on_custom_block_renamed (M32); export_script() serializes edits back (M10)
   block_palette.gd         Block palette (M11): lists opcodes as chips (reporters too, as pills — M14); on drag, mints a fresh block and hands it to the canvas; rebuild() re-renders the chips when the editor re-scopes the variable dropdowns on a sprite switch (M19); draws a "Make a Variable" button atop the variables group (M20) and, beneath it, a Rename/Delete MenuButton row per in-scope variable (M21), all calling back to the editor; draws a "My Blocks" group (M30) — a "Make a Block" button plus one pre-named call chip per custom block the sprite defines (BlockView.project_custom_blocks); define/call carry palette:false so palette_groups skips them, so this is the only place they enter the palette; a call chip carries one args slot per the block's declared parameters (M31, project_custom_block_params), the drag re-minting the args dict from the chip's palette_params
   block_view.gd            Block renderer (M8): tree-walks block data into a Control tree; opcode->{category,template,kind,defaults,enums,data_enums,output,bool_inputs,palette} table; make_block() factory (M11); editable LineEdit literal fields + coerce_literal (M12); enum-slot OptionButtons + type-shaped fields (M13); data-scoped {name} dropdowns from the editor's project_variables/project_sprites/project_custom_blocks (M17/M30, _options_for) — the variable list scoped per sprite by the editor (M19), extended by Make a Variable (M20), the custom-block list likewise per sprite (M30); count_variable_refs/rewrite_variable_refs/strip_variable_refs walk the block tree for the rename/delete cascade (M21), with count_sprite_refs/rewrite_sprite_refs/strip_sprite_refs the touching_sprite? counterparts for a sprite rename/delete (M25), and rewrite_custom_block_refs the define/call counterpart for a custom-block rename (M32, _define_header stamps the name field define_name so the canvas can detect an in-place rename); slot-typing (M23) — reporter_output_type() + a slot_type meta per widget, and an angular boolean pill vs a round value pill — so the canvas can refuse a mismatched reporter drop; the define/call custom-block opcodes (M30) carry palette:false so palette_groups skips them; custom-block parameters (M31) — the param reporter opcode, _define_header/_call_header render define/call dynamically from their own data (a spawnable param pill per define param, an args slot per call param built against the call's args sub-dict), _param_pill draws the read-only name pill, project_custom_block_params holds each sprite's block→params map; runtime scene navigation (M34) — the switch_scene/next_scene opcodes in a new "scenes" category, switch_scene's {name} a data-scoped dropdown from project_scene_names (the editor's scene-name list, the scenes twin of project_sprites; _options_for resolves the "scenes" source); this renderer just lists what it's handed; the animation block (M41) — the `animate` opcode in a new "animation" category, its {name} a data-scoped "variables" dropdown and {easing} a fixed-choice enum (linear/ease in/ease out), {value}/{seconds} ordinary numeric slots — needs no renderer change beyond the one _OPCODES entry + category colour; stamps every input widget as a slot drop target with its default literal (M14/M15); tags it for M9 dragging
-  stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); runtime camera (M37) — _ready adds a Camera2D centred at (240,176) (= the no-camera identity view, so a project without camera blocks is unchanged) and puts the background ColorRect on a CanvasLayer(-1) so it stays screen-fixed while the camera pans; set_camera/move_camera/camera_follow/camera_stop_following move or track it (_process re-centres on the followed sprite each frame), called by the camera blocks; ESC returns to the editor (the inverse of editor.gd's RUN)
+  stage.gd                 Runtime root: builds one scene's sprites + runs their scripts from the active scene of the project's scene list (M34) — the editor's whole working project via static project_scenes (every stage it holds), else PongScripts.scenes() (a single "Scene 1"), with project_active picking which to build first (replaces M24/M20/M27's three per-scene statics project_sprites/_variables/_background — each per-scene field is read off the active scene dict now, _active_scene/_scene_list); owns the name->Target registry + shared font, seeds variables from the active scene's variable list (M18/M20); runtime scene navigation (M34) — switch_scene/next_scene call go_to_scene_by_name/go_to_next_scene, which re-point the static project_active, stop_all the current scripts, and change_scene_to_file back to this game scene so _ready rebuilds on the target scene (the same swap RUN/ESC use — no bespoke teardown); on _ready re-imposes the fixed 480x360 logical viewport on the shared window (_apply_game_scaling — content_scale_size 480x360 so get_viewport_rect() is unchanged, VIEWPORT/KEEP/STRETCH_INTEGER for a crisp whole-number upscale, M26); runtime camera (M37) — _ready adds a Camera2D centred at (240,176) (= the no-camera identity view, so a project without camera blocks is unchanged) and puts the background ColorRect on a CanvasLayer(-1) so it stays screen-fixed while the camera pans; set_camera/move_camera/camera_follow/camera_stop_following move or track it (_process re-centres on the followed sprite each frame), called by the camera blocks; pixel costumes (M45) — _add_sprite takes an optional costume dict and, when present, builds the sprite texture via _make_costume_texture (palette + index grid → an Image, -1/out-of-range transparent, TEXTURE_FILTER_NEAREST) instead of the flat _make_placeholder_texture, drawn at native cw×ch (no stretch); ESC returns to the editor (the inverse of editor.gd's RUN)
   interpreter.gd           Tree-walking, coroutine-driven block interpreter + dispatch tables; custom blocks (M30) — _on_call resolves a define hat by name in the target's retained _script and awaits its body (per-sprite procedures; define is a hat, so it's never auto-started); parameters (M31) — _on_call binds a call's args (evaluated in the caller's frame) into a {param: value} frame pushed on the _frames stack for the body, _on_param reads the top frame (the param reporter); runtime scene navigation (M34) — _on_switch_scene/_on_next_scene delegate to the Stage's go_to_scene_by_name/go_to_next_scene (the Stage owns the resolve + scene reload); camera (M37) — _on_set_camera/_on_change_camera/_on_camera_follow/_on_camera_stop_following delegate to the Stage's camera methods (the Stage owns the Camera2D); animation (M41) — _on_animate is a coroutine that tweens a variable from its current value to a target over a duration, one step per fixed physics tick (yielding on _tree.physics_frame like wait_seconds), via _ease_fraction (linear / ease in t² / ease out 1−(1−t)²); it writes through _set_variable and polls the Stage/_alive flags so a stop unwinds it mid-tween
   target.gd                Wraps the controlled node + its direction and name
   font.gd                  PixelFont: bakes font.png into rendered text costumes (the `say` block)
@@ -3034,6 +3148,16 @@ CLAUDE.md                  This file
   view (M27: select / drag / resize — Alt about the centre, Shift to lock aspect (M28) — / recolour, or the inspector's x/y/w/h/colour fields) — but a
   `go_to` block in the script still wins at RUN (behaviour is blocks), so the model position matters
   most for a sprite with no `go_to`.
+- New costume / pixel art? **From the UI** (M45): the top-bar **Paint** button opens the pixel costume
+  editor — pencil/eraser/fill/eyedropper on a grid, a palette, clear-all. The painted costume is stored
+  as an optional `costume` key on the sprite dict (`{cw, ch, palette: ["#rrggbb"…], pixels: [indices, −1
+  = transparent]}`) and rides SAVE/RUN like the rest of the model. **In the stock project**: add a
+  `costume` key to a [`PongScripts.sprites()`](scripts/pong_scripts.gd) entry (the runtime renders it via
+  [`Stage._make_costume_texture`](scripts/stage.gd) at native `cw×ch`, no stretch). Don't add `costume`
+  to `_DEFAULT_SPRITE` — its *absence* is what makes an unpainted sprite fall back to the flat `color`.
+  Painting sets the sprite's `w/h` to `cw/ch` (the no-stretch footprint), so resolution is fixed at
+  creation; changing it (a resize-canvas tool), **multiple costumes** + switching blocks, animation
+  frames, undo, PNG import, and a shared palette are deferred (see Deliberately deferred).
 - Multiple stages (scenes / levels)? **Removed in M40.** M33/M34 made a project hold several
   switchable scenes; that layer was ripped out — a project is now a single flat stage again (one set of
   sprites / variables / background / grid). Don't add a scene layer back without a deliberate milestone

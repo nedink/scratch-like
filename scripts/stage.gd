@@ -130,7 +130,7 @@ func _ready() -> void:
 	# needs a sprite-scoped local's target to already exist.
 	var model: Array = _sprite_model()
 	for s in model:
-		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])))
+		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])), s.get("costume", {}))
 
 	# The runtime camera (M37). Centred at the screen midpoint, so by default the view is identical to
 	# the old no-camera transform (the screen shows world (0,0)-(480,352)). make_current() routes the
@@ -394,9 +394,17 @@ func stop_all() -> void:
 
 ## Build one sprite (placeholder texture + start position), register it, and
 ## return its Target.
-func _add_sprite(target_name: String, pos: Vector2, w: int, h: int, color: Color) -> Target:
+func _add_sprite(target_name: String, pos: Vector2, w: int, h: int, color: Color, costume: Dictionary = {}) -> Target:
 	var sprite := Sprite2D.new()
-	sprite.texture = _make_placeholder_texture(w, h, color)
+	# A painted costume (M45) becomes the texture, drawn 1 costume-pixel = 1 model-pixel (no stretch)
+	# — Sprite2D is centred, so a cw*ch texture draws cw*ch pixels around the position, the size the
+	# editor sets w/h to. NEAREST keeps it crisp through the integer window upscale (the `say` idiom).
+	# A sprite with no costume falls back to the flat placeholder fill, exactly as before M45.
+	if not costume.is_empty() and int(costume.get("cw", 0)) > 0 and (costume.get("pixels") is Array):
+		sprite.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		sprite.texture = _make_costume_texture(costume["palette"], costume["pixels"], int(costume["cw"]), int(costume["ch"]))
+	else:
+		sprite.texture = _make_placeholder_texture(w, h, color)
 	sprite.position = pos
 	add_child(sprite)
 
@@ -458,4 +466,21 @@ func remove_clone(interpreter: Interpreter, clone: Target) -> void:
 func _make_placeholder_texture(w: int, h: int, color: Color) -> Texture2D:
 	var image := Image.create(w, h, false, Image.FORMAT_RGBA8)
 	image.fill(color)
+	return ImageTexture.create_from_image(image)
+
+
+## Build a sprite costume texture (M45) from the editor's palette + row-major index grid: each pixel
+## is the indexed palette colour, or transparent for the -1 sentinel (or any out-of-range index, so a
+## malformed grid degrades gracefully). cw*ch is small, so the per-pixel loop is cheap. JSON parses
+## numbers as floats, hence the int()/String() coercions — the same discipline as the model geometry.
+func _make_costume_texture(palette: Array, pixels: Array, cw: int, ch: int) -> Texture2D:
+	var image := Image.create(cw, ch, false, Image.FORMAT_RGBA8)
+	for y in ch:
+		for x in cw:
+			var k := y * cw + x
+			var idx := int(pixels[k]) if k < pixels.size() else -1
+			if idx < 0 or idx >= palette.size():
+				image.set_pixel(x, y, Color(0, 0, 0, 0))
+			else:
+				image.set_pixel(x, y, Color(String(palette[idx])))
 	return ImageTexture.create_from_image(image)

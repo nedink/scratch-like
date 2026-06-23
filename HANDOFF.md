@@ -12,8 +12,10 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped (on `m41-animation-blocks`):** **M44 — lists**, the variable twin (nine list opcodes +
-  Make/Rename/Delete UI + persistence; data-only). See *Recently shipped* below.
+- **Just shipped (on `m41-animation-blocks`):** **M45 — pixel costume editor** (a third "Paint" editor
+  mode: pencil/eraser/fill/eyedropper on a pixel grid + palette; sprite costume stored as an optional
+  `{cw,ch,palette,pixels}` key, rendered no-stretch at RUN; falls back to flat `color`). See *Recently
+  shipped* below. (Prior: **M44 — lists**, the variable twin.)
 - **In flight (on `m41-animation-blocks`):** **`zombie.json`** — a top-down zombie-survival game built
   in the block language, plus the **six new opcodes** it required (the existing block set couldn't
   express mouse-aim, homing, recolouring, click-to-fire, or a resizable costume):
@@ -156,6 +158,19 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M45 — **pixel costume editor.** A third editor mode, **Paint** (beside Blocks and Stage), paints a
+  sprite's costume on a pixel grid: pencil / eraser / fill / eyedropper, a palette (recolour the active
+  swatch live), clear-all. The costume is one optional `costume` key on the sprite dict —
+  `{cw, ch, palette: ["#rrggbb"…], pixels: [indices, −1 = transparent]}` — mutated in place
+  (data-is-canonical) and round-tripped through SAVE/RUN; an unpainted sprite / pre-M45 save **falls
+  back to the flat `color`** (no `costume` key). Runtime ([`Stage._make_costume_texture`](scripts/stage.gd))
+  builds the texture from the index grid, drawn **no-stretch** at native `cw×ch` (1 costume px = 1 stage
+  px, `TEXTURE_FILTER_NEAREST`); painting sets the sprite's `w/h` to `cw/ch` so collision/inspector/stage
+  preview agree (the stage resize handle + inspector w/h are disabled for a painted sprite). New file
+  [`scripts/paint_view.gd`](scripts/paint_view.gd) (mirrors `stage_view.gd`); `editor.gd`'s `_stage_mode`
+  bool widened to `enum Mode {BLOCKS, STAGE, PAINT}` + `_set_mode`. **No opcode, no block-data-shape
+  change.** Deferred: multiple costumes / switching blocks, animation frames, undo, PNG import, shared
+  palette, resize-canvas. *(code complete, uncommitted)*
 - M44 — **lists (ordered collections), the structural twin of variables.** A list is a named `Array`
   with global / per-sprite-local scope, made / renamed / deleted from the palette's new **LISTS** group
   exactly like a variable. **Nine opcodes** (the full Scratch set): statements `list_add` /

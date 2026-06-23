@@ -4,6 +4,7 @@
 [ext_resource type="Script" uid="uid://vfyg3fbmcnyo" path="res://scripts/block_palette.gd" id="2_palette"]
 [ext_resource type="Script" uid="uid://btx44p6nb4eos" path="res://scripts/block_canvas.gd" id="3_canvas"]
 [ext_resource type="Script" path="res://scripts/stage_view.gd" id="4_stage"]
+[ext_resource type="Script" path="res://scripts/paint_view.gd" id="5_paint"]
 
 [sub_resource type="Theme" id="Theme_ui"]
 default_font_size = 11
@@ -83,6 +84,11 @@ text = "Rename Sprite"
 unique_name_in_owner = true
 layout_mode = 2
 text = "Stage"
+
+[node name="PaintToggle" type="Button" parent="Page/BarPanel/Bar" unique_id=1458511914]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Paint"
 
 [node name="Spacer" type="Control" parent="Page/BarPanel/Bar" unique_id=1330330019]
 layout_mode = 2
@@ -284,6 +290,21 @@ layout_mode = 2
 unique_name_in_owner = true
 layout_mode = 2
 text = "Recenter view"
+
+[node name="PaintContainer" type="HBoxContainer" parent="Page/Workspace" unique_id=566786400]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="PaintView" type="Control" parent="Page/Workspace/PaintContainer" unique_id=566786401]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+script = ExtResource("5_paint")
 
 [node name="VarDialog" type="ConfirmationDialog" parent="." unique_id=300687861]
 unique_name_in_owner = true

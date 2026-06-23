@@ -355,7 +355,11 @@ func _render() -> void:
 	if _selected >= 0 and _selected < _sprites.size():
 		var sel := _display_rect(_sprites[_selected])
 		_add_selection_outline(sel)
-		_add_handle(sel, Vector2(1, 1))
+		# Suppress the resize handle when the sprite has a painted costume (M45): its w/h are slaved
+		# to the costume resolution (cw/ch), so a resize drag would desync the footprint from the
+		# pixels. Resolution is changed in the Paint view, not here (resize-canvas is deferred).
+		if not (_sprites[_selected] as Dictionary).has("costume"):
+			_add_handle(sel, Vector2(1, 1))
 
 
 ## The selection outline — a bright, fill-less border around the selected sprite's rect.

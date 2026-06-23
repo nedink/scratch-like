@@ -103,6 +103,12 @@ static var _restore_path: String = ""
 @onready var _canvas_scroll: ScrollContainer = %CanvasScroll
 @onready var _stage_container: HBoxContainer = %StageContainer
 @onready var _stage_view: StageView = %StageView
+## The pixel costume editor (M45): a third workspace mode beside Blocks and Stage. PaintToggle
+## enters/leaves it; PaintContainer holds the PaintView surface (which builds its own tool/palette
+## chrome in code). on_costume_changed routes back here so the inspector re-syncs after a paint.
+@onready var _paint_toggle: Button = %PaintToggle
+@onready var _paint_container: HBoxContainer = %PaintContainer
+@onready var _paint_view: PaintView = %PaintView
 @onready var _insp_name: Label = %InspName
 @onready var _insp_x: SpinBox = %InspX
 @onready var _insp_y: SpinBox = %InspY
@@ -147,8 +153,10 @@ var _background: String = ""
 ## background it isn't handed to the running game (the grid is an authoring aid, not part of the scene).
 var _grid_settings: Dictionary = {}
 
-## True while the Stage view is showing (vs the block canvas). The toggle flips it.
-var _stage_mode: bool = false
+## Which workspace surface is showing (M45 widened M27's bool to three modes): the block canvas
+## (BLOCKS), the stage/geometry editor (STAGE), or the pixel costume editor (PAINT). _set_mode flips it.
+enum Mode { BLOCKS, STAGE, PAINT }
+var _mode: Mode = Mode.BLOCKS
 
 ## Set while _sync_inspector is loading the spin boxes / colour picker from the model, so their
 ## value_changed/color_changed signals don't fire back and re-write the model with what we just read.
@@ -323,7 +331,11 @@ func _ready() -> void:
 	# Stage (scene) editor (M27): the toggle swaps Blocks <-> Stage; the stage view reports a clicked
 	# sprite (on_pick, routed through the normal selection flow) and live geometry changes during a
 	# drag (on_geometry_changed, so the inspector tracks); the inspector writes geometry/colour back.
-	_view_toggle.pressed.connect(_toggle_view)
+	# Each toggle flips into its mode, or back to Blocks if already there (M45). The stage view reports
+	# a clicked sprite / live geometry changes; the paint view reports costume edits.
+	_view_toggle.pressed.connect(func(): _set_mode(Mode.BLOCKS if _mode == Mode.STAGE else Mode.STAGE))
+	_paint_toggle.pressed.connect(func(): _set_mode(Mode.BLOCKS if _mode == Mode.PAINT else Mode.PAINT))
+	_paint_view.on_costume_changed = _on_costume_changed
 	_stage_view.on_pick = _on_stage_pick
 	_stage_view.on_geometry_changed = _on_stage_geometry_changed
 	_insp_x.value_changed.connect(_on_insp_x)
@@ -474,11 +486,13 @@ func _load_project_into_ui(select_index := 0) -> void:
 	var index: int = clampi(select_index, 0, _scripts.size() - 1)
 	_selector.select(index)
 	_show(index)
-	# NEW / OPEN replace _scripts with a fresh array, so re-point the stage view at it (set_selected
+	# NEW / OPEN replace _scripts with a fresh array, so re-point the open view at it (set_selected
 	# in _show only re-rendered the stale reference). A no-op in Blocks mode (re-pulled on toggle).
-	if _stage_mode:
+	if _mode == Mode.STAGE:
 		_stage_view.set_model(_scripts, index)
 		_sync_inspector()
+	elif _mode == Mode.PAINT:
+		_paint_view.set_model(_scripts, index)
 
 
 ## Load the script at `index` into the canvas, first persisting the outgoing sprite's
@@ -505,11 +519,13 @@ func _show(index: int) -> void:
 	BlockView.project_custom_block_params = _custom_block_params_in(_scripts[index]["script"])
 	_palette.rebuild()
 	_canvas.load_script(_scripts[index]["script"])
-	# Keep the stage view's highlight + the inspector on the loaded sprite while Stage mode is up
-	# (M27). The model reference is unchanged here, so set_selected (not set_model) suffices.
-	if _stage_mode:
+	# Keep the open view on the loaded sprite while Stage / Paint mode is up (M27/M45). The model
+	# reference is unchanged here, so set_selected (not set_model) suffices.
+	if _mode == Mode.STAGE:
 		_stage_view.set_selected(index)
 		_sync_inspector()
+	elif _mode == Mode.PAINT:
+		_paint_view.set_selected(index)
 
 
 func _on_select(index: int) -> void:
@@ -518,20 +534,27 @@ func _on_select(index: int) -> void:
 
 # --- Stage (scene) editor (M27) --------------------------------------------
 
-## Swap the workspace between Blocks (palette | canvas) and Stage (stage view + inspector). An
-## HBoxContainer skips visible == false children, so hiding one mode lets the other fill the width.
-## Entering Stage mode (re)points the stage view at the live model — it may have changed via the
-## block side or an Add/Delete/Rename since we were last here — and loads the inspector.
-func _toggle_view() -> void:
-	_stage_mode = not _stage_mode
-	_palette_scroll.visible = not _stage_mode
-	_canvas_scroll.visible = not _stage_mode
-	_stage_container.visible = _stage_mode
-	_view_toggle.text = "Blocks" if _stage_mode else "Stage"
-	if _stage_mode:
+## Swap the workspace between Blocks (palette | canvas), Stage (stage view + inspector), and Paint
+## (the pixel costume editor) — M45 widened M27's two-way toggle. An HBoxContainer skips
+## visible == false children, so the one visible mode fills the width. Each toggle button reads
+## "Blocks" while its mode is up (to leave) and its own name otherwise. Entering Stage/Paint
+## (re)points that view at the live model — it may have changed via the block side or an
+## Add/Delete/Rename since we were last here — after folding any in-progress canvas edits back.
+func _set_mode(mode: Mode) -> void:
+	_mode = mode
+	_palette_scroll.visible = mode == Mode.BLOCKS
+	_canvas_scroll.visible = mode == Mode.BLOCKS
+	_stage_container.visible = mode == Mode.STAGE
+	_paint_container.visible = mode == Mode.PAINT
+	_view_toggle.text = "Blocks" if mode == Mode.STAGE else "Stage"
+	_paint_toggle.text = "Blocks" if mode == Mode.PAINT else "Paint"
+	if mode != Mode.BLOCKS:
 		_persist_current()  # fold any in-progress canvas edits back before we leave the canvas
+	if mode == Mode.STAGE:
 		_stage_view.set_model(_scripts, _current)
 		_sync_inspector()
+	elif mode == Mode.PAINT:
+		_paint_view.set_model(_scripts, _current)
 
 
 ## A sprite was clicked on the stage: select it through the normal flow (the selector + _show, which
@@ -553,6 +576,14 @@ func _on_stage_geometry_changed(index: int) -> void:
 		_sync_inspector()
 
 
+## A paint changed the selected sprite's costume (M45). Creating a costume sets the sprite's w/h to
+## the costume resolution, so re-sync the inspector read-outs (kept current for when we return to
+## Stage mode). The pixels themselves live in the model; nothing else needs touching here.
+func _on_costume_changed(index: int) -> void:
+	if index == _current:
+		_sync_inspector()
+
+
 ## Load the inspector widgets from the selected sprite's model entry. Guarded by _loading_inspector
 ## so setting the values doesn't fire the value_changed/color_changed writers back at the model.
 func _sync_inspector() -> void:
@@ -566,6 +597,11 @@ func _sync_inspector() -> void:
 	_insp_w.value = float(entry.get("w", 1))
 	_insp_h.value = float(entry.get("h", 1))
 	_insp_color.color = Color(String(entry.get("color", "#cccccc")))
+	# A painted costume (M45) slaves w/h to its resolution (cw/ch), so lock the W/H fields then —
+	# editing them would desync the footprint from the pixels (resolution lives in the Paint view).
+	var has_costume := entry.has("costume")
+	_insp_w.editable = not has_costume
+	_insp_h.editable = not has_costume
 	_loading_inspector = false
 	# Layer buttons (M42): grey out the moves that would do nothing — Forward/To Front when the sprite is
 	# already frontmost (the last array slot), Backward/To Back when it's already backmost (slot 0).
@@ -878,7 +914,7 @@ func _on_rename_sprite_confirmed() -> void:
 	BlockView.project_lists = _lists_in_scope(new_name)  # the renamed sprite's local lists, now under its new name (M44)
 	_palette.rebuild()
 	_canvas.refresh()  # after re-pointing project_sprites, so the new name is an in-scope option
-	if _stage_mode:
+	if _mode == Mode.STAGE:
 		_sync_inspector()  # the inspector's "Sprite: <name>" label tracks the rename
 
 
