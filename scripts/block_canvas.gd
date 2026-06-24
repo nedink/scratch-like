@@ -100,6 +100,7 @@ var _pending_reporter := false   # the pending press was on an on-canvas reporte
 var _pending_spawn := false      # the pending press was on a spawnable prototype pill (M31) -> mint a copy
 var _trashing := false           # the ghost is currently over the palette -> a drop deletes it (M16)
 var _spawn_scope_body: Variant = null  # (M31) when dragging a `param`, the define body Array its drops are confined to; null otherwise
+var _grabbed_collapsed := false  # (M47) the grab took a whole collapsed stack — re-home it collapsed if it lands free
 
 ## --- Multi-block selection (M46) ---
 ## References to the selected block dicts (identity, via is_same) — statement blocks *and* reporter
@@ -275,15 +276,59 @@ func _render() -> void:
 		child.queue_free()
 	var extent := Vector2.ZERO
 	for stack in _stacks:
-		var ctrl := BlockView.build_stack(stack["blocks"])
-		_passthrough(ctrl, true)
-		_wire_literals(ctrl)
+		# A collapsed stack (M47) renders as a one-line summary bar instead of its full tree; the bar is
+		# a pure summary, so nothing inside it is interactive (no _wire_literals, no kept literal fields).
+		var collapsed: bool = stack.get("collapsed", false)
+		var body_ctrl: Control = BlockView.build_collapsed_stack(stack["blocks"]) if collapsed \
+			else BlockView.build_stack(stack["blocks"])
+		var ctrl := _wrap_with_gutter(stack, body_ctrl, collapsed)  # left gutter holding the collapse chevron
+		# Pass the whole wrapped row through to _input (so the wheel still reaches the ScrollContainer and
+		# we hit-test presses ourselves); the chevron is found by its global rect, not its mouse_filter, so
+		# leaving it IGNORE is fine. A collapsed bar keeps no editable fields — it's a summary, not a header.
+		_passthrough(ctrl, not collapsed)
+		if not collapsed:
+			_wire_literals(ctrl)
 		_layer.add_child(ctrl)
 		ctrl.position = stack["pos"]
 		ctrl.size = ctrl.get_combined_minimum_size()
 		extent = extent.max(ctrl.position + ctrl.size)
 	_apply_selection_highlight()  # outline the selected blocks (M46)
 	_fit_to_content(extent)
+
+
+## Wrap a rendered stack in a row with a fixed-width left gutter (M47), so a collapse chevron has a home
+## without disturbing the stack's own layout — and so collapsible and non-collapsible stacks share one
+## left edge. The chevron (▼ expanded / ▶ collapsed) appears only when the stack has more than one block
+## to hide; it carries the stack dict as meta, so a press on it (intercepted in _input before any grab)
+## toggles that stack's `collapsed`. A single-block stack gets the empty gutter and no chevron.
+const _GUTTER_W := 16.0
+const _ROW_SEP := 2
+func _wrap_with_gutter(stack: Dictionary, body_ctrl: Control, collapsed: bool) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", _ROW_SEP)
+	var lead: Control
+	if BlockView.count_blocks(stack["blocks"]) > 1:
+		var chevron := Label.new()
+		chevron.text = "▶" if collapsed else "▼"
+		chevron.custom_minimum_size = Vector2(_GUTTER_W, 0)
+		chevron.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+		chevron.set_meta("collapse_stack", stack)
+		lead = chevron
+	else:
+		lead = Control.new()
+		lead.custom_minimum_size = Vector2(_GUTTER_W, 0)
+	lead.size_flags_vertical = Control.SIZE_SHRINK_BEGIN  # sit at the top, beside the first block
+	row.add_child(lead)
+	row.add_child(body_ctrl)
+	return row
+
+
+## Where a free-landing dragged stack should store its `pos` (M47). The ghost is the bare block(s) (no
+## gutter), but _render wraps every stack in the gutter row — which shifts the block right by the gutter
+## width + separation. Subtracting that here makes the landed block sit exactly where the ghost was,
+## instead of drifting right by the gutter on every drop.
+func _land_pos() -> Vector2:
+	return _ghost.position - Vector2(_GUTTER_W + _ROW_SEP, 0)
 
 
 ## Grow the canvas's minimum size to cover every stack (plus a margin), so the enclosing
@@ -458,6 +503,17 @@ func _input(event: InputEvent) -> void:
 			# in progress legitimately travels off-canvas, e.g. onto the palette trash, M16.)
 			if not _in_view(event.position):
 				return
+			# A press on a collapse chevron (M47) toggles that script's collapsed state — checked
+			# before any grab / marquee so the chevron never selects, drags, or clears. Commit any
+			# open field edit first, as a grab would.
+			var toggle: Variant = _collapse_toggle_at(event.position)
+			if toggle != null:
+				get_viewport().gui_release_focus()
+				var st := toggle as Dictionary  # the stack dict (a reference into _stacks)
+				st["collapsed"] = not st.get("collapsed", false)
+				_render()
+				get_viewport().set_input_as_handled()
+				return
 			# Scope every press-time hit-test to the front-most stack actually under the cursor, so
 			# a click never reaches a field, dropdown, or block belonging to a stack drawn *behind*
 			# it. Block bodies are mouse-transparent (_passthrough leaves only literal fields
@@ -585,6 +641,25 @@ func _tagged_panels(node: Node, out: Array = []) -> Array:
 	return out
 
 
+## The stack dict whose collapse chevron (M47) is under a global point, or null. The chevron carries its
+## owning stack dict as the `collapse_stack` meta (stamped in _wrap_with_gutter), so the press handler can
+## flip that stack's `collapsed` directly. Checked before _front_stack_at — the chevron sits in the left
+## gutter, outside every tagged block panel, so it would otherwise read as an empty-canvas press.
+func _collapse_toggle_at(global_point: Vector2) -> Variant:
+	for c in _chevrons(_layer):
+		if (c as Control).get_global_rect().has_point(global_point):
+			return c.get_meta("collapse_stack")
+	return null
+
+
+func _chevrons(node: Node, out: Array = []) -> Array:
+	if node is Control and node.has_meta("collapse_stack"):
+		out.append(node)
+	for child in node.get_children():
+		_chevrons(child, out)
+	return out
+
+
 ## True when a global point lands inside the canvas's visible region — its enclosing
 ## ScrollContainer's rect. The press handler gates on this so a press on the chrome above
 ## the canvas (the top bar) never grabs a block whose scrolled-up global rect overlaps it.
@@ -676,18 +751,23 @@ func _spawnables(node: Node, out: Array = []) -> Array:
 ## is not inside a define stack. A `param` reporter is bound to the function that declares it, so its
 ## drops are confined to slots in this body (see _nearest_slot). The Array reference is the live data,
 ## stable across re-renders — so it survives the _render() a reporter pickup triggers and matches back
-## to the freshly-built body column by is_same. Walks up to the top-level stack column (a direct child
-## of _layer); its body_array is the stack's blocks, and a define stack is [define_dict].
+## to the freshly-built body column by is_same. Walks up to the **outermost** stack column (the topmost
+## ancestor carrying `body_array` — the top-level stack's blocks, since a stack is wrapped in a gutter
+## row, M47, so the column is no longer a direct child of _layer); its body_array is [define_dict] for a
+## define stack, whose body is returned.
 func _enclosing_define_body(node: Node) -> Variant:
 	var n: Node = node
+	var top_column: Control = null
 	while n != null:
-		if n is Control and n.get_parent() == _layer:
-			var arr: Array = (n as Control).get_meta("body_array", [])
-			if not arr.is_empty() and typeof(arr[0]) == TYPE_DICTIONARY \
-					and String((arr[0] as Dictionary).get("opcode", "")) == "define":
-				return (arr[0] as Dictionary).get("inputs", {}).get("body")
-			return null
+		if n is Control and (n as Control).has_meta("body_array"):
+			top_column = n  # keep climbing — the last (outermost) match is the top-level stack column
 		n = n.get_parent()
+	if top_column == null:
+		return null
+	var arr: Array = top_column.get_meta("body_array", [])
+	if not arr.is_empty() and typeof(arr[0]) == TYPE_DICTIONARY \
+			and String((arr[0] as Dictionary).get("opcode", "")) == "define":
+		return (arr[0] as Dictionary).get("inputs", {}).get("body")
 	return null
 
 
@@ -700,6 +780,7 @@ func _enclosing_define_body(node: Node) -> Variant:
 ## into the canvas data. `global_point` is the cursor position to anchor the first frame.
 func begin_spawn_drag(blocks: Array, global_point: Vector2) -> void:
 	_cancel_drag()
+	_grabbed_collapsed = false  # a fresh spawn is never a collapsed stack (M47)
 	_grabbed = blocks
 	# A single reporter targets slots (and ghosts as a pill); anything else is a stack.
 	_dragging_reporter = blocks.size() == 1 and BlockView.is_reporter(String(blocks[0].get("opcode", "")))
@@ -746,6 +827,15 @@ func _begin_drag() -> void:
 	# Dragging a single / unselected block manipulates just that run — drop any standing selection.
 	_selected = []
 
+	# If this grab takes a whole collapsed top-level stack (its bar is the only grab target, so the
+	# press is always at index 0 of the stack's blocks), remember so _drop re-homes it still collapsed
+	# (M47). Any other grab — a block out of a stack, an expanded stack — re-homes expanded.
+	_grabbed_collapsed = false
+	for stack in _stacks:
+		if index == 0 and is_same(stack["blocks"], arr) and stack.get("collapsed", false):
+			_grabbed_collapsed = true
+			break
+
 	# Anchor the ghost so the grabbed block sits exactly where it was on press.
 	var origin := _grabbed_block_top_left(arr, index)
 	_grab_offset = _press_pos - origin
@@ -789,6 +879,7 @@ func _hit_is_reporter(hit: Dictionary) -> bool:
 ## stack) detaches by dropping that stack. From here it targets slots, re-homes free on empty canvas, or
 ## (over the palette) deletes — see _drop / begin_spawn_drag.
 func _begin_reporter_drag() -> void:
+	_grabbed_collapsed = false  # a single reporter is never a collapsed stack (M47)
 	var reporter: Variant
 	if _pending.has("array"):
 		# Free-floating reporter: lift it out of its top-level stack and drop the now-empty stack.
@@ -869,14 +960,15 @@ func _drop() -> void:
 		elif _spawn_scope_body == null:
 			# Off every slot: land the reporter as its own free-floating stack. A confined `param`
 			# (scope set) has no home outside its define body, so it is discarded (M31) instead.
-			_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
+			_stacks.append({"blocks": _grabbed, "pos": _land_pos()})
 	elif not _snap.is_empty():
 		var arr: Array = _snap["array"]
 		var index: int = _snap["index"]
 		for i in range(_grabbed.size()):
 			arr.insert(index + i, _grabbed[i])
 	else:
-		_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
+		# Land free — keeping it collapsed if it was grabbed as a whole collapsed stack (M47).
+		_stacks.append({"blocks": _grabbed, "pos": _land_pos(), "collapsed": _grabbed_collapsed})
 	_clear_drag_overlays()
 	_render()
 
@@ -888,7 +980,7 @@ func _cancel_drag() -> void:
 	# A statement stack or a free reporter is re-homed so it isn't lost (a reporter now has a top-level
 	# home, M46); a confined `param` drag (scope set) is discarded — it has no home outside its body.
 	if _state == _DRAGGING and not _grabbed.is_empty() and _spawn_scope_body == null:
-		_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
+		_stacks.append({"blocks": _grabbed, "pos": _land_pos(), "collapsed": _grabbed_collapsed})
 	_clear_drag_overlays()
 
 
@@ -1063,6 +1155,7 @@ func _block_of(panel: Control) -> Variant:
 
 
 func _is_selected(block: Variant) -> bool:
+
 	for b in _selected:
 		if is_same(b, block):
 			return true
@@ -1279,6 +1372,7 @@ func _begin_multi_drag() -> void:
 	var picks := _topmost_selected_in_order()
 	if picks.is_empty():
 		return
+	_grabbed_collapsed = false  # a gathered multi-selection lands expanded (M47)
 	# Anchor the ghost to the block actually under the cursor (measured before removal), so the run
 	# doesn't jump to a different selected block's position when the pickup begins.
 	var arr: Array = _pending["array"]
@@ -1352,9 +1446,10 @@ func _panel_top_left_of(block: Variant) -> Vector2:
 
 # --- Keyboard -------------------------------------------------------------
 
-## Keyboard ops on the selection (M46): Delete/Backspace removes it, Cmd/Ctrl+D duplicates it. Ignored
-## while a text field is focused (so typing — incl. Delete — inside a literal is unaffected) or nothing
-## is selected. set_input_as_handled only when we actually act, so other keys propagate untouched.
+## Keyboard ops on the selection (M46): Delete/Backspace removes it, Cmd/Ctrl+D duplicates it,
+## Cmd/Ctrl+E collapses/expands the scripts it touches (M47). Ignored while a text field is focused (so
+## typing — incl. Delete — inside a literal is unaffected) or nothing is selected. set_input_as_handled
+## only when we actually act, so other keys propagate untouched.
 func _handle_key(event: InputEventKey) -> void:
 	if not event.pressed or event.echo or _selected.is_empty():
 		return
@@ -1366,3 +1461,50 @@ func _handle_key(event: InputEventKey) -> void:
 	elif event.keycode == KEY_D and (event.meta_pressed or event.ctrl_pressed):
 		_duplicate_selection()
 		get_viewport().set_input_as_handled()
+	elif event.keycode == KEY_E and (event.meta_pressed or event.ctrl_pressed):
+		_toggle_collapse_selection()
+		get_viewport().set_input_as_handled()
+
+
+## Collapse / expand every top-level script the selection touches (M47, Cmd/Ctrl+E). Only collapsible
+## stacks (more than one block — a lone block has nothing to hide) participate. The toggle is uniform:
+## if any touched script is currently expanded, collapse them all; otherwise expand them all — so a
+## mixed selection resolves to one consistent state rather than flipping each independently.
+func _toggle_collapse_selection() -> void:
+	var stacks := _stacks_with_selection()
+	if stacks.is_empty():
+		return
+	var any_expanded := false
+	for st in stacks:
+		var d := st as Dictionary
+		if BlockView.count_blocks(d["blocks"]) > 1 and not d.get("collapsed", false):
+			any_expanded = true
+			break
+	for st in stacks:
+		var d := st as Dictionary
+		if BlockView.count_blocks(d["blocks"]) > 1:
+			d["collapsed"] = any_expanded
+	_render()
+
+
+## The top-level stacks containing any selected block (M47) — a stack qualifies if a selected block is
+## one of its statements or nested in a C-block body (the structure a collapse acts on). An in-slot
+## reporter pill selection isn't matched here; you collapse a script by selecting its blocks.
+func _stacks_with_selection() -> Array:
+	var out: Array = []
+	for stack in _stacks:
+		if _blocks_contain_selected(stack["blocks"]):
+			out.append(stack)
+	return out
+
+
+func _blocks_contain_selected(blocks: Array) -> bool:
+	for b in blocks:
+		if typeof(b) != TYPE_DICTIONARY:
+			continue
+		if _is_selected(b):
+			return true
+		var body: Variant = (b.get("inputs", {}) as Dictionary).get("body")
+		if body is Array and _blocks_contain_selected(body):
+			return true
+	return false

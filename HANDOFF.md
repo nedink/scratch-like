@@ -12,7 +12,25 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped (editor convenience):** the **block palette is resizable** — it's wider by default
+- **Just shipped — M47: collapsable scripts.** Collapse a top-level script in the block canvas to a
+  compact one-line bar and expand it again. Editor-only UI state (an optional `collapsed` flag per stack
+  in `BlockCanvas._stacks`, beside `pos`; never serialized, reset on a sprite switch) — **no opcode /
+  data-shape / runtime change**. `_render` draws `BlockView.build_collapsed_stack` (a summary bar in the
+  first block's category colour: its flattened label + a `+N` hidden-block badge, stamped `blk_index 0`
+  so it drags/selects/deletes as one unit) instead of the full tree when collapsed. Every stack is
+  wrapped by `_wrap_with_gutter` in a row with a left gutter; a multi-block stack gets a **chevron**
+  (`▼`/`▶`, meta `collapse_stack`). **Two gestures:** click the chevron (`_collapse_toggle_at`, checked
+  before `_front_stack_at` since the chevron is outside every block panel) or **Cmd/Ctrl+E** on a
+  selection (`_toggle_collapse_selection`, uniform toggle over the touched scripts). A whole-collapsed-
+  stack drag re-homes collapsed (`_grabbed_collapsed`); `_land_pos` offsets free-landing drops by the
+  gutter width so blocks don't drift. Files: `block_view.gd` (`build_collapsed_stack`/`_summary_text`/
+  `count_blocks`), `block_canvas.gd`.
+  - **F5-verify:** Blocks mode. A script with several blocks shows a `▼` at its left → click it: the
+    script folds to a one-line bar (first block's label + `+N`); the `▶` expands it. Drag a collapsed bar
+    → the whole script moves (and stays collapsed when dropped on empty canvas); Delete / Cmd+D act on it
+    as one unit. Select blocks across scripts, press **Cmd/Ctrl+E** → those scripts collapse/expand
+    together. A one-block stack has no chevron. RUN / SAVE unchanged; switching sprites re-expands all.
+- **Earlier (editor convenience):** the **block palette is resizable** — it's wider by default
   (min width 150 → 240, so the 220px chips no longer overflow into a horizontal scrollbar) and a
   **draggable divider** (`PaletteResizer`, a thin handle between the palette and the canvas, HSIZE
   cursor) sets the palette's width. Editor-side only: the handle's `gui_input` adds the drag delta to

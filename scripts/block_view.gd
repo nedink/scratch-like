@@ -363,6 +363,82 @@ static func build_reporter(block: Dictionary) -> Control:
 	return panel
 
 
+## A collapsed top-level stack (M47): a one-line summary bar in the first block's category colour —
+## its label text plus a "+N" badge counting the blocks hidden beneath it. Stamped blk_array/blk_index
+## 0 so the canvas drags / selects / deletes the whole collapsed script as a unit (the real blocks stay
+## in _stacks untouched, so export/persist are unaffected — collapse is editor-only UI state). It carries
+## no editable fields (it's a summary, not the live header), so the whole bar is one clean mouse target.
+static func build_collapsed_stack(blocks: Array) -> Control:
+	var first: Dictionary = {}
+	for b in blocks:
+		if b is Dictionary:
+			first = b as Dictionary
+			break
+	var category := String(_OPCODES.get(String(first.get("opcode", "")), {}).get("category", "unknown"))
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], 5))
+	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	var label := Label.new()
+	label.text = _summary_text(first)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	row.add_child(label)
+	var hidden := count_blocks(blocks) - 1
+	if hidden > 0:
+		var badge := Label.new()
+		badge.text = "+%d" % hidden
+		badge.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
+		row.add_child(badge)
+	panel.add_child(row)
+
+	panel.set_meta("blk_array", blocks)
+	panel.set_meta("blk_index", 0)
+	return panel
+
+
+## A one-line plain-text summary of a block for the collapsed bar (M47): its label template with each
+## {input} replaced by a stringified value — a literal/enum by its text, a nested reporter by "( )". No
+## editable widgets (unlike _header_from_template), so the collapsed bar reads as a single mouse target.
+## define/call show their name (their headers are data-driven, not template-driven — see _define_header).
+static func _summary_text(block: Dictionary) -> String:
+	var opcode := String(block.get("opcode", ""))
+	var inputs: Dictionary = block.get("inputs", {})
+	if opcode == "define":
+		return "define " + _stringify(inputs.get("name", ""))
+	if opcode == "call":
+		return "call " + _stringify(inputs.get("name", ""))
+	var template := String(_OPCODES.get(opcode, {}).get("template", opcode))
+	var out := ""
+	var i := 0
+	while i < template.length():
+		if template[i] == "{":
+			var close := template.find("}", i)
+			var key := template.substr(i + 1, close - i - 1)
+			var v: Variant = inputs.get(key)
+			out += "( )" if typeof(v) == TYPE_DICTIONARY else _stringify(v)
+			i = close + 1
+		else:
+			out += template[i]
+			i += 1
+	return out
+
+
+## Total statement blocks in a stack, counting nested C-block bodies recursively (M47) — drives the
+## collapsed bar's hidden-block count (total − 1, the first block being the one the bar shows). In-slot
+## reporter pills aren't counted (they're part of their host block's one line, not blocks "beneath" it).
+static func count_blocks(blocks: Array) -> int:
+	var n := 0
+	for b in blocks:
+		if b is Dictionary:
+			n += 1
+			var body: Variant = (b.get("inputs", {}) as Dictionary).get("body")
+			if body is Array:
+				n += count_blocks(body)
+	return n
+
+
 ## Render one input value, read from `inputs[key]`: a nested reporter dictionary ->
 ## a pill (build_reporter); an enum slot (non-empty `options`, M13) -> a dropdown
 ## (_enum_field); any other literal -> a small white **editable** field (M12), shaped
