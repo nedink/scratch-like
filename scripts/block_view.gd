@@ -68,10 +68,22 @@ const _ENUM_FIELD_SCENE := preload("res://blocks/enum_field.tscn")
 const _EMPTY_SLOT_SCENE := preload("res://blocks/empty_slot.tscn")
 const _COLLAPSED_BAR_SCENE := preload("res://blocks/collapsed_bar.tscn")
 
-## The editable per-category colour palette (blocks/block_styles.tres). category_color() reads
-## it; if it's missing (a non-editor caller, or the resource failed to load) it falls back to
-## the hardcoded _CATEGORY_COLORS below, so rendering never hard-depends on the resource.
+## The block-category **defaults**: the BlockStyles resource (blocks/block_styles.tres) — M48's
+## inspector-editable palette — falling back to the hardcoded _CATEGORY_COLORS below when it's
+## missing. These are the stock colours a category uses when the open project doesn't override it,
+## and what "reset to default" restores to (default_category_color). A user's *in-app* recolour no
+## longer writes here (M50): it goes into the project (project_block_colors), so a recolour is
+## per-project, not a permanent global edit.
 static var _styles: BlockStyles = (load("res://blocks/block_styles.tres") as BlockStyles)
+
+## Per-project category-colour overrides (M50): category name -> Color. The editor owns these — it
+## sets them on every project load from the saved `block_colors` model (editor._sync_block_colors),
+## the same static-as-project-model pattern as project_variables / project_sprites — and the
+## section-header colour picker writes into them live. category_color() reads an override here first,
+## else the default. Empty by default (no editor, or a project with no recoloured categories), so a
+## category with no override draws its stock colour. A recolour is saved in the project `.json`
+## (block_colors key), so it loads with that project and resets on NEW.
+static var project_block_colors: Dictionary = {}
 
 ## Scratch's category palette. Keyed by the "category" each opcode declares below.
 ## A static var (not const) because a Color built from a hex *string* is not a
@@ -906,39 +918,25 @@ static func reporter_output_type(opcode: String) -> String:
 	return String(_OPCODES.get(opcode, {}).get("output", "value"))
 
 
-## The display colour for a category — from the editable BlockStyles resource
-## (blocks/block_styles.tres) when present, else the hardcoded _CATEGORY_COLORS fallback (a
-## non-editor caller, or the resource failed to load). Used by the palette for its group
-## headers and by _tint to recolour each block scene's stylebox.
+## The display colour for a category (M50): the open project's override (project_block_colors) when
+## it has one, else the category default (default_category_color). Used by the palette for its group
+## headers and by _tint to recolour each block scene's stylebox — so a project's recoloured category
+## draws its custom hue and every other category draws the stock default.
 static func category_color(category: String) -> Color:
+	if project_block_colors.has(category):
+		return project_block_colors[category]
+	return default_category_color(category)
+
+
+## The default colour for a category — the value used when the project carries no override (M50):
+## the editable BlockStyles resource (blocks/block_styles.tres, M48) when present, else the hardcoded
+## _CATEGORY_COLORS fallback. The palette's colour picker uses this for its "reset to default" button
+## (which clears the project override — see editor._reset_category_color). Unknown category → the
+## grey `unknown` fallback.
+static func default_category_color(category: String) -> Color:
 	if _styles != null:
 		return _styles.color_for(category)
 	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
-
-
-## The stock (built-in) colour for a category — the hardcoded Scratch hue, ignoring any user edit in
-## the BlockStyles resource. The palette's colour picker uses this for its "reset to default" button
-## (M49). Unknown category → the grey `unknown` fallback.
-static func default_category_color(category: String) -> Color:
-	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
-
-
-## Set a category's display colour in the editable BlockStyles resource (the M48 styling store),
-## in memory. The palette calls this live as the user drags in a section-header colour picker (M49);
-## category_color() / _tint() then read the new value on the next render. Falls back to creating a
-## fresh BlockStyles if the resource failed to load, so a recolour never silently no-ops.
-static func set_category_color(category: String, color: Color) -> void:
-	if _styles == null:
-		_styles = BlockStyles.new()
-	_styles.set(category, color)
-
-
-## Persist the BlockStyles resource back to blocks/block_styles.tres, so a colour edit survives a
-## relaunch (the resource IS the editable colour store — M48). The palette calls this once when a
-## header's colour picker closes. A no-op if styles never loaded.
-static func save_styles() -> void:
-	if _styles != null:
-		ResourceSaver.save(_styles, "res://blocks/block_styles.tres")
 
 
 ## Recolour a block scene's `panel` stylebox to its category colour, in place. The scene owns

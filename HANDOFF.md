@@ -12,30 +12,39 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M49: recolour a block category from its palette header.** Click a section title in
+- **Just shipped — M50: category recolours are per-project, not a global edit.** M49 saved a category
+  recolour to `blocks/block_styles.tres` (a permanent global change, shared by every project); M50 moves
+  it into the **project `.json`** so a recolour rides with that project — it loads when the project opens
+  and resets on NEW, and any category the project doesn't recolour draws its **default**. The editor owns
+  a new `_block_colors` model (category → hex string), seeded `{}` by `_seed_demo`, serialised under a
+  top-level **`block_colors`** key (`_serialize_project` / `_apply_project` — optional, so a pre-M50 save
+  opens with no overrides), stashed across the RUN→ESC round trip (`_restore_block_colors`), and pushed
+  to the new static `BlockView.project_block_colors` on every project load (`_sync_block_colors`, the
+  colour twin of `_sync_background`). `BlockView.category_color` now reads that project override first,
+  else `default_category_color` (the `BlockStyles` `.tres` / `_CATEGORY_COLORS` default). The palette
+  picker no longer writes the `.tres`: `BlockView.set_category_color` / `save_styles` are **removed**, and
+  the palette calls back to the editor via new `_on_recolor_category(cat, color)` (live: writes
+  `_block_colors` + `project_block_colors` + `_canvas.refresh()`) and `_on_reset_category(cat)` (clears the
+  override). Picker close just rebuilds the chips (persistence already happened live). `BlockStyles`
+  (`block_styles.gd` / `.tres`) stays as the inspector-editable **default** provider (M48); the working
+  `.tres` was reverted to stock (the `control`/`motion` edits baked in by M49 testing are gone).
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — click a section title →
+    picker opens, category recolours live as you pick; **SAVE** the project, relaunch, **OPEN** it → the
+    colour comes back; **NEW** → all categories return to defaults; the recoloured project's `.json` has a
+    `block_colors` entry. "Reset to default colour" returns a category to stock and drops it from the
+    project. `blocks/block_styles.tres` should **no longer** change when you recolour in-app. RUN→ESC keeps
+    the colours.
+- **Earlier — M49: recolour a block category from its palette header.** Click a section title in
   the palette (the coloured header bars — MOTION, CONTROL, …, plus MY BLOCKS / LISTS) to open a colour
-  picker; blocks in that category recolour **live** as you pick, and the choice is saved to
-  `blocks/block_styles.tres` when the picker closes. Builds on M48's data-keyed colour: each group title
-  is now a **flat `Button`** (`BlockPalette._add_group_header` — colour-fonted title, transparent, like
-  the M48 `Label`) that on click pops a **shared `ColorPicker` in a `PopupPanel`** (`_ensure_color_popup`,
-  reused across categories, skipped by `rebuild()`). A `ColorPickerButton` was the first attempt but
-  paints its swatch over the whole button, hiding the title — hence the separate picker. `color_changed`
-  → `_on_category_color_changed` (sets `BlockView.set_category_color` in memory + recolours the header +
-  `_canvas.refresh()` so the canvas recolours live; no palette rebuild — would free the open picker);
-  `popup_hide` → `_on_category_color_committed` (`BlockView.save_styles()` writes the `.tres`, then
-  deferred `rebuild()` re-tints the chips). A **"Reset to default colour"** button under the picker
-  (`_on_reset_category_color` → `BlockView.default_category_color`) restores a category's stock hue —
-  the way back, since colours persist globally and NEW/OPEN don't reset them (resetting writes the
-  default, which matches the `BlockStyles` script default, so `ResourceSaver` drops the override).
-  **No opcode / data-shape / runtime / `editor.tscn` / `editor.gd` change** — it's
-  `BlockPalette` + a two-method API on `BlockView` (`set_category_color` / `save_styles`). Persistence is
-  to the `.tres` (a global styling preference), not the project `.json`.
-  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — each palette section
-    title still shows as its colour-fonted name (now a clickable button); click one → a colour picker
-    opens, and that category's blocks (canvas +
-    chips) recolour as you pick. Close it, relaunch → the colour persists (and `git status` shows
-    `blocks/block_styles.tres` modified). MY BLOCKS and LISTS titles work too. Dragging chips, the
-    Make-a-Variable/Make-a-Block buttons, and the per-variable/list rows are unaffected.
+  picker; blocks in that category recolour **live** as you pick. Each group title is a **flat `Button`**
+  (`BlockPalette._add_group_header` — colour-fonted title, transparent, like the M48 `Label`) that on
+  click pops a **shared `ColorPicker` in a `PopupPanel`** (`_ensure_color_popup`, reused across categories,
+  skipped by `rebuild()`). A `ColorPickerButton` was the first attempt but paints its swatch over the
+  whole button, hiding the title — hence the separate picker. `color_changed` → `_on_category_color_changed`
+  → `_apply_recolor` (recolours the header + applies live; no palette rebuild — would free the open
+  picker); `popup_hide` → `_on_category_color_committed` (deferred `rebuild()` re-tints the chips). A
+  **"Reset to default colour"** button under the picker restores a category's stock hue. (M49 persisted to
+  the `.tres`; **M50 above changed that to per-project**.)
 - **Earlier — M48: block rendering via editable Godot scenes.** The block visuals are no longer
   hand-built in code: `BlockView` now **instantiates one `.tscn` shell per shape** (`blocks/*.tscn`) and
   populates it, so block styling — corner radii, padding, borders, fonts, layout, decorations — is

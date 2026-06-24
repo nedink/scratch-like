@@ -80,6 +80,7 @@ static var _restore_variables: Array = []
 static var _restore_background: String = ""
 static var _restore_grid: Dictionary = {}
 static var _restore_lists: Array = []
+static var _restore_block_colors: Dictionary = {}
 static var _restore_path: String = ""
 
 ## The interactive block canvas (M9): drag/snap lives here. Reloaded on selection.
@@ -161,6 +162,15 @@ var _background: String = ""
 ## project load (_sync_grid). _read_project defaults it for a pre-grid save. Editor-only: unlike the
 ## background it isn't handed to the running game (the grid is an authoring aid, not part of the scene).
 var _grid_settings: Dictionary = {}
+
+## The project's per-category block-colour overrides (M50) — category name -> hex string. A project
+## property like _background: seeded empty by _seed_demo (so an untouched project draws stock colours),
+## written by the section-header colour picker (_recolor_category / _reset_category_color), saved under
+## a top-level "block_colors" key, and pushed to BlockView.project_block_colors on every project load
+## (_sync_block_colors). Only recoloured categories appear; a missing category falls back to its
+## default (BlockView.default_category_color) — so a recolour rides with its project and NEW resets it,
+## rather than permanently editing the global blocks/block_styles.tres.
+var _block_colors: Dictionary = {}
 
 ## Which workspace surface is showing (M45 widened M27's bool to three modes): the block canvas
 ## (BLOCKS), the stage/geometry editor (STAGE), or the pixel costume editor (PAINT). _set_mode flips it.
@@ -340,6 +350,10 @@ func _ready() -> void:
 	_palette._on_make_list = _make_list
 	_palette._on_rename_list = _rename_list
 	_palette._on_delete_list = _delete_list
+	# Recolouring a category from its palette header (M49) now writes a per-project override (M50):
+	# these hooks let the editor apply it live and persist it with the project (not the global .tres).
+	_palette._on_recolor_category = _recolor_category
+	_palette._on_reset_category = _reset_category_color
 	# Renaming a `define` in place (M32) cascades to its `call`s in the canvas; this hook lets us then
 	# re-derive the sprite's custom-block names so the palette chips and `call` dropdowns track the rename.
 	_canvas.on_custom_block_renamed = _on_custom_block_renamed
@@ -468,6 +482,8 @@ func _seed_demo() -> void:
 	_lists = PongScripts.lists().duplicate(true)
 	_background = PongScripts.background()
 	_grid_settings = PongScripts.grid()
+	# The stock demo recolours no category — every block draws its default colour (M50).
+	_block_colors = {}
 
 
 ## Restore the project stashed by _on_run when ESC returns from a RUN (see _restore_* statics). The
@@ -482,6 +498,7 @@ func _restore_project() -> void:
 	_lists = _restore_lists
 	_background = _restore_background
 	_grid_settings = _restore_grid
+	_block_colors = _restore_block_colors
 	_current_path = _restore_path
 
 
@@ -503,6 +520,7 @@ func _load_project_into_ui(select_index := 0) -> void:
 	_update_title()
 	_sync_background()  # NEW/OPEN may have changed the project's background; push it to the view + picker
 	_sync_grid()        # likewise the grid settings (show/snap/colour/step) — push to the controls + view
+	_sync_block_colors()  # push the project's per-category block-colour overrides to BlockView (M50)
 	var index: int = clampi(select_index, 0, _scripts.size() - 1)
 	_selector.select(index)
 	_show(index)
@@ -781,6 +799,39 @@ func _on_grid_step_changed(value: float) -> void:
 		return
 	_grid_settings["step"] = int(value)
 	_stage_view.set_grid_step(int(value))
+
+
+# --- Per-project block colours (M50) ---------------------------------------
+
+## Push the project's per-category block-colour overrides into BlockView (M50) — the colour twin of
+## _sync_background, run on every project load. Rebuilds BlockView.project_block_colors fresh from the
+## `_block_colors` model (hex strings parsed to Colors), so the previous project's overrides don't
+## linger. The palette rebuild / canvas render that follow (via _show) then draw each category in its
+## override, or its default where the project carries none.
+func _sync_block_colors() -> void:
+	BlockView.project_block_colors = {}
+	for category in _block_colors:
+		BlockView.project_block_colors[String(category)] = Color(String(_block_colors[category]))
+
+
+## Set a category's colour override from the palette's section-header picker (M50), live as the user
+## drags: record it in the project model (`_block_colors`, as a hex string so it serialises) and in
+## BlockView (the live render source), then refresh the canvas so its blocks recolour at once. The
+## palette restyles the header and (on picker close) rebuilds the chips. Persisted with the project on
+## SAVE — a recolour is per-project, not a global edit.
+func _recolor_category(category: String, color: Color) -> void:
+	_block_colors[category] = "#" + color.to_html(false)  # opaque (the picker disables alpha)
+	BlockView.project_block_colors[category] = color
+	_canvas.refresh()
+
+
+## Reset a category to its default colour from the palette's "Reset to default" button (M50): drop the
+## project override (so the category falls back to its default and the project no longer carries it)
+## and refresh the canvas. The palette syncs the picker swatch + header to the default.
+func _reset_category_color(category: String) -> void:
+	_block_colors.erase(category)
+	BlockView.project_block_colors.erase(category)
+	_canvas.refresh()
 
 
 ## The project's sprite names (M17), the sprites half of the project model — the targets a
@@ -1465,6 +1516,7 @@ func _serialize_project() -> String:
 		"lists": _lists,
 		"background": _background,
 		"grid": _grid_settings,
+		"block_colors": _block_colors,
 	}, "\t")
 
 
@@ -1524,6 +1576,10 @@ func _apply_project(text: String, source: String) -> bool:
 		for key in saved_grid:
 			grid[key] = saved_grid[key]
 	_grid_settings = grid
+	# Per-category block colours (M50): optional, so a project saved before it (or one that recoloured
+	# nothing) opens with no overrides — every category draws its default. Validate it's a dict if present.
+	var saved_colors: Variant = data.get("block_colors", {})
+	_block_colors = saved_colors if typeof(saved_colors) == TYPE_DICTIONARY else {}
 	return true
 
 
@@ -1635,6 +1691,7 @@ func _on_run() -> void:
 	_restore_lists = lists
 	_restore_background = _background
 	_restore_grid = _grid_settings.duplicate(true)
+	_restore_block_colors = _block_colors.duplicate(true)
 	_restore_path = _current_path
 	_restore_pending = true
 	get_tree().change_scene_to_file(_GAME_SCENE)

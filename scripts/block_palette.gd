@@ -63,13 +63,20 @@ var _on_make_list: Callable
 var _on_rename_list: Callable
 var _on_delete_list: Callable
 
+## Called when a category is recoloured / reset from its section-header picker (M50). Set by the
+## editor, which owns the per-project colour model (_block_colors) and applies the change live +
+## persists it with the project. Left unset by a non-editor caller (the live preview then no-ops).
+## `_on_recolor_category(category: String, color: Color)`, `_on_reset_category(category: String)`.
+var _on_recolor_category: Callable
+var _on_reset_category: Callable
+
 ## The shared colour picker used to recolour a category from its section header (M49). Built lazily
 ## on the first header click and reused; deliberately kept out of rebuild()'s teardown (see rebuild)
 ## so a recolour-driven rebuild can't free it mid-interaction.
 var _color_popup: PopupPanel
 var _color_picker: ColorPicker
 ## The category currently being recoloured and its header button, so a live colour_changed can update
-## both the BlockStyles store and the header title's colour before the picker closes.
+## both the project colour model and the header title's colour before the picker closes.
 var _recolor_category: String
 var _recolor_header: Button
 
@@ -233,9 +240,9 @@ func _ensure_color_popup() -> void:
 	_color_picker.edit_alpha = false  # category colours are opaque
 	_color_picker.color_changed.connect(_on_category_color_changed)
 	box.add_child(_color_picker)
-	# A "reset to default" button beneath the picker (M49) restores the category's stock Scratch
-	# hue — the only way back once a colour is edited, since colours persist globally and NEW/OPEN
-	# don't touch them. It sets the picker swatch and applies the change live, like a drag would.
+	# A "reset to default" button beneath the picker (M49) restores the category's stock default
+	# colour — it clears the project override (M50), so the category goes back to drawing its
+	# default and the project no longer carries an entry for it.
 	var reset_btn := Button.new()
 	reset_btn.text = "Reset to default colour"
 	reset_btn.pressed.connect(_on_reset_category_color)
@@ -250,40 +257,43 @@ func _on_category_color_changed(color: Color) -> void:
 	_apply_recolor(color)
 
 
-## Reset the category being edited to its stock built-in colour (M49): sync the picker swatch (a
-## programmatic set doesn't emit color_changed) and apply the change live. Persistence happens on
-## the picker close, like any recolour — so closing after a reset writes the default back to the .tres.
+## Reset the category being edited to its default colour (M49/M50): clear the project override (via
+## the editor, which also refreshes the canvas), then sync the picker swatch to the default (a
+## programmatic set doesn't emit color_changed, so this doesn't re-add an override) and recolour the
+## header title to match.
 func _on_reset_category_color() -> void:
 	if _recolor_category == "":
 		return
+	if _on_reset_category.is_valid():
+		_on_reset_category.call(_recolor_category)
 	var stock := BlockView.default_category_color(_recolor_category)
 	_color_picker.color = stock
-	_apply_recolor(stock)
+	if is_instance_valid(_recolor_header):
+		_style_header_text(_recolor_header, stock)
 
 
-## Apply a category recolour live (M49): set the colour in memory (BlockView.set_category_color),
-## recolour the header title to match, and re-render the canvas so its blocks recolour immediately. No
-## palette rebuild here — that would free the open popup; chip re-tinting and persistence wait for the
-## picker to close.
+## Apply a category recolour live (M49/M50): hand the colour to the editor (which sets the override
+## in the project model + BlockView and re-renders the canvas so its blocks recolour immediately) and
+## recolour the header title to match. No palette rebuild here — that would free the open popup; chip
+## re-tinting waits for the picker to close.
 func _apply_recolor(color: Color) -> void:
 	if _recolor_category == "":
 		return
-	BlockView.set_category_color(_recolor_category, color)
+	if _on_recolor_category.is_valid():
+		_on_recolor_category.call(_recolor_category, color)
 	if is_instance_valid(_recolor_header):
 		_style_header_text(_recolor_header, color)
-	if _canvas != null:
-		_canvas.refresh()
 
 
-## When the picker closes (M49): persist the BlockStyles resource to disk (one write) and rebuild the
-## palette so every chip in the category re-tints to the final colour. Deferred — rebuild() frees the
-## palette's children, and we're inside the popup's own hide signal.
+## When the picker closes (M49): rebuild the palette so every chip in the category re-tints to the
+## final colour. Deferred — rebuild() frees the palette's children, and we're inside the popup's own
+## hide signal. Persistence already happened live (the editor wrote each change into the project
+## model as the picker dragged), so there's nothing to commit here (M50).
 func _on_category_color_committed() -> void:
 	if _recolor_category == "":
 		return
 	_recolor_category = ""
 	_recolor_header = null
-	BlockView.save_styles()
 	call_deferred("rebuild")
 
 
