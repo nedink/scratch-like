@@ -63,6 +63,16 @@ var _on_make_list: Callable
 var _on_rename_list: Callable
 var _on_delete_list: Callable
 
+## The shared colour picker used to recolour a category from its section header (M49). Built lazily
+## on the first header click and reused; deliberately kept out of rebuild()'s teardown (see rebuild)
+## so a recolour-driven rebuild can't free it mid-interaction.
+var _color_popup: PopupPanel
+var _color_picker: ColorPicker
+## The category currently being recoloured and its header button, so a live colour_changed can update
+## both the BlockStyles store and the header title's colour before the picker closes.
+var _recolor_category: String
+var _recolor_header: Button
+
 var _state: int = _IDLE
 var _press_pos: Vector2
 ## The chip pressed, held through the PENDING window so the motion handler can read its opcode and
@@ -177,48 +187,77 @@ func _add_group_header(category: String, text := "") -> void:
 		spacer.custom_minimum_size = Vector2(0, _GROUP_GAP)
 		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(spacer)
-	# The header is a ColorPickerButton (M49) so clicking a section title opens a colour picker for
-	# that category — the same picker idiom the inspector and Paint view use. The button's fill *is*
-	# the category colour (a Scratch-like coloured title bar), with the title text drawn in a
-	# contrasting shade so it stays legible on light and dark categories alike. It carries no
-	# `palette_opcode` meta, so _chip_at skips it and our _input never starts a drag from it; GUI
-	# handles the click, exactly like the Make-a-Variable button.
-	var col := BlockView.category_color(category)
-	var header := ColorPickerButton.new()
+	# The header is a flat Button (M49) so clicking a section title opens a colour picker for that
+	# category. It keeps the M48 look — the title in the category's colour on a transparent
+	# background — held across hover/pressed/focus so a flat button's default skin never overrides
+	# it. It carries no `palette_opcode` meta, so _chip_at skips it and our _input never starts a
+	# drag from it; GUI handles the click, exactly like the Make-a-Variable button. (A
+	# ColorPickerButton can't be used here — it paints its colour swatch over the whole button,
+	# hiding the title text — so the click pops a separate ColorPicker instead.)
+	var header := Button.new()
+	header.flat = true
 	header.text = text if text != "" else category.to_upper()
 	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	header.edit_alpha = false  # category colours are opaque
-	header.color = col
 	header.tooltip_text = "Click to change this category's block colour"
-	_style_header_text(header, col)
-	header.color_changed.connect(_on_category_color_changed.bind(category, header))
-	header.popup_closed.connect(_on_category_color_committed)
+	_style_header_text(header, BlockView.category_color(category))
+	header.pressed.connect(_on_header_pressed.bind(category, header))
 	add_child(header)
 
 
-## Draw a header button's title in black or white, whichever contrasts with its category-colour
-## fill (M49), so the section name stays readable across the whole palette.
-func _style_header_text(btn: Button, fill: Color) -> void:
-	var fg := Color.BLACK if fill.get_luminance() > 0.5 else Color.WHITE
-	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		btn.add_theme_color_override(state, fg)
+## Colour a header button's title in `col` across every state (M49), so the section name keeps the
+## category colour and a flat button's hover/pressed/focus skins don't override it.
+func _style_header_text(btn: Button, col: Color) -> void:
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_hover_pressed_color", "font_focus_color"]:
+		btn.add_theme_color_override(state, col)
 
 
-## Live as the user drags in a category header's colour picker (M49): set the colour in memory
-## (BlockView.set_category_color) and re-render the canvas so its blocks recolour immediately. The
-## header button tracks its own fill; we deliberately do NOT rebuild the palette here (that would
-## free the open picker) — chip re-tinting and persistence wait for the picker to close.
-func _on_category_color_changed(color: Color, category: String, header: ColorPickerButton) -> void:
-	BlockView.set_category_color(category, color)
-	_style_header_text(header, color)
+## Open the shared colour picker for a category when its header is clicked (M49), pre-set to the
+## category's current colour. The picker is built lazily and reused (see _ensure_color_popup).
+func _on_header_pressed(category: String, header: Button) -> void:
+	_ensure_color_popup()
+	_recolor_category = category
+	_recolor_header = header
+	_color_picker.color = BlockView.category_color(category)
+	_color_popup.popup_centered()
+
+
+## Build the shared category colour picker once — a ColorPicker in a PopupPanel — and reuse it. It's
+## added as a palette child but skipped by rebuild(), so a live recolour can rebuild the chips without
+## freeing the open popup.
+func _ensure_color_popup() -> void:
+	if is_instance_valid(_color_popup):
+		return
+	_color_popup = PopupPanel.new()
+	_color_picker = ColorPicker.new()
+	_color_picker.edit_alpha = false  # category colours are opaque
+	_color_picker.color_changed.connect(_on_category_color_changed)
+	_color_popup.popup_hide.connect(_on_category_color_committed)
+	_color_popup.add_child(_color_picker)
+	add_child(_color_popup)
+
+
+## Live as the user drags in the picker (M49): set the colour in memory (BlockView.set_category_color),
+## recolour the header title to match, and re-render the canvas so its blocks recolour immediately. No
+## palette rebuild here — that would free the open popup; chip re-tinting and persistence wait for the
+## picker to close.
+func _on_category_color_changed(color: Color) -> void:
+	if _recolor_category == "":
+		return
+	BlockView.set_category_color(_recolor_category, color)
+	if is_instance_valid(_recolor_header):
+		_style_header_text(_recolor_header, color)
 	if _canvas != null:
 		_canvas.refresh()
 
 
-## When a category header's colour picker closes (M49): persist the BlockStyles resource to disk
-## (one write) and rebuild the palette so every chip in that category re-tints to the final colour.
-## Deferred — rebuild() frees the palette's children, and we're inside the button's own signal.
+## When the picker closes (M49): persist the BlockStyles resource to disk (one write) and rebuild the
+## palette so every chip in the category re-tints to the final colour. Deferred — rebuild() frees the
+## palette's children, and we're inside the popup's own hide signal.
 func _on_category_color_committed() -> void:
+	if _recolor_category == "":
+		return
+	_recolor_category = ""
+	_recolor_header = null
 	BlockView.save_styles()
 	call_deferred("rebuild")
 
@@ -310,6 +349,8 @@ func _on_list_menu(id: int, list_name: String) -> void:
 ## never lingers in the tree for _chip_at to hit.
 func rebuild() -> void:
 	for child in get_children():
+		if child == _color_popup:
+			continue  # the shared category colour picker (M49) outlives a rebuild
 		remove_child(child)
 		child.queue_free()
 	_build()

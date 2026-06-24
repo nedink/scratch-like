@@ -16,16 +16,20 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   the palette (the coloured header bars — MOTION, CONTROL, …, plus MY BLOCKS / LISTS) to open a colour
   picker; blocks in that category recolour **live** as you pick, and the choice is saved to
   `blocks/block_styles.tres` when the picker closes. Builds on M48's data-keyed colour: each group title
-  is now a **`ColorPickerButton`** (`BlockPalette._add_group_header` — fill = category colour, title text
-  black/white by luminance via `_style_header_text`) instead of a `Label`. `color_changed` →
-  `_on_category_color_changed` (sets `BlockView.set_category_color` in memory + `_canvas.refresh()` so the
-  canvas recolours live; no palette rebuild — would free the open picker); `popup_closed` →
-  `_on_category_color_committed` (`BlockView.save_styles()` writes the `.tres`, then deferred `rebuild()`
-  re-tints the chips). **No opcode / data-shape / runtime / `editor.tscn` / `editor.gd` change** — it's
+  is now a **flat `Button`** (`BlockPalette._add_group_header` — colour-fonted title, transparent, like
+  the M48 `Label`) that on click pops a **shared `ColorPicker` in a `PopupPanel`** (`_ensure_color_popup`,
+  reused across categories, skipped by `rebuild()`). A `ColorPickerButton` was the first attempt but
+  paints its swatch over the whole button, hiding the title — hence the separate picker. `color_changed`
+  → `_on_category_color_changed` (sets `BlockView.set_category_color` in memory + recolours the header +
+  `_canvas.refresh()` so the canvas recolours live; no palette rebuild — would free the open picker);
+  `popup_hide` → `_on_category_color_committed` (`BlockView.save_styles()` writes the `.tres`, then
+  deferred `rebuild()` re-tints the chips). **No opcode / data-shape / runtime / `editor.tscn` /
+  `editor.gd` change** — it's
   `BlockPalette` + a two-method API on `BlockView` (`set_category_color` / `save_styles`). Persistence is
   to the `.tres` (a global styling preference), not the project `.json`.
   - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — each palette section
-    title is now a coloured bar; click one → a colour picker opens, and that category's blocks (canvas +
+    title still shows as its colour-fonted name (now a clickable button); click one → a colour picker
+    opens, and that category's blocks (canvas +
     chips) recolour as you pick. Close it, relaunch → the colour persists (and `git status` shows
     `blocks/block_styles.tres` modified). MY BLOCKS and LISTS titles work too. Dragging chips, the
     Make-a-Variable/Make-a-Block buttons, and the per-variable/list rows are unaffected.
