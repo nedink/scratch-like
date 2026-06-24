@@ -292,7 +292,11 @@ static func build_stack(blocks: Array) -> VBoxContainer:
 	for block in blocks:
 		if typeof(block) != TYPE_DICTIONARY:
 			continue
-		var panel := build_block(block)
+		# A reporter block sitting at stack level is a **free-floating reporter** (M46) — Scratch's
+		# "pull a reporter onto the workspace": draw it as its pill, not a statement panel, but still
+		# stamp blk_array/blk_index so the canvas drags/selects it like any top-level block.
+		var opcode := String((block as Dictionary).get("opcode", ""))
+		var panel: Control = build_reporter(block) if is_reporter(opcode) else build_block(block)
 		panel.set_meta("blk_array", blocks)
 		panel.set_meta("blk_index", index)
 		column.add_child(panel)

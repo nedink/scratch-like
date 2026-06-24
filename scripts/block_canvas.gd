@@ -28,15 +28,17 @@ extends Control
 ## target — but the target is a slot (_nearest_slot, found via the `slot_*` meta BlockView
 ## stamps on every input widget) instead of a stack gap, and the drop *writes* the reporter
 ## into the slot's live `inputs[key]` (overwriting whatever was there) instead of splicing
-## into an array. A reporter released off any slot is **discarded** — it can't become a
-## top-level orphan the interpreter couldn't run.
+## into an array. A reporter released off any slot lands as a **free-floating top-level stack**
+## (M46 — Scratch's loose reporter on the workspace; through M45 it was discarded). It is inert at
+## runtime (run() starts only hats, so a loose reporter never executes) but persists with the project.
 ##
 ## M15 adds the reverse: **grab a reporter pill already in a slot** to pull it back out.
 ## A press over a pill (checked before the statement it sits in, _reporter_at) detaches the
 ## reporter dict, leaves the slot's default literal behind (slot_default — we never kept the
 ## literal the reporter displaced), and rides the very same _dragging_reporter flow as a
-## palette spawn: re-drop it into another slot, or release off every slot to discard it
-## (the editor's reporter "trash"). A pill whose interior is entirely a literal field — a
+## palette spawn: re-drop it into another slot, drop it on empty canvas to leave it floating, or
+## drag it onto the palette to delete it. A free-floating reporter is itself grabbable again (it is
+## its own top-level stack, found by _block_at — M46). A pill whose interior is entirely a literal field — a
 ## bare `variable`/`score` — is grabbed by its thin coloured border; the wider operator /
 ## sensing pills are grabbed by their body. (Full-body grab of a `variable` waits for its
 ## free-text name to become a data-scoped menu — see CLAUDE.md.)
@@ -503,7 +505,10 @@ func _input(event: InputEvent) -> void:
 				_pending = hit
 				_pending["double"] = double_click  # (M46) click-select on release
 				_pending["additive"] = additive
-				_pending_reporter = not rep.is_empty()
+				# A reporter drag (targets slots / re-homes free, M46) when the press is on an in-slot
+				# pill (rep) OR a free-floating reporter — a top-level stack whose single block is a
+				# reporter, found by _block_at. A statement press is a normal stack drag.
+				_pending_reporter = not rep.is_empty() or _hit_is_reporter(hit)
 				get_viewport().set_input_as_handled()
 		elif not event.pressed:
 			if _state == _DRAGGING:
@@ -724,18 +729,20 @@ func _begin_drag() -> void:
 		begin_spawn_drag([blk], _press_pos)
 		_spawn_scope_body = scope
 		return
+	# Multi-block move (M46): if the grabbed block is part of a 2+ selection, gather the whole
+	# selection (topmost-selected, in document order) and drag it as one run, leaving the rest behind.
+	# Covers statements AND free-floating reporters (both are blocks in a top-level stack, so both have
+	# `array`); an in-slot pill press has no `array` and so never multi-drags — it pulls out of its slot.
+	if _pending.has("array") and _selected.size() >= 2:
+		var clicked: Variant = _pending_clicked_block()
+		if clicked != null and _is_selected(clicked):
+			_begin_multi_drag()
+			return
 	if _pending_reporter:
 		_begin_reporter_drag()
 		return
 	var arr: Array = _pending["array"]
 	var index: int = _pending["index"]
-
-	# Multi-block move (M46): if the grabbed block is part of a 2+ selection, gather the whole
-	# selection (topmost-selected, in document order) and drag it as one run, leaving the rest behind.
-	var grabbed_block: Variant = arr[index] if index < arr.size() else null
-	if grabbed_block != null and _selected.size() >= 2 and _is_selected(grabbed_block):
-		_begin_multi_drag()
-		return
 	# Dragging a single / unselected block manipulates just that run — drop any standing selection.
 	_selected = []
 
@@ -762,24 +769,51 @@ func _begin_drag() -> void:
 	_state = _DRAGGING
 
 
-## Pull an on-canvas reporter out of its slot (M15) and start it floating. The slot reverts
-## to its opcode default literal (slot_default), since we never kept the literal the reporter
-## displaced. From here it is an ordinary _dragging_reporter drag — drop it into another slot
-## or release off every slot to discard it (cf. begin_spawn_drag, which spawns a fresh one).
+## True when `hit` (a _block_at result) names a free-floating reporter — a top-level stack whose
+## block is a reporter (M46). Such a press starts a reporter drag (targets slots / re-homes free)
+## rather than a statement drag, even though _block_at, not _reporter_at, found it.
+func _hit_is_reporter(hit: Dictionary) -> bool:
+	if not hit.has("array"):
+		return false
+	var arr: Array = hit["array"]
+	var index: int = int(hit["index"])
+	if index < 0 or index >= arr.size():
+		return false
+	var block: Variant = arr[index]
+	return block is Dictionary and BlockView.is_reporter(String((block as Dictionary).get("opcode", "")))
+
+
+## Start a single reporter pill floating as a _dragging_reporter drag. Two origins (M46): an **in-slot**
+## pill (M15) detaches out of its slot, which reverts to its opcode default literal (slot_default, since
+## we never kept the literal the reporter displaced); a **free-floating** reporter (its own top-level
+## stack) detaches by dropping that stack. From here it targets slots, re-homes free on empty canvas, or
+## (over the palette) deletes — see _drop / begin_spawn_drag.
 func _begin_reporter_drag() -> void:
-	var inputs: Dictionary = _pending["inputs"]
-	var key: String = _pending["key"]
-	var reporter: Variant = inputs.get(key)
+	var reporter: Variant
+	if _pending.has("array"):
+		# Free-floating reporter: lift it out of its top-level stack and drop the now-empty stack.
+		var arr: Array = _pending["array"]
+		var index: int = int(_pending["index"])
+		reporter = arr[index]
+		_grab_offset = _press_pos - _grabbed_block_top_left(arr, index)
+		for s in range(_stacks.size() - 1, -1, -1):
+			if is_same(_stacks[s]["blocks"], arr):
+				_stacks.remove_at(s)
+		_selected = []
+	else:
+		var inputs: Dictionary = _pending["inputs"]
+		var key: String = _pending["key"]
+		reporter = inputs.get(key)
 
-	# A `param` reporter (M31) is bound to its define — moving it stays confined to that function's
-	# body. Computed from the source slot's subtree *before* _render() frees it; the body Array is the
-	# live data, so it stays valid across the re-render (and matches the rebuilt column by is_same).
-	if typeof(reporter) == TYPE_DICTIONARY and String((reporter as Dictionary).get("opcode", "")) == "param":
-		_spawn_scope_body = _enclosing_define_body(_pending.get("control"))
+		# A `param` reporter (M31) is bound to its define — moving it stays confined to that function's
+		# body. Computed from the source slot's subtree *before* _render() frees it; the body Array is the
+		# live data, so it stays valid across the re-render (and matches the rebuilt column by is_same).
+		if typeof(reporter) == TYPE_DICTIONARY and String((reporter as Dictionary).get("opcode", "")) == "param":
+			_spawn_scope_body = _enclosing_define_body(_pending.get("control"))
 
-	# Anchor the ghost so the grabbed pill sits exactly where it was on press.
-	_grab_offset = _press_pos - _pending["origin"]
-	inputs[key] = _pending["default"]  # slot reverts to its default literal
+		# Anchor the ghost so the grabbed pill sits exactly where it was on press.
+		_grab_offset = _press_pos - _pending["origin"]
+		inputs[key] = _pending["default"]  # slot reverts to its default literal
 	_grabbed = [reporter]
 	_dragging_reporter = true
 
@@ -820,10 +854,11 @@ func _over_trash(global_point: Vector2) -> bool:
 
 ## Place the dragged blocks. Over the palette (the trash, M16) the grabbed blocks are simply
 ## **not re-homed** — they were already detached from the data on pickup, so dropping them
-## here deletes them (the statement counterpart to a reporter's off-slot discard). Otherwise:
-## a reporter drops into the targeted slot (overwriting its live `inputs[key]`) or, off any
-## slot, is discarded; a statement stack splices into the snap gap if one is active, else lands
-## as a new free-floating stack. Then re-render from the data.
+## here deletes them. Otherwise: a reporter drops into the targeted slot (overwriting its live
+## `inputs[key]`) or, off any slot, lands as a **free-floating top-level stack** (M46 — Scratch's
+## loose reporter on the workspace; a confined `param` drag is the exception, discarded off its
+## body); a statement stack splices into the snap gap if one is active, else lands free. Then
+## re-render from the data.
 func _drop() -> void:
 	if _trashing:
 		pass  # over the palette: delete the grabbed blocks (don't re-home them)
@@ -831,7 +866,10 @@ func _drop() -> void:
 		if not _snap.is_empty():
 			var inputs: Dictionary = _snap["inputs"]
 			inputs[String(_snap["key"])] = _grabbed[0]
-		# Released off every slot: discard (no top-level orphan reporters).
+		elif _spawn_scope_body == null:
+			# Off every slot: land the reporter as its own free-floating stack. A confined `param`
+			# (scope set) has no home outside its define body, so it is discarded (M31) instead.
+			_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
 	elif not _snap.is_empty():
 		var arr: Array = _snap["array"]
 		var index: int = _snap["index"]
@@ -847,9 +885,9 @@ func _drop() -> void:
 ## grabbed blocks are already detached from the data, so re-home them as a loose stack
 ## rather than losing them.
 func _cancel_drag() -> void:
-	# A statement stack is re-homed so it isn't lost; a reporter (fresh from the palette) is
-	# discarded — it has no top-level home.
-	if _state == _DRAGGING and not _grabbed.is_empty() and not _dragging_reporter:
+	# A statement stack or a free reporter is re-homed so it isn't lost (a reporter now has a top-level
+	# home, M46); a confined `param` drag (scope set) is discarded — it has no home outside its body.
+	if _state == _DRAGGING and not _grabbed.is_empty() and _spawn_scope_body == null:
 		_stacks.append({"blocks": _grabbed, "pos": _ghost.position})
 	_clear_drag_overlays()
 
@@ -1006,14 +1044,18 @@ func _grabbed_block_top_left(arr: Array, index: int) -> Vector2:
 
 # --- Multi-block selection (M46) -------------------------------------------
 #
-# Selection is a set of statement-block dicts (by identity). It is editor-only UI state, never
-# serialized. Three ways in — click (Shift/Cmd to toggle), double-click (the block + everything after
-# it in this script), and rubber-band over empty canvas — and three things you can do with it: delete
+# Selection is a set of block dicts (by identity) — statement blocks, in-slot reporter pills, and
+# free-floating reporters alike. It is editor-only UI state, never serialized. Three ways in — click
+# (Shift/Cmd to toggle), double-click (the block + everything after it in this script, plus its nested
+# children), and rubber-band over empty canvas — and three things you can do with it: delete
 # (Delete/Backspace, or drag onto the palette/trash), move together (drag any selected block), and
-# duplicate (Cmd/Ctrl+D). The drag and trash paths reuse the existing _begin_drag / _drop machinery.
+# duplicate (Cmd/Ctrl+D). Move/delete/duplicate act on the *statement-level* picks (statements and
+# free-floating reporters — both are blocks in a top-level stack); an in-slot pill is highlight-only.
+# The drag and trash paths reuse the existing _begin_drag / _drop machinery.
 
-## The block dict a rendered statement panel stands for, via the blk_array/blk_index meta BlockView
-## stamps. null if the index is stale (shouldn't happen between renders).
+## The block dict a rendered top-level panel stands for (a statement, or a free-floating reporter pill —
+## M46), via the blk_array/blk_index meta BlockView stamps. null if the index is stale (shouldn't happen
+## between renders).
 func _block_of(panel: Control) -> Variant:
 	var arr: Array = panel.get_meta("blk_array")
 	var idx := int(panel.get_meta("blk_index"))
@@ -1124,18 +1166,19 @@ func _on_pending_click() -> void:
 	_render()
 
 
-## The block dict the pending press is over — a reporter pill's `inputs[key]` dict (_pending_reporter) or
-## the statement at _pending {array, index}. null if the slot no longer holds a reporter / the index is
-## stale / the press wasn't over a block at all.
+## The block dict the pending press is over — keyed off the `_pending` shape: a statement or a
+## free-floating reporter at {array, index} (from _block_at), else an in-slot reporter pill's
+## `inputs[key]` dict (from _reporter_at). null if the index is stale / the slot no longer holds a
+## reporter / the press wasn't over a block.
 func _pending_clicked_block() -> Variant:
-	if _pending_reporter:
+	if _pending.has("array"):
+		var arr: Array = _pending["array"]
+		var index: int = int(_pending["index"])
+		return arr[index] if index >= 0 and index < arr.size() else null
+	if _pending.has("inputs"):
 		var inputs: Dictionary = _pending["inputs"]
 		return inputs.get(String(_pending["key"]))
-	if not _pending.has("array"):
-		return null
-	var arr: Array = _pending["array"]
-	var index: int = int(_pending["index"])
-	return arr[index] if index >= 0 and index < arr.size() else null
+	return null
 
 
 ## Select `block` and everything nested inside it (M46) — the statements in its `body` substack and the

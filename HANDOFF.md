@@ -12,28 +12,29 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped (on `m41-animation-blocks`):** **M46 — multi-block selection in the editor canvas**,
-  now including **selectable reporter pills** + **double-click selects all nested children.**
-  Select blocks in the block canvas and act on them as a group: **click** (Shift/Cmd-click to toggle) —
-  works on both statement blocks **and reporter pills** now; **double-click** (the block + everything
-  after it in that script, **plus every block nested inside** — a C-block's body and any reporter input
-  pills, recursively — `_select_subtree`); or **rubber-band** over empty canvas (statement-level); then
-  **drag to move them together**, **Delete/Backspace** to delete, or **Cmd/Ctrl+D** to duplicate.
-  (Move/delete/duplicate stay statement-level — `_topmost_selected_in_order` ignores selected pills; a
-  pure-pill selection is a no-op for those ops.) Pure editor-side, entirely in `block_canvas.gd`
-  (`BlockView` untouched): no opcode, no block-data-shape change, no runtime change. Selection is
-  editor-only UI state (`_selected`, tracked by block-dict identity, survives `_render`), never
-  serialized; cleared on sprite switch. A pill is highlighted via the slot whose `inputs[key]` is the
-  selected dict (`_apply_selection_highlight` now also walks `_slots`). (Prior: **M45 — pixel costume
-  editor**, a third "Paint" mode storing an optional `{cw,ch,palette,pixels}` costume key.)
-  - **F5-verify:** open the editor (Blocks mode). Click a block → white outline; **click a reporter pill
-    (e.g. `score`, `+`) → it outlines**; Shift/Cmd-click more → they stay outlined; double-click a
-    mid-stack C-block (`forever`/`if`) → it + everything below it **and its body blocks/input pills**
-    highlight; drag a box over empty canvas → statement blocks under it highlight live (Shift-drag adds).
-    With 2+ statements selected, drag one → they move as one run (snap into a stack, or drop onto the
-    palette to delete all); press Delete → all gone; Cmd/Ctrl+D → a duplicate stack appears. Typing
-    Delete inside a literal field still edits text. Switch sprites → selection clears. RUN/SAVE
-    unaffected (selection leaves no trace in the data).
+- **Just shipped (on `m41-animation-blocks`):** **M46 — multi-block selection**, now extended so
+  **reporters can live free on the canvas** (Scratch's loose reporter) and are manipulated/selected like
+  statements. Select blocks in the block canvas: **click** (Shift/Cmd-click to toggle) — statement
+  blocks, in-slot reporter pills, **and free-floating reporters**; **double-click** (the block +
+  everything after it in that script, **plus every block nested inside** — a C-block's body and any
+  reporter input pills, recursively — `_select_subtree`); or **rubber-band** over empty canvas (sweeps
+  statements + free reporters); then **drag to move together**, **Delete/Backspace**, or **Cmd/Ctrl+D**.
+  **New in this pass — free-floating reporters:** dropping a reporter off every slot (from the palette or
+  pulled out of a slot) now **lands it as its own top-level stack** (`_drop`) instead of discarding it;
+  `BlockView.build_stack` renders a stack-level reporter as its **pill** (still stamping
+  `blk_array`/`blk_index`), so it drags/selects like a statement (`_block_at`/`_hit_is_reporter` route its
+  pickup to `_begin_reporter_drag`, which now handles both the in-slot and free origins). A loose reporter
+  is **inert at runtime** (`run()` starts only hats) but persists with the project. Group ops act on
+  stack-level picks (statements + free reporters); an *in-slot* pill stays highlight-only — pull it out
+  first. Editor-side; the only `BlockView` touch is the one `build_stack` line; no opcode / data-shape /
+  runtime change. (Prior pass: selectable in-slot pills + double-click-selects-children. Before that:
+  **M45 — pixel costume editor**.)
+  - **F5-verify:** Blocks mode. Drag a reporter (`score`, `+`) from the palette onto **empty canvas** →
+    it stays there as a pill. Pull a reporter out of a slot and drop on empty canvas → it stays (was
+    discarded before). Grab a free-floating reporter → drag it into a slot / elsewhere / onto the palette
+    (deletes). Click it → white outline; double-click → it + its nested input pills outline; rubber-band
+    over it → selected; Delete / Cmd+D act on it. RUN a project with a parked reporter → plays normally
+    (the loose reporter does nothing); SAVE→reopen keeps it. Statement selection/move/delete unchanged.
 - **In flight (on `m41-animation-blocks`):** **`zombie.json`** — a top-down zombie-survival game built
   in the block language, plus the **six new opcodes** it required (the existing block set couldn't
   express mouse-aim, homing, recolouring, click-to-fire, or a resizable costume):
