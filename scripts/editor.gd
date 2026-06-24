@@ -28,10 +28,12 @@ const _GAME_SCENE := "res://main.tscn"
 
 ## The editor's logical resolution (M26) — the coordinate space its chrome lays out in, independent
 ## of the runtime's fixed 480x352. Larger than 480x352 (more workspace) but smaller than a typical
-## screen's raw pixels (so blocks/text scale up to a readable size rather than shrinking). On a
-## 1920x1080 screen this is a 2x upscale. Bump it for more room (smaller blocks) or shrink it for
-## bigger blocks (less room) — it is the one knob for the editor's zoom. See _ready.
-const _EDITOR_SIZE := Vector2i(960, 540)
+## screen's raw pixels (so blocks/text scale up to a readable size rather than shrinking). At
+## 1280x800 (16:10) this is an exact 2x upscale on a 2560x1600 (13.3" "Retina") display — matching
+## the screen aspect so EXPAND doesn't stretch either axis, and giving a roomy workspace while
+## blocks/text stay crisp. Bump it for more room (smaller blocks) or shrink it for bigger blocks
+## (less room) — it is the one knob for the editor's zoom. See _ready.
+const _EDITOR_SIZE := Vector2i(1280, 800)
 
 ## User zoom (pinch / Ctrl+scroll). The window's `content_scale_factor` multiplies *on top of*
 ## the M26 `_EDITOR_SIZE` fit (1.0 = the default layout); lowering it zooms the whole editor
@@ -280,7 +282,15 @@ func _ready() -> void:
 	# screen. This also *resets* the window after a RUN: stage.gd flips it to a 480x352 INTEGER viewport
 	# for the game, and ESC returns here, so we restore the editor's policy every time _ready runs.
 	var win := get_window()
-	win.content_scale_mode = Window.CONTENT_SCALE_MODE_VIEWPORT
+	# CANVAS_ITEMS (not VIEWPORT): render at the native window resolution and apply the editor's
+	# scale as a 2D transform, so the TTF UI font + stylebox borders rasterize at true device pixels
+	# (crisp) while Controls still lay out in the _EDITOR_SIZE logical space. On a 2560x1600 (16:10)
+	# display this is an exact 2x (1280x800 -> 2560x1600 on both axes), so every logical pixel maps to
+	# a clean 2x2 device-pixel block — pixel-perfect. (The game keeps VIEWPORT + INTEGER in stage.gd:
+	# its pixel-art say costumes want a low-res integer upscale, the opposite of vector UI.) Input
+	# events and get_global_rect() stay in the logical space in this mode too, so BlockCanvas's manual
+	# global-coordinate hit-testing is unaffected. ESC back from a RUN re-asserts this every _ready.
+	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
 	win.content_scale_size = _EDITOR_SIZE
