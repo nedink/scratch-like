@@ -93,6 +93,13 @@ static var _restore_path: String = ""
 ## back over it is deleted. (The palette VBox lives inside it.)
 @onready var _palette_scroll: ScrollContainer = %PaletteScroll
 
+## A draggable divider between the palette and the canvas: drag it left/right to set the palette's
+## width (its custom_minimum_size.x — the palette has no expand flag, so its min width is its width,
+## and the canvas fills the rest). Visible only in Blocks mode (it sits between the two blocks-mode
+## panels). _palette_dragging tracks an in-progress drag started by a press on the handle.
+@onready var _palette_resizer: Panel = %PaletteResizer
+var _palette_dragging: bool = false
+
 ## The top-bar widgets we wire in _ready: the sprite selector (populated from _scripts) and RUN.
 @onready var _selector: OptionButton = %SpriteSelector
 @onready var _run_button: Button = %RunButton
@@ -338,6 +345,9 @@ func _ready() -> void:
 	_canvas.on_custom_block_renamed = _on_custom_block_renamed
 	_canvas._trash = _palette_scroll
 
+	# Drag the divider between the palette and the canvas to resize the palette (M46 follow-on).
+	_palette_resizer.gui_input.connect(_on_palette_resizer_input)
+
 	# Stage (scene) editor (M27): the toggle swaps Blocks <-> Stage; the stage view reports a clicked
 	# sprite (on_pick, routed through the normal selection flow) and live geometry changes during a
 	# drag (on_geometry_changed, so the inspector tracks); the inspector writes geometry/colour back.
@@ -553,6 +563,7 @@ func _on_select(index: int) -> void:
 func _set_mode(mode: Mode) -> void:
 	_mode = mode
 	_palette_scroll.visible = mode == Mode.BLOCKS
+	_palette_resizer.visible = mode == Mode.BLOCKS
 	_canvas_scroll.visible = mode == Mode.BLOCKS
 	_stage_container.visible = mode == Mode.STAGE
 	_paint_container.visible = mode == Mode.PAINT
@@ -565,6 +576,18 @@ func _set_mode(mode: Mode) -> void:
 		_sync_inspector()
 	elif mode == Mode.PAINT:
 		_paint_view.set_model(_scripts, _current)
+
+
+## Drag the palette/canvas divider. A press on the handle starts a drag; each motion adds the
+## cursor delta to the palette's min width (clamped to a sensible range — narrow enough to reclaim
+## canvas room, wide enough to show a couple of chips). The palette has no horizontal expand flag,
+## so its min width *is* its width and the canvas (which expands) takes whatever is left.
+func _on_palette_resizer_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_palette_dragging = event.pressed
+	elif event is InputEventMouseMotion and _palette_dragging:
+		var w: float = _palette_scroll.custom_minimum_size.x + event.relative.x
+		_palette_scroll.custom_minimum_size.x = clampf(w, 120.0, 600.0)
 
 
 ## A sprite was clicked on the stage: select it through the normal flow (the selector + _show, which

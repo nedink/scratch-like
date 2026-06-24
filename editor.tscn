@@ -16,6 +16,13 @@ content_margin_top = 6.0
 content_margin_right = 6.0
 content_margin_bottom = 6.0
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_resizer"]
+bg_color = Color(0.235294, 0.235294, 0.301961, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+
 [node name="Editor" type="Control" unique_id=1899586967]
 layout_mode = 3
 anchors_preset = 15
@@ -122,7 +129,7 @@ theme_override_constants/separation = 4
 
 [node name="PaletteScroll" type="ScrollContainer" parent="Page/Workspace" unique_id=1873497012]
 unique_name_in_owner = true
-custom_minimum_size = Vector2(150, 0)
+custom_minimum_size = Vector2(240, 0)
 layout_mode = 2
 size_flags_vertical = 3
 
@@ -130,6 +137,14 @@ size_flags_vertical = 3
 unique_name_in_owner = true
 layout_mode = 2
 script = ExtResource("2_palette")
+
+[node name="PaletteResizer" type="Panel" parent="Page/Workspace" unique_id=1873497013]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(6, 0)
+layout_mode = 2
+size_flags_vertical = 3
+mouse_default_cursor_shape = 10
+theme_override_styles/panel = SubResource("StyleBoxFlat_resizer")
 
 [node name="CanvasScroll" type="ScrollContainer" parent="Page/Workspace" unique_id=566786302]
 unique_name_in_owner = true

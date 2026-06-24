@@ -12,7 +12,16 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped (on `m41-animation-blocks`):** **M46 — multi-block selection**, now extended so
+- **Just shipped (editor convenience):** the **block palette is resizable** — it's wider by default
+  (min width 150 → 240, so the 220px chips no longer overflow into a horizontal scrollbar) and a
+  **draggable divider** (`PaletteResizer`, a thin handle between the palette and the canvas, HSIZE
+  cursor) sets the palette's width. Editor-side only: the handle's `gui_input` adds the drag delta to
+  `_palette_scroll.custom_minimum_size.x` (clamped 120–600) in `editor._on_palette_resizer_input`; it's
+  shown only in Blocks mode (toggled in `_set_mode`). No opcode / data-shape / runtime change.
+  - **F5-verify:** Blocks mode — palette is wider and chips fit without a horizontal scrollbar. Hover the
+    divider between palette and canvas → resize cursor; drag it → palette widens/narrows, canvas fills the
+    rest. Switch to Stage/Paint → the handle disappears. (Stage/Paint inspectors unaffected.)
+- **Earlier (on `m41-animation-blocks`):** **M46 — multi-block selection**, now extended so
   **reporters can live free on the canvas** (Scratch's loose reporter) and are manipulated/selected like
   statements. Select blocks in the block canvas: **click** (Shift/Cmd-click to toggle) — statement
   blocks, in-slot reporter pills, **and free-floating reporters**; **double-click** (the block +
