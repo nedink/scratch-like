@@ -12,24 +12,26 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M47: collapsable scripts.** Collapse a top-level script in the block canvas to a
-  compact one-line bar and expand it again. Editor-only UI state (an optional `collapsed` flag per stack
-  in `BlockCanvas._stacks`, beside `pos`; never serialized, reset on a sprite switch) — **no opcode /
-  data-shape / runtime change**. `_render` draws `BlockView.build_collapsed_stack` (a summary bar in the
-  first block's category colour: its flattened label + a `+N` hidden-block badge, stamped `blk_index 0`
-  so it drags/selects/deletes as one unit) instead of the full tree when collapsed. Every stack is
-  wrapped by `_wrap_with_gutter` in a row with a left gutter; a multi-block stack gets a **chevron**
-  (`▼`/`▶`, meta `collapse_stack`). **Two gestures:** click the chevron (`_collapse_toggle_at`, checked
-  before `_front_stack_at` since the chevron is outside every block panel) or **Cmd/Ctrl+E** on a
-  selection (`_toggle_collapse_selection`, uniform toggle over the touched scripts). A whole-collapsed-
-  stack drag re-homes collapsed (`_grabbed_collapsed`); `_land_pos` offsets free-landing drops by the
-  gutter width so blocks don't drift. Files: `block_view.gd` (`build_collapsed_stack`/`_summary_text`/
-  `count_blocks`), `block_canvas.gd`.
-  - **F5-verify:** Blocks mode. A script with several blocks shows a `▼` at its left → click it: the
-    script folds to a one-line bar (first block's label + `+N`); the `▶` expands it. Drag a collapsed bar
-    → the whole script moves (and stays collapsed when dropped on empty canvas); Delete / Cmd+D act on it
-    as one unit. Select blocks across scripts, press **Cmd/Ctrl+E** → those scripts collapse/expand
-    together. A one-block stack has no chevron. RUN / SAVE unchanged; switching sprites re-expands all.
+- **Just shipped — M48: block rendering via editable Godot scenes.** The block visuals are no longer
+  hand-built in code: `BlockView` now **instantiates one `.tscn` shell per shape** (`blocks/*.tscn`) and
+  populates it, so block styling — corner radii, padding, borders, fonts, layout, decorations — is
+  edited **visually in the Godot editor**. Per-category *colour* stays data-applied (it's keyed by the
+  block's category) from an **editable `BlockStyles` resource** (`blocks/block_styles.tres`, one `Color`
+  per category in the inspector); `BlockView._tint()` duplicates a shell's stylebox and overrides only
+  `bg_color`, so shape edits survive and the canvas's selection-outline still works. **No opcode /
+  data-shape / runtime change, and no canvas/palette change** — they walk the rendered tree generically
+  by meta (`blk_array`/`slot_inputs`/`slot_type`/…), which `BlockView` still stamps on the same nodes.
+  Scenes: `statement_block` (hats/C-blocks too — exposes `%Content`), `reporter_pill` / `boolean_pill`,
+  `number_field` / `text_field`, `enum_field`, `empty_slot`, `collapsed_bar` (exposes `%Row`). Files:
+  new `blocks/` dir + `scripts/block_styles.gd`; `block_view.gd` (`build_block` / `build_reporter` /
+  `build_collapsed_stack` / `_param_pill` / `_literal_field` / `_enum_field` / `_empty_slot` now
+  `instantiate()` + `_tint`; `_box`/`_BLOCK_PAD` removed; `category_color` reads the resource).
+  - **⚠ Not F5-verified** (Claude can't run Godot, and `.tscn`/`.tres` parse can't be checked here).
+    Hand-authored in format-3, comment-free, minimal. **F5-verify:** Blocks mode — every block, pill,
+    field, dropdown, empty C-slot, and collapsed bar should look **identical to before**; categories keep
+    their colours; editing literals, dropping/dragging reporters, selection outline, collapse all still
+    work. Then open `blocks/statement_block.tscn` (or `block_styles.tres`) in the Godot editor, tweak it,
+    and re-run to see the restyle apply to every statement block.
 - **Earlier (editor convenience):** the **block palette is resizable** — it's wider by default
   (min width 150 → 240, so the 220px chips no longer overflow into a horizontal scrollbar) and a
   **draggable divider** (`PaletteResizer`, a thin handle between the palette and the canvas, HSIZE
@@ -204,6 +206,13 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M47 — **collapsable scripts.** Collapse a top-level script in the block canvas to a one-line summary
+  bar (chevron `▼`/`▶`, or **Cmd/Ctrl+E** on a selection) and expand it again. Editor-only UI state (an
+  optional `collapsed` flag per stack in `BlockCanvas._stacks`; never serialized, reset on a sprite
+  switch) — no opcode / data-shape / runtime change. A collapsed bar drags / selects / deletes as one
+  unit. Files: `block_view.gd` (`build_collapsed_stack`/`_summary_text`/`count_blocks`), `block_canvas.gd`.
+- M46 — multi-block selection in the canvas (click / Shift-click / double-click / rubber-band; move /
+  delete / duplicate together) + reporters can live free on the canvas.
 - M45 — **pixel costume editor.** A third editor mode, **Paint** (beside Blocks and Stage), paints a
   sprite's costume on a pixel grid: pencil / eraser / fill / eyedropper, a palette (recolour the active
   swatch live), clear-all. The costume is one optional `costume` key on the sprite dict —

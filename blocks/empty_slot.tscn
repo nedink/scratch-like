@@ -1,0 +1,15 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+bg_color = Color(1, 1, 1, 0.12)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[node name="EmptySlot" type="PanelContainer"]
+custom_minimum_size = Vector2(40, 14)
+size_flags_horizontal = 0
+theme_override_styles/panel = SubResource("panel")
+
+[node name="Spacer" type="Control" parent="."]

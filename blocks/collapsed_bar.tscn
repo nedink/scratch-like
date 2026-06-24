@@ -1,0 +1,20 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StyleBoxFlat" id="panel"]
+bg_color = Color(0.5, 0.5, 0.5, 1)
+content_margin_left = 8.0
+content_margin_top = 8.0
+content_margin_right = 8.0
+content_margin_bottom = 8.0
+corner_radius_top_left = 5
+corner_radius_top_right = 5
+corner_radius_bottom_right = 5
+corner_radius_bottom_left = 5
+
+[node name="Bar" type="PanelContainer"]
+size_flags_horizontal = 0
+theme_override_styles/panel = SubResource("panel")
+
+[node name="Row" type="HBoxContainer" parent="."]
+unique_name_in_owner = true
+theme_override_constants/separation = 6

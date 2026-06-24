@@ -42,9 +42,36 @@ extends RefCounted
 ## when a `call` invokes it (never on the green flag).
 const HAT_OPCODES := ["when_flag_clicked", "when_i_start_as_a_clone", "define"]
 
-## C-blocks wrap their body in an indented "C". (The interpreter treats both the same
+## C-blocks nest their body inside the panel. (The interpreter treats both the same
 ## way — a nested body Array — so this is purely a drawing distinction.)
 const C_OPCODES := ["forever", "while", "if"]
+
+## The block *shells* — one editable scene per visual shape (blocks/*.tscn). The renderer
+## instantiates these and populates them (header, body, fields), so a block's look — corner
+## radii, padding, borders, fonts, layout, any added decorations — is edited visually in the
+## Godot editor rather than hand-built in code here. The renderer still owns all the dynamic
+## *assembly* (templates, nested reporters, C-block bodies) and the meta-stamping the canvas
+## relies on; only the leaf Control construction moved into scenes.
+##
+## Each statement/reporter/collapsed scene exposes a mount point block_view fills:
+##   * statement_block.tscn  -> PanelContainer with a `%Content` VBox (header + optional body)
+##   * reporter_pill / boolean_pill .tscn -> PanelContainer; the header is its single child
+##   * collapsed_bar.tscn    -> PanelContainer with a `%Row` HBox (summary label + badge)
+## The field/slot scenes are populated directly (set .text / add items). _tint() recolours a
+## panel's stylebox by category (the one styling concern that stays data-keyed — see BlockStyles).
+const _STATEMENT_SCENE := preload("res://blocks/statement_block.tscn")
+const _REPORTER_SCENE := preload("res://blocks/reporter_pill.tscn")
+const _BOOLEAN_SCENE := preload("res://blocks/boolean_pill.tscn")
+const _NUMBER_FIELD_SCENE := preload("res://blocks/number_field.tscn")
+const _TEXT_FIELD_SCENE := preload("res://blocks/text_field.tscn")
+const _ENUM_FIELD_SCENE := preload("res://blocks/enum_field.tscn")
+const _EMPTY_SLOT_SCENE := preload("res://blocks/empty_slot.tscn")
+const _COLLAPSED_BAR_SCENE := preload("res://blocks/collapsed_bar.tscn")
+
+## The editable per-category colour palette (blocks/block_styles.tres). category_color() reads
+## it; if it's missing (a non-editor caller, or the resource failed to load) it falls back to
+## the hardcoded _CATEGORY_COLORS below, so rendering never hard-depends on the resource.
+static var _styles: BlockStyles = (load("res://blocks/block_styles.tres") as BlockStyles)
 
 ## Scratch's category palette. Keyed by the "category" each opcode declares below.
 ## A static var (not const) because a Color built from a hex *string* is not a
@@ -286,7 +313,8 @@ const PALETTE_CATEGORY_ORDER := ["events", "control", "motion", "animation", "lo
 ## a reachable drop zone (the column's own rect names the array, index 0).
 static func build_stack(blocks: Array) -> VBoxContainer:
 	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 2)
+	# Stacked statement blocks nestle flush against each other — no gap between siblings.
+	column.add_theme_constant_override("separation", 0)
 	column.set_meta("body_array", blocks)
 	var index := 0
 	for block in blocks:
@@ -307,30 +335,23 @@ static func build_stack(blocks: Array) -> VBoxContainer:
 
 
 ## One block: a category-colored panel whose header is built from the opcode's
-## template. A hat's body flows directly beneath the header at the same indent (hats
-## are stack roots, not C-blocks); forever/if wrap their body in an indented "C".
+## template. A hat's or C-block's (forever/if) body flows directly beneath the header,
+## inset only by the panel's uniform 8px padding — so the gold frame around the body reads
+## the same on every side (no thick left "C" arm vs a hairline bottom). The panel padding
+## is the only frame; the body stack adds no extra indent.
 static func build_block(block: Dictionary) -> Control:
 	var opcode := String(block.get("opcode", ""))
 	var info: Dictionary = _OPCODES.get(opcode, {})
 	var category := String(info.get("category", "unknown"))
 	var template := String(info.get("template", opcode))
 
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], 5))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-
-	var column := VBoxContainer.new()
-	column.add_theme_constant_override("separation", 3)
-	panel.add_child(column)
+	var panel: PanelContainer = _STATEMENT_SCENE.instantiate()
+	_tint(panel, category)
+	var column: VBoxContainer = panel.get_node("%Content")
 	column.add_child(_header_from_template(template, block))
 
-	if opcode in HAT_OPCODES:
+	if opcode in HAT_OPCODES or opcode in C_OPCODES:
 		column.add_child(build_stack(block.get("inputs", {}).get("body", [])))
-	elif opcode in C_OPCODES:
-		var margin := MarginContainer.new()
-		margin.add_theme_constant_override("margin_left", 14)
-		margin.add_child(build_stack(block.get("inputs", {}).get("body", [])))
-		column.add_child(margin)
 
 	return panel
 
@@ -353,12 +374,11 @@ static func build_reporter(block: Dictionary) -> Control:
 	var info: Dictionary = _OPCODES.get(opcode, {})
 	var category := String(info.get("category", "operators"))
 	var template := String(info.get("template", opcode))
-	var radius := 3 if reporter_output_type(opcode) == "boolean" else 10
-
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], radius))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# A boolean reporter draws as the angular boolean_pill scene, a value reporter as the round
+	# reporter_pill — Scratch's hexagon-vs-round distinction, now restyleable per-scene.
+	var scene := _BOOLEAN_SCENE if reporter_output_type(opcode) == "boolean" else _REPORTER_SCENE
+	var panel: PanelContainer = scene.instantiate()
+	_tint(panel, category)
 	panel.add_child(_header_from_template(template, block))
 	return panel
 
@@ -375,12 +395,10 @@ static func build_collapsed_stack(blocks: Array) -> Control:
 			first = b as Dictionary
 			break
 	var category := String(_OPCODES.get(String(first.get("opcode", "")), {}).get("category", "unknown"))
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS[category], 5))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	var panel: PanelContainer = _COLLAPSED_BAR_SCENE.instantiate()
+	_tint(panel, category)
 
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 6)
+	var row: HBoxContainer = panel.get_node("%Row")
 	var label := Label.new()
 	label.text = _summary_text(first)
 	label.add_theme_color_override("font_color", Color.WHITE)
@@ -391,7 +409,6 @@ static func build_collapsed_stack(blocks: Array) -> Control:
 		badge.text = "+%d" % hidden
 		badge.add_theme_color_override("font_color", Color(1, 1, 1, 0.6))
 		row.add_child(badge)
-	panel.add_child(row)
 
 	panel.set_meta("blk_array", blocks)
 	panel.set_meta("blk_index", 0)
@@ -889,10 +906,27 @@ static func reporter_output_type(opcode: String) -> String:
 	return String(_OPCODES.get(opcode, {}).get("output", "value"))
 
 
-## The display colour for a category (used by the palette for its group headers). Falls
-## back to the "unknown" grey for an unrecognized category.
+## The display colour for a category — from the editable BlockStyles resource
+## (blocks/block_styles.tres) when present, else the hardcoded _CATEGORY_COLORS fallback (a
+## non-editor caller, or the resource failed to load). Used by the palette for its group
+## headers and by _tint to recolour each block scene's stylebox.
 static func category_color(category: String) -> Color:
+	if _styles != null:
+		return _styles.color_for(category)
 	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
+
+
+## Recolour a block scene's `panel` stylebox to its category colour, in place. The scene owns
+## the *shape* (corner radii, padding, border); we duplicate its stylebox and override only
+## bg_color, so a user's shape edits survive and only the data-keyed colour is applied. The
+## duplicate also keeps the canvas's selection-outline working (it duplicates this stylebox in
+## turn). A scene whose `panel` isn't a StyleBoxFlat is left untouched (no crash).
+static func _tint(panel: Control, category: String) -> void:
+	var sb := panel.get_theme_stylebox("panel")
+	if sb is StyleBoxFlat:
+		var dup: StyleBoxFlat = (sb as StyleBoxFlat).duplicate()
+		dup.bg_color = category_color(category)
+		panel.add_theme_stylebox_override("panel", dup)
 
 
 # --- Header assembly -------------------------------------------------------
@@ -994,10 +1028,8 @@ static func _call_header(block: Dictionary) -> HBoxContainer:
 ## sits in a slot (build_reporter) and, stamped by _spawn_param_pill, as the prototype pill in a
 ## define hat.
 static func _param_pill(name: String) -> Control:
-	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", _box(_CATEGORY_COLORS["custom"], 10))
-	panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	panel.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var panel: PanelContainer = _REPORTER_SCENE.instantiate()
+	_tint(panel, "custom")
 	var label := Label.new()
 	label.text = name
 	label.add_theme_color_override("font_color", Color.WHITE)
@@ -1032,13 +1064,7 @@ static func _push_label(row: HBoxContainer, text: String) -> void:
 ## forever/if with nothing inside still has area to drop the first block into. (The
 ## column it lives in names the body array; the canvas treats this as the index-0 gap.)
 static func _empty_slot() -> Control:
-	var slot := PanelContainer.new()
-	slot.custom_minimum_size = Vector2(40, 14)
-	slot.add_theme_stylebox_override("panel", _box(Color(1, 1, 1, 0.12), 4))
-	slot.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-	var spacer := Control.new()
-	slot.add_child(spacer)
-	return slot
+	return _EMPTY_SLOT_SCENE.instantiate()
 
 
 ## A literal input value: dark text on a small white field. As of M12 this is an editable
@@ -1054,19 +1080,10 @@ static func _empty_slot() -> Control:
 ## (a String) reads as text, consistent with how its value coerces.
 static func _literal_field(text: String, value_type := TYPE_STRING) -> LineEdit:
 	var numeric := value_type == TYPE_INT or value_type == TYPE_FLOAT
-	var radius := 11 if numeric else 3
-	var field := LineEdit.new()
+	# number_field.tscn (oval) vs text_field.tscn (rectangular) carry the shape + styling; we
+	# only fill the text. The scene also sets the behavioural flags (centre align, grow-to-text).
+	var field: LineEdit = (_NUMBER_FIELD_SCENE if numeric else _TEXT_FIELD_SCENE).instantiate()
 	field.text = text
-	field.expand_to_text_length = true
-	field.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	field.custom_minimum_size = Vector2(16, 0)
-	field.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	field.context_menu_enabled = false
-	field.add_theme_stylebox_override("normal", _box(Color.WHITE, radius))
-	field.add_theme_stylebox_override("focus", _box(Color("#fff4c2"), radius))
-	field.add_theme_color_override("font_color", Color("#303030"))
-	field.add_theme_color_override("font_uneditable_color", Color("#303030"))
-	field.add_theme_color_override("caret_color", Color("#303030"))
 	return field
 
 
@@ -1077,9 +1094,8 @@ static func _literal_field(text: String, value_type := TYPE_STRING) -> LineEdit:
 ## `item_selected` to write the chosen text back into the block data; the palette leaves
 ## it inert (mouse-ignored, like the literal field).
 static func _enum_field(options: Array, current: String) -> OptionButton:
-	var dd := OptionButton.new()
-	dd.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	dd.fit_to_longest_item = true
+	# enum_field.tscn carries the white styling + font colours; we fill the items here.
+	var dd: OptionButton = _ENUM_FIELD_SCENE.instantiate()
 	# Items are listed alphabetically (case-insensitive), regardless of the order the
 	# fixed-choice enum / project list supplied them in.
 	var sorted := options.map(func(o): return String(o))
@@ -1093,27 +1109,10 @@ static func _enum_field(options: Array, current: String) -> OptionButton:
 		dd.add_item(current)
 		selected = dd.item_count - 1
 	dd.select(selected)
-	for state in ["normal", "hover", "pressed", "focus"]:
-		dd.add_theme_stylebox_override(state, _box(Color.WHITE, 6))
-	for color in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
-		dd.add_theme_color_override(color, Color("#303030"))
 	return dd
 
 
 # --- Helpers ---------------------------------------------------------------
-
-## A filled, rounded background box with a little padding — the visual body of every
-## block, reporter, and literal field.
-static func _box(color: Color, radius: int) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = color
-	sb.set_corner_radius_all(radius)
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	sb.content_margin_top = 3
-	sb.content_margin_bottom = 3
-	return sb
-
 
 ## Stringify a literal for display, matching the interpreter's _stringify: a whole-
 ## number float reads as a bare integer ("3", not "3.0"). null -> "" (an input the
