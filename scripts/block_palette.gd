@@ -228,19 +228,44 @@ func _ensure_color_popup() -> void:
 	if is_instance_valid(_color_popup):
 		return
 	_color_popup = PopupPanel.new()
+	var box := VBoxContainer.new()
 	_color_picker = ColorPicker.new()
 	_color_picker.edit_alpha = false  # category colours are opaque
 	_color_picker.color_changed.connect(_on_category_color_changed)
+	box.add_child(_color_picker)
+	# A "reset to default" button beneath the picker (M49) restores the category's stock Scratch
+	# hue — the only way back once a colour is edited, since colours persist globally and NEW/OPEN
+	# don't touch them. It sets the picker swatch and applies the change live, like a drag would.
+	var reset_btn := Button.new()
+	reset_btn.text = "Reset to default colour"
+	reset_btn.pressed.connect(_on_reset_category_color)
+	box.add_child(reset_btn)
+	_color_popup.add_child(box)
 	_color_popup.popup_hide.connect(_on_category_color_committed)
-	_color_popup.add_child(_color_picker)
 	add_child(_color_popup)
 
 
-## Live as the user drags in the picker (M49): set the colour in memory (BlockView.set_category_color),
+## Live as the user drags in the picker (M49): apply the chosen colour. Delegates to _apply_recolor.
+func _on_category_color_changed(color: Color) -> void:
+	_apply_recolor(color)
+
+
+## Reset the category being edited to its stock built-in colour (M49): sync the picker swatch (a
+## programmatic set doesn't emit color_changed) and apply the change live. Persistence happens on
+## the picker close, like any recolour — so closing after a reset writes the default back to the .tres.
+func _on_reset_category_color() -> void:
+	if _recolor_category == "":
+		return
+	var stock := BlockView.default_category_color(_recolor_category)
+	_color_picker.color = stock
+	_apply_recolor(stock)
+
+
+## Apply a category recolour live (M49): set the colour in memory (BlockView.set_category_color),
 ## recolour the header title to match, and re-render the canvas so its blocks recolour immediately. No
 ## palette rebuild here — that would free the open popup; chip re-tinting and persistence wait for the
 ## picker to close.
-func _on_category_color_changed(color: Color) -> void:
+func _apply_recolor(color: Color) -> void:
 	if _recolor_category == "":
 		return
 	BlockView.set_category_color(_recolor_category, color)

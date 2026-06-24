@@ -916,6 +916,13 @@ static func category_color(category: String) -> Color:
 	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
 
 
+## The stock (built-in) colour for a category — the hardcoded Scratch hue, ignoring any user edit in
+## the BlockStyles resource. The palette's colour picker uses this for its "reset to default" button
+## (M49). Unknown category → the grey `unknown` fallback.
+static func default_category_color(category: String) -> Color:
+	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
+
+
 ## Set a category's display colour in the editable BlockStyles resource (the M48 styling store),
 ## in memory. The palette calls this live as the user drags in a section-header colour picker (M49);
 ## category_color() / _tint() then read the new value on the next render. Falls back to creating a

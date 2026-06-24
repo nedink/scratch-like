@@ -63,8 +63,16 @@ shows up as a modified `blocks/block_styles.tres` in git (commit it to keep the 
 restore the stock Scratch hues). `set_category_color` falls back to a fresh `BlockStyles` if the resource
 failed to load, so a recolour never silently no-ops.
 
-What this leaves deferred: a **reset-to-default** swatch (revert one category, or all, without editing
-the file); **renaming/adding categories** (the set is fixed by `BlockStyles`' exported properties); and
+A **"Reset to default colour"** button sits beneath the picker
+([`_on_reset_category_color`](scripts/block_palette.gd)): since colours persist globally and NEW/OPEN
+don't touch them, it's the way back to a category's stock Scratch hue — it sets the picker swatch to
+[`BlockView.default_category_color`](scripts/block_view.gd) (the hardcoded `_CATEGORY_COLORS` value) and
+applies it live, so closing the picker writes the default back to the `.tres` (where it matches the
+`BlockStyles` script default, so `ResourceSaver` drops the override entirely — a clean revert).
+
+What this leaves deferred: a **reset-*all*-categories** one-shot (reset is per-category; to wipe every
+edit, revert `blocks/block_styles.tres` in git); **renaming/adding categories** (the set is fixed by
+`BlockStyles`' exported properties); and
 the standing M48 deferral — a shared editor **`Theme`** for label/font styling (block label colour is
 still white via `_push_label`, independent of the category fill).
 
@@ -1467,10 +1475,11 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    when you first paint it (so the Stage view's resize handle and the inspector's w/h are disabled for a
    painted sprite — resize the canvas is deferred).
    **Recolour a block category** (M49) by clicking its **section title** in the palette (the coloured
-   header bars — MOTION, CONTROL, LOOKS, … and MY BLOCKS / LISTS): a colour picker opens, and the blocks
-   in that category recolour live as you pick. The choice is saved to `blocks/block_styles.tres`, so it
-   sticks across relaunches and across projects (it's an editor styling preference, not per-project data
-   — commit that file to keep your palette, or revert it to restore the stock Scratch colours).
+   category names — MOTION, CONTROL, LOOKS, … and MY BLOCKS / LISTS): a colour picker opens, and the
+   blocks in that category recolour live as you pick. The choice is saved to `blocks/block_styles.tres`,
+   so it sticks across relaunches and across projects (it's an editor styling preference, not per-project
+   data — NEW/OPEN don't reset it). **Reset to default colour** (the button under the picker) restores a
+   category's stock Scratch hue; to wipe every edit at once, revert `blocks/block_styles.tres` in git.
 4. Click **RUN** in the editor's top bar to launch the game (`main.tscn`, the
    `Stage`). **RUN now plays your edited scripts** (M10) — each sprite runs your
    version, or the stock script if you didn't touch it. Press **ESC** in-game to

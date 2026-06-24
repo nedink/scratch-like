@@ -23,8 +23,11 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   → `_on_category_color_changed` (sets `BlockView.set_category_color` in memory + recolours the header +
   `_canvas.refresh()` so the canvas recolours live; no palette rebuild — would free the open picker);
   `popup_hide` → `_on_category_color_committed` (`BlockView.save_styles()` writes the `.tres`, then
-  deferred `rebuild()` re-tints the chips). **No opcode / data-shape / runtime / `editor.tscn` /
-  `editor.gd` change** — it's
+  deferred `rebuild()` re-tints the chips). A **"Reset to default colour"** button under the picker
+  (`_on_reset_category_color` → `BlockView.default_category_color`) restores a category's stock hue —
+  the way back, since colours persist globally and NEW/OPEN don't reset them (resetting writes the
+  default, which matches the `BlockStyles` script default, so `ResourceSaver` drops the override).
+  **No opcode / data-shape / runtime / `editor.tscn` / `editor.gd` change** — it's
   `BlockPalette` + a two-method API on `BlockView` (`set_category_color` / `save_styles`). Persistence is
   to the `.tres` (a global styling preference), not the project `.json`.
   - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — each palette section
