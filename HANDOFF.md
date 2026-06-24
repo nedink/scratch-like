@@ -12,7 +12,24 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M48: block rendering via editable Godot scenes.** The block visuals are no longer
+- **Just shipped — M49: recolour a block category from its palette header.** Click a section title in
+  the palette (the coloured header bars — MOTION, CONTROL, …, plus MY BLOCKS / LISTS) to open a colour
+  picker; blocks in that category recolour **live** as you pick, and the choice is saved to
+  `blocks/block_styles.tres` when the picker closes. Builds on M48's data-keyed colour: each group title
+  is now a **`ColorPickerButton`** (`BlockPalette._add_group_header` — fill = category colour, title text
+  black/white by luminance via `_style_header_text`) instead of a `Label`. `color_changed` →
+  `_on_category_color_changed` (sets `BlockView.set_category_color` in memory + `_canvas.refresh()` so the
+  canvas recolours live; no palette rebuild — would free the open picker); `popup_closed` →
+  `_on_category_color_committed` (`BlockView.save_styles()` writes the `.tres`, then deferred `rebuild()`
+  re-tints the chips). **No opcode / data-shape / runtime / `editor.tscn` / `editor.gd` change** — it's
+  `BlockPalette` + a two-method API on `BlockView` (`set_category_color` / `save_styles`). Persistence is
+  to the `.tres` (a global styling preference), not the project `.json`.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — each palette section
+    title is now a coloured bar; click one → a colour picker opens, and that category's blocks (canvas +
+    chips) recolour as you pick. Close it, relaunch → the colour persists (and `git status` shows
+    `blocks/block_styles.tres` modified). MY BLOCKS and LISTS titles work too. Dragging chips, the
+    Make-a-Variable/Make-a-Block buttons, and the per-variable/list rows are unaffected.
+- **Earlier — M48: block rendering via editable Godot scenes.** The block visuals are no longer
   hand-built in code: `BlockView` now **instantiates one `.tscn` shell per shape** (`blocks/*.tscn`) and
   populates it, so block styling — corner radii, padding, borders, fonts, layout, decorations — is
   edited **visually in the Godot editor**. Per-category *colour* stays data-applied (it's keyed by the
@@ -206,6 +223,11 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M49 — **recolour a block category from its palette header.** Section titles are `ColorPickerButton`s;
+  picking recolours the category live and saves `blocks/block_styles.tres`. Editor UI only (`BlockPalette`
+  + `BlockView.set_category_color`/`save_styles`); no opcode / data-shape / runtime change.
+- M48 — **block rendering via editable `.tscn` shells** (one scene per shape under `blocks/`) +
+  `BlockStyles` colour resource. Pure rendering refactor.
 - M47 — **collapsable scripts.** Collapse a top-level script in the block canvas to a one-line summary
   bar (chevron `▼`/`▶`, or **Cmd/Ctrl+E** on a selection) and expand it again. Editor-only UI state (an
   optional `collapsed` flag per stack in `BlockCanvas._stacks`; never serialized, reset on a sprite

@@ -103,19 +103,19 @@ func _build() -> void:
 			if _on_rename_variable.is_valid() or _on_delete_variable.is_valid():
 				for var_name in BlockView.project_variables:
 					add_child(_make_variable_row(String(var_name)))
-			# The "Make a List" affordance + per-list rows sit atop the lists group (M44), the exact
-			# twin of the variables group's Make button + rows — a real Button + MenuButtons, not chips,
-			# so GUI handles their clicks and _chip_at skips them. The list *chips* (the 9 list blocks)
-			# then follow via the generic loop below, since they carry palette:true like any category.
-			if category == "lists" and _on_make_list.is_valid():
-				var make_list_btn := Button.new()
-				make_list_btn.text = "Make a List"
-				make_list_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-				make_list_btn.pressed.connect(_on_make_list)
-				add_child(make_list_btn)
-				if _on_rename_list.is_valid() or _on_delete_list.is_valid():
-					for list_name in BlockView.project_lists:
-						add_child(_make_list_row(String(list_name)))
+		# The "Make a List" affordance + per-list rows sit atop the lists group (M44), the exact
+		# twin of the variables group's Make button + rows — a real Button + MenuButtons, not chips,
+		# so GUI handles their clicks and _chip_at skips them. The list *chips* (the 9 list blocks)
+		# then follow via the generic loop below, since they carry palette:true like any category.
+		if category == "lists" and _on_make_list.is_valid():
+			var make_list_btn := Button.new()
+			make_list_btn.text = "Make a List"
+			make_list_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			make_list_btn.pressed.connect(_on_make_list)
+			add_child(make_list_btn)
+			if _on_rename_list.is_valid() or _on_delete_list.is_valid():
+				for list_name in BlockView.project_lists:
+					add_child(_make_list_row(String(list_name)))
 		var self_state_separated := false
 		for opcode in group["opcodes"]:
 			# The running-sprite self-state reporters (position/velocity) come last in the group
@@ -177,11 +177,50 @@ func _add_group_header(category: String, text := "") -> void:
 		spacer.custom_minimum_size = Vector2(0, _GROUP_GAP)
 		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		add_child(spacer)
-	var header := Label.new()
+	# The header is a ColorPickerButton (M49) so clicking a section title opens a colour picker for
+	# that category — the same picker idiom the inspector and Paint view use. The button's fill *is*
+	# the category colour (a Scratch-like coloured title bar), with the title text drawn in a
+	# contrasting shade so it stays legible on light and dark categories alike. It carries no
+	# `palette_opcode` meta, so _chip_at skips it and our _input never starts a drag from it; GUI
+	# handles the click, exactly like the Make-a-Variable button.
+	var col := BlockView.category_color(category)
+	var header := ColorPickerButton.new()
 	header.text = text if text != "" else category.to_upper()
-	header.add_theme_color_override("font_color", BlockView.category_color(category))
-	header.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	header.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	header.edit_alpha = false  # category colours are opaque
+	header.color = col
+	header.tooltip_text = "Click to change this category's block colour"
+	_style_header_text(header, col)
+	header.color_changed.connect(_on_category_color_changed.bind(category, header))
+	header.popup_closed.connect(_on_category_color_committed)
 	add_child(header)
+
+
+## Draw a header button's title in black or white, whichever contrasts with its category-colour
+## fill (M49), so the section name stays readable across the whole palette.
+func _style_header_text(btn: Button, fill: Color) -> void:
+	var fg := Color.BLACK if fill.get_luminance() > 0.5 else Color.WHITE
+	for state in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color"]:
+		btn.add_theme_color_override(state, fg)
+
+
+## Live as the user drags in a category header's colour picker (M49): set the colour in memory
+## (BlockView.set_category_color) and re-render the canvas so its blocks recolour immediately. The
+## header button tracks its own fill; we deliberately do NOT rebuild the palette here (that would
+## free the open picker) — chip re-tinting and persistence wait for the picker to close.
+func _on_category_color_changed(color: Color, category: String, header: ColorPickerButton) -> void:
+	BlockView.set_category_color(category, color)
+	_style_header_text(header, color)
+	if _canvas != null:
+		_canvas.refresh()
+
+
+## When a category header's colour picker closes (M49): persist the BlockStyles resource to disk
+## (one write) and rebuild the palette so every chip in that category re-tints to the final colour.
+## Deferred — rebuild() frees the palette's children, and we're inside the button's own signal.
+func _on_category_color_committed() -> void:
+	BlockView.save_styles()
+	call_deferred("rebuild")
 
 
 ## A thin horizontal rule used inside a group to set off the running-sprite self-state reporters

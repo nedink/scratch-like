@@ -916,6 +916,24 @@ static func category_color(category: String) -> Color:
 	return _CATEGORY_COLORS.get(category, _CATEGORY_COLORS["unknown"])
 
 
+## Set a category's display colour in the editable BlockStyles resource (the M48 styling store),
+## in memory. The palette calls this live as the user drags in a section-header colour picker (M49);
+## category_color() / _tint() then read the new value on the next render. Falls back to creating a
+## fresh BlockStyles if the resource failed to load, so a recolour never silently no-ops.
+static func set_category_color(category: String, color: Color) -> void:
+	if _styles == null:
+		_styles = BlockStyles.new()
+	_styles.set(category, color)
+
+
+## Persist the BlockStyles resource back to blocks/block_styles.tres, so a colour edit survives a
+## relaunch (the resource IS the editable colour store — M48). The palette calls this once when a
+## header's colour picker closes. A no-op if styles never loaded.
+static func save_styles() -> void:
+	if _styles != null:
+		ResourceSaver.save(_styles, "res://blocks/block_styles.tres")
+
+
 ## Recolour a block scene's `panel` stylebox to its category colour, in place. The scene owns
 ## the *shape* (corner radii, padding, border); we duplicate its stylebox and override only
 ## bg_color, so a user's shape edits survive and only the data-keyed colour is applied. The
