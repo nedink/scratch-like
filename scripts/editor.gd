@@ -35,6 +35,12 @@ const _GAME_SCENE := "res://main.tscn"
 ## (less room) — it is the one knob for the editor's zoom. See _ready.
 const _EDITOR_SIZE := Vector2i(1280, 800)
 
+## Mobile logical resolution (chosen in _ready when _is_mobile()). A *smaller* content_scale_size
+## means each logical pixel covers more device pixels, so the chrome/blocks render **bigger** — which
+## is what a small phone screen needs to keep blocks tappable (the opposite problem to a big monitor).
+## Half of _EDITOR_SIZE on each axis, so the layout is unchanged, just scaled up 2x relative to desktop.
+const _EDITOR_MOBILE_SIZE := Vector2i(640, 400)
+
 ## User zoom (pinch / Ctrl+scroll). The window's `content_scale_factor` multiplies *on top of*
 ## the M26 `_EDITOR_SIZE` fit (1.0 = the default layout); lowering it zooms the whole editor
 ## **out** — smaller blocks, more workspace visible — which is what a crowded canvas wants. We
@@ -290,6 +296,18 @@ var _renaming_sprite: String = ""
 const _DEFAULT_SPRITE := {"x": 240, "y": 180, "w": 16, "h": 16, "color": "#ffffff"}
 
 
+## True on a phone/tablet, where we want the smaller _EDITOR_MOBILE_SIZE so blocks render bigger.
+## Covers a native Android/iOS export (OS.has_feature("mobile")) and a mobile *web* export — Godot's
+## web build reports "web_android"/"web_ios" features, and we also fall back to a narrow window check
+## (a phone in portrait) so a desktop-class browser on a small screen still gets the bigger layout.
+func _is_mobile() -> bool:
+	if OS.has_feature("mobile") or OS.has_feature("web_android") or OS.has_feature("web_ios"):
+		return true
+	if OS.has_feature("web"):
+		return DisplayServer.window_get_size().x < 800
+	return false
+
+
 func _ready() -> void:
 	# Lay the editor chrome out against its own logical resolution (M26) — bigger than the runtime's
 	# fixed 480x352 (so the workspace has room) but well under the raw window pixels (so blocks/text
@@ -310,17 +328,18 @@ func _ready() -> void:
 	win.content_scale_mode = Window.CONTENT_SCALE_MODE_CANVAS_ITEMS
 	win.content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	win.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_FRACTIONAL
-	win.content_scale_size = _EDITOR_SIZE
+	# Mobile users get a smaller logical size so blocks render bigger (and stay tappable) on a small
+	# screen — see _EDITOR_MOBILE_SIZE / _is_mobile.
+	win.content_scale_size = _EDITOR_MOBILE_SIZE if _is_mobile() else _EDITOR_SIZE
 	win.content_scale_factor = 1.0
 
-	# Land on the in-code demo (the stock Pong project) — the unsaved default, bound to no file, so
-	# it is always reachable and never overwritten by a saved project (M22). Exception: when ESC has
-	# just returned us from a RUN, restore the project that was open instead of reseeding the demo, so
+	# Land on a blank project — the unsaved default, bound to no file (M22). Exception: when ESC has
+	# just returned us from a RUN, restore the project that was open instead of reseeding blank, so
 	# the round trip doesn't discard the user's open project / unsaved edits.
 	if _restore_pending:
 		_restore_project()
 	else:
-		_seed_demo()
+		_seed_blank()
 
 	# Wire the signals/callbacks once (the *contents* below re-render per project, but these
 	# connections are set up a single time). The layout and dialogs are declared in editor.tscn;
@@ -464,25 +483,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().quit()
 
 
-## Seed the working project with the stock demo — the in-code PongScripts (M22, extracted from the
-## original _ready). `_scripts` is the **living project** (M10): switching sprites and RUN persist
-## the canvas's edits back here. As of M24 each `_scripts` entry is a full **sprite def** —
-## {name, x, y, w, h, color, script} — so it owns the sprite's placeholder geometry too (the sprite
-## counterpart of M18's variable model); the editor can add/delete entries from the UI.
-## `_variables` is the editor-owned **mutable** variable model (M20),
-## seeded from the one runtime declaration PongScripts.variables() (a fresh array each call, so the
-## editor keeps its own copy to append to); _on_run hands it back to the Stage. Both are deep copies
-## so editing never mutates the shared PongScripts builders.
-func _seed_demo() -> void:
-	# Seed the working project from the one declaration the project ships — today's Pong: sprites
-	# (geometry + scripts) + variables + background + grid. Deep-copied so editing never mutates the
-	# shared PongScripts builders (background() returns a String value, so no copy needed there).
-	_scripts = PongScripts.sprites().duplicate(true)
-	_variables = PongScripts.variables().duplicate(true)
-	_lists = PongScripts.lists().duplicate(true)
-	_background = PongScripts.background()
-	_grid_settings = PongScripts.grid()
-	# The stock demo recolours no category — every block draws its default colour (M50).
+## Seed the working project **blank** — the default a fresh launch and NEW land on. There are no
+## sprites, variables, or lists; only the stage-level defaults (background + grid) come from
+## ProjectDefaults. The user builds from here: the blinking + Sprite button (see
+## _update_add_sprite_blink) prompts creating the first sprite. (The in-code Pong demo this used to seed
+## is gone — a demo worth keeping lives as a saved `.json` project, opened with OPEN.)
+##
+## `_scripts` is the **living project** (M10): switching sprites and RUN persist the canvas's edits back
+## here. Each `_scripts` entry is a full **sprite def** — {name, x, y, w, h, color, script} (M24) — so it
+## owns the sprite's placeholder geometry too; the editor adds/deletes entries from the UI. `_variables`
+## / `_lists` are the editor-owned **mutable** models (M20/M44) the UI appends to; _on_run hands them to
+## the Stage.
+func _seed_blank() -> void:
+	_scripts = []
+	_variables = []
+	_lists = []
+	_background = ProjectDefaults.background()
+	_grid_settings = ProjectDefaults.grid()
+	# A blank project recolours no category — every block draws its default colour (M50).
 	_block_colors = {}
 
 
@@ -1451,12 +1469,12 @@ func _persist_current() -> void:
 
 # --- Save / open named projects (M22) --------------------------------------
 
-## Reset the working project to the stock demo, without touching any saved file (M22). The demo is
-## always reachable this way and your saved `.json` projects are left untouched; it is unsaved (no
-## bound path) until you SAVE it under a name. Discards the current canvas's unsaved edits — like
-## the rest of the app there is no undo (M16), so SAVE first if you want to keep them.
+## Reset the working project to a fresh blank project, without touching any saved file (M22). Your
+## saved `.json` projects are left untouched; the new project is unsaved (no bound path) until you SAVE
+## it under a name. Discards the current canvas's unsaved edits — like the rest of the app there is no
+## undo (M16), so SAVE first if you want to keep them.
 func _on_new() -> void:
-	_seed_demo()
+	_seed_blank()
 	_current_path = ""
 	_load_project_into_ui()
 
@@ -1567,10 +1585,10 @@ func _apply_project(text: String, source: String) -> bool:
 	# Validate it's an array if present, so a malformed value can't break the editor.
 	var saved_lists: Variant = data.get("lists", [])
 	_lists = saved_lists if typeof(saved_lists) == TYPE_ARRAY else []
-	_background = String(data.get("background", PongScripts.background()))
+	_background = String(data.get("background", ProjectDefaults.background()))
 	# Overlay any saved grid settings onto the stock defaults, so a partial or absent grid dict still
 	# opens with sane values (the M27 grid-overlay).
-	var grid := PongScripts.grid()
+	var grid := ProjectDefaults.grid()
 	var saved_grid: Variant = data.get("grid")
 	if typeof(saved_grid) == TYPE_DICTIONARY:
 		for key in saved_grid:

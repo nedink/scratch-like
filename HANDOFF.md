@@ -12,7 +12,16 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M50: category recolours are per-project, not a global edit.** M49 saved a category
+- **Just shipped — mobile editor resolution.** The editor's logical layout size (`_EDITOR_SIZE`,
+  1280×800) shrinks to `_EDITOR_MOBILE_SIZE` (640×400) when `_is_mobile()` — a native mobile export, a
+  mobile *web* export (`web_android`/`web_ios`), or a narrow web window (<800px wide). A smaller logical
+  size makes each logical pixel cover more device pixels, so the chrome/blocks render **bigger** and stay
+  tappable on a phone. Editor-only: the **game** stays at its fixed 480×352 viewport (`stage.gd`, load-
+  bearing for `go_to`/edge/pixel-art), already letterboxed+scaled to fit any screen via ASPECT_KEEP.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** on a desktop browser, narrow the
+    window below 800px before load → editor chrome should come up noticeably larger; full-width →
+    unchanged. The game (RUN) should look the same on both.
+- **Earlier — M50: category recolours are per-project, not a global edit.** M49 saved a category
   recolour to `blocks/block_styles.tres` (a permanent global change, shared by every project); M50 moves
   it into the **project `.json`** so a recolour rides with that project — it loads when the project opens
   and resets on NEW, and any category the project doesn't recolour draws its **default**. The editor owns
