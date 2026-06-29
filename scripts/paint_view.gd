@@ -329,10 +329,13 @@ func _input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed and _state == _IDLE:
+		if event.pressed:
+			# A press always starts a fresh gesture — don't gate on _state, or a stuck state (a release
+			# lost to a mid-drag mode switch / a release outside the window) would swallow the next click.
 			var cell := _cell_at(event.position)
 			if cell.x < 0:
-				return  # missed the grid — let the chrome buttons handle the click
+				_state = _IDLE  # missed the grid — let the chrome buttons handle the click
+				return
 			_state = _PENDING
 			_press_pos = event.position
 			_last_cell = cell
@@ -356,6 +359,11 @@ func _input(event: InputEvent) -> void:
 ## cell layout — subtract the grid's global origin, divide out the display scale, bounds-check.
 func _cell_at(global_point: Vector2) -> Vector2i:
 	if _grid == null:
+		return Vector2i(-1, -1)
+	# Clip to the visible scroll viewport: when zoomed in the grid overflows (and scrolls) past the
+	# viewport, so its global rect can extend under the tools panel. Without this, a click on a chrome
+	# button maps to an in-bounds grid cell — we'd paint and consume it, swallowing the button's click.
+	if _grid_scroll != null and not _grid_scroll.get_global_rect().has_point(global_point):
 		return Vector2i(-1, -1)
 	var local := global_point - _grid.global_position
 	if local.x < 0.0 or local.y < 0.0:

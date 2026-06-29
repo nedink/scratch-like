@@ -9,12 +9,66 @@
 	"scripts": [
 		{
 			"color": "#ffffff",
-			"h": 16,
+			"h": 16.0,
 			"name": "Player",
-			"script": [],
-			"w": 16,
+			"script": [
+				{
+					"inputs": {
+						"body": [
+							{
+								"inputs": {
+									"name": "snake length",
+									"value": 3
+								},
+								"opcode": "set_var"
+							},
+							{
+								"inputs": {
+									"body": []
+								},
+								"opcode": "forever"
+							}
+						]
+					},
+					"opcode": "when_flag_clicked"
+				},
+				{
+					"inputs": {
+						"body": []
+					},
+					"opcode": "when_i_start_as_a_clone"
+				},
+				{
+					"inputs": {
+						"name": "snake index",
+						"value": 0
+					},
+					"opcode": "set_var"
+				},
+				{
+					"inputs": {
+						"by": 2,
+						"name": "p1_score"
+					},
+					"opcode": "change_var"
+				},
+				{
+					"inputs": {
+						"target": "myself"
+					},
+					"opcode": "create_clone"
+				},
+				{
+					"inputs": {
+						"by": -1,
+						"name": "snake index"
+					},
+					"opcode": "change_var"
+				}
+			],
+			"w": 16.0,
 			"x": 240,
-			"y": 180
+			"y": 176
 		}
 	],
 	"variables": [
@@ -52,6 +106,16 @@
 			"name": "right_paddle_y",
 			"scope": "global",
 			"value": 0.0
+		},
+		{
+			"name": "snake length",
+			"scope": "global",
+			"value": 0
+		},
+		{
+			"name": "snake index",
+			"scope": "Player",
+			"value": 0
 		}
 	]
 }

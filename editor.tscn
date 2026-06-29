@@ -3,18 +3,18 @@
 [ext_resource type="Script" uid="uid://c02x7i7846g6w" path="res://scripts/editor.gd" id="1_editor"]
 [ext_resource type="Script" uid="uid://vfyg3fbmcnyo" path="res://scripts/block_palette.gd" id="2_palette"]
 [ext_resource type="Script" uid="uid://btx44p6nb4eos" path="res://scripts/block_canvas.gd" id="3_canvas"]
-[ext_resource type="Script" path="res://scripts/stage_view.gd" id="4_stage"]
-[ext_resource type="Script" path="res://scripts/paint_view.gd" id="5_paint"]
+[ext_resource type="Script" uid="uid://cj0rwr0uf0kb8" path="res://scripts/stage_view.gd" id="4_stage"]
+[ext_resource type="Script" uid="uid://bsrnaptdagn12" path="res://scripts/paint_view.gd" id="5_paint"]
 
 [sub_resource type="Theme" id="Theme_ui"]
 default_font_size = 11
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-bg_color = Color(0.109804, 0.109804, 0.14902, 1)
 content_margin_left = 6.0
 content_margin_top = 6.0
 content_margin_right = 6.0
 content_margin_bottom = 6.0
+bg_color = Color(0.109804, 0.109804, 0.14902, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_resizer"]
 bg_color = Color(0.235294, 0.235294, 0.301961, 1)
@@ -205,6 +205,7 @@ unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 2000.0
+value = 1.0
 prefix = "w"
 
 [node name="InspH" type="SpinBox" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786310]
@@ -212,6 +213,7 @@ unique_name_in_owner = true
 layout_mode = 2
 min_value = 1.0
 max_value = 2000.0
+value = 1.0
 prefix = "h"
 
 [node name="InspColor" type="ColorPickerButton" parent="Page/Workspace/StageContainer/InspectorPanel/Inspector" unique_id=566786311]

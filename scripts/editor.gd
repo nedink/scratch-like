@@ -539,7 +539,9 @@ func _load_project_into_ui(select_index := 0) -> void:
 	_sync_background()  # NEW/OPEN may have changed the project's background; push it to the view + picker
 	_sync_grid()        # likewise the grid settings (show/snap/colour/step) — push to the controls + view
 	_sync_block_colors()  # push the project's per-category block-colour overrides to BlockView (M50)
-	var index: int = clampi(select_index, 0, _scripts.size() - 1)
+	# A blank project has no sprites: select nothing (-1) rather than clamping to a phantom slot 0.
+	# clampi(0, 0, -1) would return -1 anyway, but spell the empty case out so _show's guard is obvious.
+	var index: int = -1 if _scripts.is_empty() else clampi(select_index, 0, _scripts.size() - 1)
 	_selector.select(index)
 	_show(index)
 	# NEW / OPEN replace _scripts with a fresh array, so re-point the open view at it (set_selected
@@ -557,6 +559,22 @@ func _load_project_into_ui(select_index := 0) -> void:
 func _show(index: int) -> void:
 	_persist_current()
 	_current = index
+	# A blank project (no sprites) selects nothing: scope the dropdowns to globals only, clear the
+	# canvas, and skip the per-sprite derivation that would index _scripts[-1]. The Stage/Paint views
+	# already tolerate a -1 selection (they render an empty / unselected stage), so just re-point them.
+	if index < 0 or index >= _scripts.size():
+		BlockView.project_variables = _variables_in_scope("")
+		BlockView.project_lists = _lists_in_scope("")
+		BlockView.project_custom_blocks = []
+		BlockView.project_custom_block_params = {}
+		_palette.rebuild()
+		_canvas.load_script([])
+		if _mode == Mode.STAGE:
+			_stage_view.set_selected(index)
+			_sync_inspector()
+		elif _mode == Mode.PAINT:
+			_paint_view.set_selected(index)
+		return
 	# Re-scope the variable dropdowns to the sprite we're loading (M19): globals plus *this*
 	# sprite's locals. Both the canvas (rendered next) and the palette's chips read
 	# project_variables, so update it and rebuild the palette before the canvas renders — that
@@ -862,6 +880,13 @@ func _sprite_names() -> Array:
 	return names
 
 
+## The selected sprite's name, or "" when no sprite is selected (a blank project — _current is -1).
+## The scope-resolving helpers (Make/Rename/Delete a Variable or List) read this so they degrade to
+## globals-only rather than indexing _scripts[-1]; a new variable/list made with no sprite is global.
+func _current_sprite_name() -> String:
+	return String(_scripts[_current]["name"]) if _current >= 0 and _current < _scripts.size() else ""
+
+
 # --- Add / delete a sprite (M24) -------------------------------------------
 
 ## Pop the Add-Sprite name prompt (the top-bar button's callback). The dialog is declared in
@@ -961,6 +986,8 @@ func _on_del_sprite_confirmed() -> void:
 ## the user can type a replacement immediately). The button always targets the selected sprite, so the
 ## name we stash is `_current`'s — the sprite analog of the variable rename's `_renaming`.
 func _rename_sprite_pressed() -> void:
+	if _current < 0 or _current >= _scripts.size():
+		return  # no sprite selected (a blank project) — nothing to rename
 	var sprite_name := String(_scripts[_current]["name"])
 	_renaming_sprite = sprite_name
 	_rename_sprite_edit.text = sprite_name
@@ -1069,6 +1096,8 @@ func _lists_in_scope(sprite_name: String) -> Array:
 func _make_list() -> void:
 	_list_name_edit.text = ""
 	_list_scope.select(0)
+	# "For this sprite only" (item 1) needs a selected sprite; grey it out in a blank project.
+	_list_scope.set_item_disabled(1, _current < 0 or _current >= _scripts.size())
 	_list_dialog.popup_centered(Vector2i(280, 150))
 	_list_name_edit.grab_focus()
 
@@ -1080,10 +1109,11 @@ func _on_new_list_confirmed() -> void:
 	var list_name := _list_name_edit.text.strip_edges()
 	if list_name == "":
 		return
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	if list_name in _lists_in_scope(sprite_name):
 		return
-	var scope := "global" if _list_scope.selected == 0 else sprite_name
+	# "For this sprite only" needs a sprite; with none selected (a blank project) fall back to a global.
+	var scope := "global" if _list_scope.selected == 0 or sprite_name == "" else sprite_name
 	_lists.append({"name": list_name, "items": [], "scope": scope})
 	BlockView.project_lists = _lists_in_scope(sprite_name)
 	_palette.rebuild()
@@ -1107,7 +1137,7 @@ func _on_list_rename_confirmed() -> void:
 	var new_name := _list_rename_edit.text.strip_edges()
 	if new_name == "" or new_name == _renaming_list:
 		return
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	if new_name in _lists_in_scope(sprite_name):
 		return
 	var entry := _in_scope_list_entry(_renaming_list)
@@ -1157,7 +1187,7 @@ func _on_list_delete_confirmed() -> void:
 	if entry.is_empty():
 		return
 	var scope := String(entry.get("scope", "global"))
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 
 	for i in _scripts.size():
 		if not _is_list_referent_for(String(_scripts[i]["name"]), _deleting_list, scope):
@@ -1182,7 +1212,7 @@ func _on_list_delete_confirmed() -> void:
 ## The list model entry for `list_name` that the current sprite sees (a global, or a local of this
 ## sprite), or {} if none — the list twin of _in_scope_entry.
 func _in_scope_list_entry(list_name: String) -> Dictionary:
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	for l in _lists:
 		var scope := String(l.get("scope", "global"))
 		if String(l["name"]) == list_name and (scope == "global" or scope == sprite_name):
@@ -1215,6 +1245,8 @@ func _sprite_has_local_list(sprite_name: String, list_name: String) -> bool:
 func _make_variable() -> void:
 	_var_name_edit.text = ""
 	_var_scope.select(0)
+	# "For this sprite only" (item 1) needs a selected sprite; grey it out in a blank project.
+	_var_scope.set_item_disabled(1, _current < 0 or _current >= _scripts.size())
 	_var_dialog.popup_centered(Vector2i(280, 150))
 	_var_name_edit.grab_focus()
 
@@ -1229,10 +1261,11 @@ func _on_new_variable_confirmed() -> void:
 	var var_name := _var_name_edit.text.strip_edges()
 	if var_name == "":
 		return
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	if var_name in _variables_in_scope(sprite_name):
 		return
-	var scope := "global" if _var_scope.selected == 0 else sprite_name
+	# "For this sprite only" needs a sprite; with none selected (a blank project) fall back to a global.
+	var scope := "global" if _var_scope.selected == 0 or sprite_name == "" else sprite_name
 	_variables.append({"name": var_name, "value": 0, "scope": scope})
 
 	# The new name must reach the dropdowns the same way M19's scoping does: re-point the scoped
@@ -1278,6 +1311,8 @@ func _custom_block_params_in(script: Array) -> Dictionary:
 ## editor.tscn and reused; Enter-to-confirm is wired in _ready. Clears both the name and the
 ## parameters field (M31).
 func _make_block() -> void:
+	if _current < 0 or _current >= _scripts.size():
+		return  # custom blocks are per-sprite — there's no sprite to define one on in a blank project
 	_block_name_edit.text = ""
 	_block_params_edit.text = ""
 	_block_dialog.popup_centered(Vector2i(300, 180))
@@ -1355,7 +1390,7 @@ func _on_rename_confirmed() -> void:
 	var new_name := _rename_edit.text.strip_edges()
 	if new_name == "" or new_name == _renaming:
 		return
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	if new_name in _variables_in_scope(sprite_name):
 		return
 	var entry := _in_scope_entry(_renaming)
@@ -1408,7 +1443,7 @@ func _on_delete_confirmed() -> void:
 	if entry.is_empty():
 		return
 	var scope := String(entry.get("scope", "global"))
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 
 	for i in _scripts.size():
 		if not _is_referent_for(String(_scripts[i]["name"]), _deleting, scope):
@@ -1434,7 +1469,7 @@ func _on_delete_confirmed() -> void:
 ## sprite), or {} if none. A name is unique within a sprite's scope (the make/rename guards forbid
 ## an in-scope collision), so this resolves to exactly the entry a palette row stands for.
 func _in_scope_entry(var_name: String) -> Dictionary:
-	var sprite_name := String(_scripts[_current]["name"])
+	var sprite_name := _current_sprite_name()
 	for v in _variables:
 		var scope := String(v.get("scope", "global"))
 		if String(v["name"]) == var_name and (scope == "global" or scope == sprite_name):

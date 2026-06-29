@@ -58,23 +58,23 @@ var _font: PixelFont
 ## The project's sprite model, the editor's RUN hand-off (M24): an Array of
 ## {name, x, y, w, h, color, script} dicts — every sprite the project holds, with its placeholder
 ## geometry and script. The editor sets this *static* (so it survives change_scene_to_file, which
-## can't pass a value) right before launching the game; _ready falls back to PongScripts.sprites()
-## when it is empty, so launching this scene directly (no editor) still builds and plays stock Pong.
-## Static, so it outlives any one Stage instance.
+## can't pass a value) right before launching the game; left empty on a direct launch (no editor), so
+## the stage builds nothing — a blank project plays as a blank stage. Static, so it outlives any one
+## Stage instance.
 static var project_sprites: Array = []
 
 ## The project's variable model (M18/M20): an Array of {name, value, scope} dicts the Stage seeds at
-## _ready (a "global" entry to the Stage store, a sprite-scoped one to that target's locals). Falls
-## back to PongScripts.variables() on a direct launch.
+## _ready (a "global" entry to the Stage store, a sprite-scoped one to that target's locals). Empty on
+## a direct launch.
 static var project_variables: Array = []
 
 ## The project's list model (M44): an Array of {name, items, scope} dicts the Stage seeds at _ready
 ## (a "global" entry to the Stage's `_lists`, a sprite-scoped one to that target's locals — each
-## deep-copied so the seeded list is the runtime's own mutable container, not the editor's). Falls
-## back to PongScripts.lists() on a direct launch. The list twin of project_variables.
+## deep-copied so the seeded list is the runtime's own mutable container, not the editor's). Empty on
+## a direct launch. The list twin of project_variables.
 static var project_lists: Array = []
 
-## The project's stage background colour as a hex string (M27). Falls back to PongScripts.background().
+## The project's stage background colour as a hex string (M27). Falls back to ProjectDefaults.background().
 static var project_background: String = ""
 
 ## The runtime camera (M37). A Camera2D centred at the screen midpoint (240,176) by default, which
@@ -102,8 +102,8 @@ func _ready() -> void:
 	# Paint the stage background (M27): a full-viewport ColorRect. It sits on a CanvasLayer at layer -1
 	# (M37) so it stays **screen-fixed** when the camera pans (a CanvasLayer is not transformed by a
 	# Camera2D) and draws *behind* the sprites (the negative layer). Its colour is the project's
-	# background hex (the editor's, else PongScripts'); the 480x352 logical viewport is the space sprite
-	# coordinates live in, so size it to _GAME_SIZE.
+	# background hex (the editor's, else the blank default); the 480x352 logical viewport is the space
+	# sprite coordinates live in, so size it to _GAME_SIZE.
 	var bg_layer := CanvasLayer.new()
 	bg_layer.layer = -1
 	add_child(bg_layer)
@@ -116,18 +116,12 @@ func _ready() -> void:
 
 	_font = PixelFont.new()
 
-	# Build every sprite from the project's sprite model (Milestone 24) — the editor's edited
-	# model when it handed one over (Stage.project_sprites, which may include sprites *added in the
-	# UI*), else PongScripts (a direct launch still builds stock Pong — see _sprite_model).
-	# Each entry carries the placeholder geometry stage.gd used to hardcode plus the sprite's script:
-	#   * the paddles 16x96 on their rails and the ball 16x16 near center (the playfield);
-	#   * the two HUDs (top corners) and the Announcer (parked off-screen) as 16x16 transparent
-	#     placeholders — they carry no costume of their own, `say` supplies one each tick / on the
-	#     win, drawn at the sprite's native scale 1 (the 480x352 window is integer-upscaled, so even
-	#     the native "large" glyph reads cleanly). See pong_scripts.gd for why each script exists.
-	# `color` is a hex string in the model (JSON-friendly for SAVE/OPEN); Color() parses it here.
-	# We build *all* sprites first so the registry is fully populated before variable seeding, which
-	# needs a sprite-scoped local's target to already exist.
+	# Build every sprite from the project's sprite model (Milestone 24) — the editor's edited model
+	# handed over via Stage.project_sprites (empty on a direct launch, so a blank project builds no
+	# sprites). Each entry carries the sprite's placeholder geometry plus its script; `color` is a hex
+	# string in the model (JSON-friendly for SAVE/OPEN), which Color() parses here. We build *all*
+	# sprites first so the registry is fully populated before variable seeding, which needs a
+	# sprite-scoped local's target to already exist.
 	var model: Array = _sprite_model()
 	for s in model:
 		_add_sprite(String(s["name"]), Vector2(s["x"], s["y"]), int(s["w"]), int(s["h"]), Color(String(s["color"])), s.get("costume", {}))
@@ -145,10 +139,10 @@ func _ready() -> void:
 	# A "global" entry lands on the Stage's store; a sprite-scoped one lands on that target's
 	# locals — e.g. the ball's `speed`, which move_steps reads as a variable, proving the
 	# local store works alongside the globals. As of M20 the model comes from the editor when
-	# it handed one over (so a variable *made in the UI* is seeded too), else PongScripts — see
-	# _variable_model. The scores are global so the ball can drive them and the HUDs can watch.
-	# Every declared variable seeds to 0; non-zero starts (the ball's `speed`) come from `set` blocks
-	# in the scripts, not the seed (Scratch's model — the starting value lives in the editable program).
+	# it handed one over (so a variable *made in the UI* is seeded too), else empty — see
+	# _variable_model. Every declared variable seeds to its declared value; a variable made in the UI
+	# starts at 0, and a non-zero start otherwise comes from a `set` block in the script (Scratch's
+	# model — the starting value lives in the editable program).
 	for v in _variable_model():
 		if v["scope"] == "global":
 			set_var(v["name"], v["value"])
@@ -163,7 +157,7 @@ func _ready() -> void:
 	# the editor reads its `{list}` dropdown options from (the list twin of the variable seed above). A
 	# "global" list lands on the Stage's `_lists`; a sprite-scoped one on that target's locals. The
 	# items are deep-copied so the runtime owns its own mutable containers — the list blocks mutate
-	# these in place, and we must not mutate the editor's / PongScripts' source arrays.
+	# these in place, and we must not mutate the editor's source arrays.
 	for l in _list_model():
 		var items: Array = (l.get("items", []) as Array).duplicate(true)
 		if l["scope"] == "global":
@@ -240,29 +234,29 @@ func _apply_game_scaling() -> void:
 	win.content_scale_factor = 1.0
 
 
-## The sprite model to build from (M24): the editor's edited model when it handed one over
-## (Stage.project_sprites — every sprite the project holds, including UI-added ones), else the
-## hardcoded PongScripts.sprites(). Launching this scene directly (no editor) still builds stock Pong.
+## The sprite model to build from (M24): the editor's edited model handed over via Stage.project_sprites
+## — every sprite the project holds, including UI-added ones. Launching this scene directly (no editor)
+## leaves it empty, so the stage builds nothing — a blank project plays as a blank stage.
 func _sprite_model() -> Array:
-	return project_sprites if not project_sprites.is_empty() else PongScripts.sprites()
+	return project_sprites
 
 
-## The variable model to seed from (M18/M20): the editor's model when handed one over
-## (Stage.project_variables), else PongScripts.variables().
+## The variable model to seed from (M18/M20): the editor's model handed over via Stage.project_variables
+## (empty on a direct launch).
 func _variable_model() -> Array:
-	return project_variables if not project_variables.is_empty() else PongScripts.variables()
+	return project_variables
 
 
-## The list model to seed from (M44): the editor's model when handed one over (Stage.project_lists),
-## else PongScripts.lists(). The list twin of _variable_model.
+## The list model to seed from (M44): the editor's model handed over via Stage.project_lists (empty on a
+## direct launch). The list twin of _variable_model.
 func _list_model() -> Array:
-	return project_lists if not project_lists.is_empty() else PongScripts.lists()
+	return project_lists
 
 
 ## The background colour hex to paint (M27): the editor's when handed one over (Stage.project_background),
-## else PongScripts.background().
+## else the blank-project default (ProjectDefaults.background()).
 func _background_hex() -> String:
-	return project_background if project_background != "" else PongScripts.background()
+	return project_background if project_background != "" else ProjectDefaults.background()
 
 
 # --- Camera (Milestone 37) -------------------------------------------------

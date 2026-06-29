@@ -6,6 +6,7 @@
 		"snap": true,
 		"step": 8.0
 	},
+	"lists": [],
 	"scripts": [
 		{
 			"color": "#ff5a5aff",
@@ -83,6 +84,12 @@
 									}
 								},
 								"opcode": "go_to"
+							},
+							{
+								"inputs": {
+									"name": "Player"
+								},
+								"opcode": "camera_follow"
 							},
 							{
 								"inputs": {
