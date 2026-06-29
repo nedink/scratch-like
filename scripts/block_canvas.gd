@@ -279,12 +279,15 @@ func _render() -> void:
 		# A collapsed stack (M47) renders as a one-line summary bar instead of its full tree; the bar is
 		# a pure summary, so nothing inside it is interactive (no _wire_literals, no kept literal fields).
 		var collapsed: bool = stack.get("collapsed", false)
-		var body_ctrl: Control = BlockView.build_collapsed_stack(stack["blocks"]) if collapsed \
+		var ctrl: Control = BlockView.build_collapsed_stack(stack["blocks"]) if collapsed \
 			else BlockView.build_stack(stack["blocks"])
-		var ctrl := _wrap_with_gutter(stack, body_ctrl, collapsed)  # left gutter holding the collapse chevron
-		# Pass the whole wrapped row through to _input (so the wheel still reaches the ScrollContainer and
-		# we hit-test presses ourselves); the chevron is found by its global rect, not its mouse_filter, so
-		# leaving it IGNORE is fine. A collapsed bar keeps no editable fields — it's a summary, not a header.
+		# A multi-block script (something to hide) gets a collapse chevron inside its first block's
+		# header, to the right of the text — so it reads as part of the block (M47).
+		if BlockView.count_blocks(stack["blocks"]) > 1:
+			_add_collapse_chevron(ctrl, stack, collapsed)
+		# Pass the block through to _input (so the wheel still reaches the ScrollContainer and we hit-test
+		# presses ourselves); the chevron is found by its global rect, not its mouse_filter, so leaving it
+		# IGNORE is fine. A collapsed bar keeps no editable fields — it's a summary, not a header.
 		_passthrough(ctrl, not collapsed)
 		if not collapsed:
 			_wire_literals(ctrl)
@@ -296,39 +299,50 @@ func _render() -> void:
 	_fit_to_content(extent)
 
 
-## Wrap a rendered stack in a row with a fixed-width left gutter (M47), so a collapse chevron has a home
-## without disturbing the stack's own layout — and so collapsible and non-collapsible stacks share one
-## left edge. The chevron (▼ expanded / ▶ collapsed) appears only when the stack has more than one block
-## to hide; it carries the stack dict as meta, so a press on it (intercepted in _input before any grab)
-## toggles that stack's `collapsed`. A single-block stack gets the empty gutter and no chevron.
-const _GUTTER_W := 16.0
-const _ROW_SEP := 2
-func _wrap_with_gutter(stack: Dictionary, body_ctrl: Control, collapsed: bool) -> Control:
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", _ROW_SEP)
-	var lead: Control
-	if BlockView.count_blocks(stack["blocks"]) > 1:
-		var chevron := Label.new()
-		chevron.text = "▶" if collapsed else "▼"
-		chevron.custom_minimum_size = Vector2(_GUTTER_W, 0)
-		chevron.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
-		chevron.set_meta("collapse_stack", stack)
-		lead = chevron
-	else:
-		lead = Control.new()
-		lead.custom_minimum_size = Vector2(_GUTTER_W, 0)
-	lead.size_flags_vertical = Control.SIZE_SHRINK_BEGIN  # sit at the top, beside the first block
-	row.add_child(lead)
-	row.add_child(body_ctrl)
-	return row
+## Add the collapse chevron (M47) into the first block's header, to the right of its text — so it reads
+## as part of the block. The chevron carries the stack dict as the `collapse_stack` meta, so a press on
+## it (found by global rect in _collapse_toggle_at, checked before any grab) flips that stack's
+## `collapsed`. The glyphs are plain ASCII (+ / -) so they render in the web export too, unlike the
+## geometric-triangle Unicode that tofus there: + = collapsed (click to expand) / - = expanded (click to
+## collapse). An expanding spacer pushes the glyph to the header's right edge — for a hat/C-block, whose
+## panel is as wide as its body, that right-justifies it the full block width away from the text.
+func _add_collapse_chevron(ctrl: Control, stack: Dictionary, collapsed: bool) -> void:
+	var header := _first_header(ctrl, collapsed)
+	if header == null:
+		return
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	header.add_child(spacer)
+	var chevron := Label.new()
+	chevron.text = "+" if collapsed else "-"
+	chevron.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+	chevron.set_meta("collapse_stack", stack)
+	header.add_child(chevron)
 
 
-## Where a free-landing dragged stack should store its `pos` (M47). The ghost is the bare block(s) (no
-## gutter), but _render wraps every stack in the gutter row — which shifts the block right by the gutter
-## width + separation. Subtracting that here makes the landed block sit exactly where the ghost was,
-## instead of drifting right by the gutter on every drop.
+## The header row (HBoxContainer) of the first block in a rendered top-level stack — where the chevron is
+## attached. A collapsed bar exposes its summary row as %Row; an expanded stack's first child is the
+## block panel, whose header is the first HBox under its %Content (a statement/hat) or directly under the
+## panel (a free-floating reporter pill).
+func _first_header(ctrl: Control, collapsed: bool) -> HBoxContainer:
+	if collapsed:
+		return ctrl.get_node_or_null("%Row") as HBoxContainer
+	if ctrl.get_child_count() == 0:
+		return null
+	var panel := ctrl.get_child(0)
+	var content := panel.get_node_or_null("%Content")
+	var container: Node = content if content != null else panel
+	for c in container.get_children():
+		if c is HBoxContainer:
+			return c as HBoxContainer
+	return null
+
+
+## Where a free-landing dragged stack should store its `pos` (M47). The ghost is the bare block(s) and
+## _render now draws the block with no left gutter, so the two share a left edge — the ghost position is
+## exactly where the landed block should sit.
 func _land_pos() -> Vector2:
-	return _ghost.position - Vector2(_GUTTER_W + _ROW_SEP, 0)
+	return _ghost.position
 
 
 ## Grow the canvas's minimum size to cover every stack (plus a margin), so the enclosing
@@ -642,9 +656,9 @@ func _tagged_panels(node: Node, out: Array = []) -> Array:
 
 
 ## The stack dict whose collapse chevron (M47) is under a global point, or null. The chevron carries its
-## owning stack dict as the `collapse_stack` meta (stamped in _wrap_with_gutter), so the press handler can
-## flip that stack's `collapsed` directly. Checked before _front_stack_at — the chevron sits in the left
-## gutter, outside every tagged block panel, so it would otherwise read as an empty-canvas press.
+## owning stack dict as the `collapse_stack` meta (stamped in _add_collapse_chevron), so the press handler
+## can flip that stack's `collapsed` directly. Checked before _front_stack_at — the chevron sits inside
+## the first block's header, so this gives a press on it priority over grabbing the block it lives in.
 func _collapse_toggle_at(global_point: Vector2) -> Variant:
 	for c in _chevrons(_layer):
 		if (c as Control).get_global_rect().has_point(global_point):
@@ -752,8 +766,7 @@ func _spawnables(node: Node, out: Array = []) -> Array:
 ## drops are confined to slots in this body (see _nearest_slot). The Array reference is the live data,
 ## stable across re-renders — so it survives the _render() a reporter pickup triggers and matches back
 ## to the freshly-built body column by is_same. Walks up to the **outermost** stack column (the topmost
-## ancestor carrying `body_array` — the top-level stack's blocks, since a stack is wrapped in a gutter
-## row, M47, so the column is no longer a direct child of _layer); its body_array is [define_dict] for a
+## ancestor carrying `body_array` — the top-level stack's blocks); its body_array is [define_dict] for a
 ## define stack, whose body is returned.
 func _enclosing_define_body(node: Node) -> Variant:
 	var n: Node = node

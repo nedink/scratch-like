@@ -12,7 +12,19 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — mobile editor resolution.** The editor's logical layout size (`_EDITOR_SIZE`,
+- **Just shipped — collapse chevron moved into the block header.** The M47 collapse toggle used to sit in
+  a fixed-width left **gutter** beside each stack (`▼`/`▶`). It now lives **inside the first block's
+  header**, right-justified via an `SIZE_EXPAND_FILL` spacer (so on a hat/C-block — panel as wide as its
+  body — it sits the full block width from the text), and the glyph is plain ASCII (**`-` expanded / `+`
+  collapsed**) so it renders in the **web export** instead of tofu-ing like the geometric triangles. All
+  in [`block_canvas.gd`](scripts/block_canvas.gd): `_wrap_with_gutter`/`_GUTTER_W`/`_ROW_SEP` removed,
+  new `_add_collapse_chevron` + `_first_header`, `_land_pos` simplified to `_ghost.position` (no gutter to
+  subtract). Toggle logic unchanged — the chevron still carries the `collapse_stack` meta and
+  `_collapse_toggle_at` finds it by global rect.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** Blocks mode — a multi-block hat shows a
+    `-` at its top-right; click it → folds to a one-line bar showing `+`; click → expands. Also check the
+    **web build** renders the `+`/`-` (not boxes). Single-block scripts show no chevron.
+- **Earlier — mobile editor resolution.** The editor's logical layout size (`_EDITOR_SIZE`,
   1280×800) shrinks to `_EDITOR_MOBILE_SIZE` (640×400) when `_is_mobile()` — a native mobile export, a
   mobile *web* export (`web_android`/`web_ios`), or a narrow web window (<800px wide). A smaller logical
   size makes each logical pixel cover more device pixels, so the chrome/blocks render **bigger** and stay
@@ -254,7 +266,7 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 - M48 — **block rendering via editable `.tscn` shells** (one scene per shape under `blocks/`) +
   `BlockStyles` colour resource. Pure rendering refactor.
 - M47 — **collapsable scripts.** Collapse a top-level script in the block canvas to a one-line summary
-  bar (chevron `▼`/`▶`, or **Cmd/Ctrl+E** on a selection) and expand it again. Editor-only UI state (an
+  bar (header chevron `+`/`-`, or **Cmd/Ctrl+E** on a selection) and expand it again. Editor-only UI state (an
   optional `collapsed` flag per stack in `BlockCanvas._stacks`; never serialized, reset on a sprite
   switch) — no opcode / data-shape / runtime change. A collapsed bar drags / selects / deletes as one
   unit. Files: `block_view.gd` (`build_collapsed_stack`/`_summary_text`/`count_blocks`), `block_canvas.gd`.
