@@ -483,11 +483,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_tree().quit()
 
 
-## Seed the working project **blank** — the default a fresh launch and NEW land on. There are no
-## sprites, variables, or lists; only the stage-level defaults (background + grid) come from
-## ProjectDefaults. The user builds from here: the blinking + Sprite button (see
-## _update_add_sprite_blink) prompts creating the first sprite. (The in-code Pong demo this used to seed
-## is gone — a demo worth keeping lives as a saved `.json` project, opened with OPEN.)
+## Seed the working project — the default a fresh launch and NEW land on. It starts with a single
+## sprite named "Sprite" (a grey placeholder at stage centre with an empty script — Scratch's fresh
+## project), no variables or lists, and the stage-level defaults (background + grid) from
+## ProjectDefaults. The user builds from there. (The in-code Pong demo this used to seed is gone — a
+## demo worth keeping lives as a saved `.json` project, opened with OPEN.)
 ##
 ## `_scripts` is the **living project** (M10): switching sprites and RUN persist the canvas's edits back
 ## here. Each `_scripts` entry is a full **sprite def** — {name, x, y, w, h, color, script} (M24) — so it
@@ -495,7 +495,10 @@ func _unhandled_input(event: InputEvent) -> void:
 ## / `_lists` are the editor-owned **mutable** models (M20/M44) the UI appends to; _on_run hands them to
 ## the Stage.
 func _seed_blank() -> void:
-	_scripts = []
+	var sprite := _DEFAULT_SPRITE.duplicate()
+	sprite["name"] = "Sprite"
+	sprite["script"] = []
+	_scripts = [sprite]
 	_variables = []
 	_lists = []
 	_background = ProjectDefaults.background()

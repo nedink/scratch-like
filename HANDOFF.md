@@ -12,7 +12,15 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — collapse chevron moved into the block header.** The M47 collapse toggle used to sit in
+- **Just shipped — a new project starts with one sprite named "Sprite".** `_seed_blank`
+  ([`editor.gd`](scripts/editor.gd)) now seeds the default/NEW project with a single `_DEFAULT_SPRITE`
+  named `"Sprite"` (grey placeholder at stage centre, empty script) instead of zero sprites. The blank,
+  spriteless default and the stale `_update_add_sprite_blink` doc reference are gone;
+  `_load_project_into_ui` already selects sprite 0 when one exists, so the selector lands on "Sprite"
+  with no extra wiring.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** launch (or click NEW) → sprite selector
+    shows "Sprite" selected, an empty canvas, stage view shows one grey square at centre.
+- **Earlier — collapse chevron moved into the block header.** The M47 collapse toggle used to sit in
   a fixed-width left **gutter** beside each stack (`▼`/`▶`). It now lives **inside the first block's
   header**, right-justified via an `SIZE_EXPAND_FILL` spacer (so on a hat/C-block — panel as wide as its
   body — it sits the full block width from the text), and the glyph is plain ASCII (**`-` expanded / `+`
