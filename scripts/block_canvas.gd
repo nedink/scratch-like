@@ -1608,13 +1608,14 @@ func _drop_empty_stacks() -> void:
 
 
 ## Re-resolve the cursor to the current Control tree and redraw the caret marker. Called at the end of
-## _render() (so the cursor survives a rebuild) and after every cursor move. A gap/slot cursor whose
-## data no longer renders (its block was deleted) is stale and is dropped.
+## _render() (so the cursor survives a rebuild) and after every cursor move. Purely a *draw* — it never
+## mutates `_cursor` (doing so here would wipe a still-valid cursor whenever its marker can't be drawn,
+## e.g. a gap in a collapsed stack that renders no body column — and crash the picker, which keys off the
+## cursor data). An unresolvable marker just hides the caret; the cursor's data stays usable for insert /
+## navigation, and a genuinely stale cursor is harmless (inserting into an orphan array is a no-op).
 func _update_caret() -> void:
 	var g := _cursor_global_rect()
 	if g.is_empty():
-		if String(_cursor.get("kind", "")) != "new":
-			_cursor = {}
 		_caret.visible = false
 		return
 	var kind := String(g["kind"])
@@ -2152,8 +2153,11 @@ func _picker_choose_index(i: int) -> void:
 ## At a slot: nest the reporter (overwriting whatever was there) and descend into its first operand, so
 ## nested expressions build recursively. Then re-render and close.
 func _picker_choose(opcode: String) -> void:
-	var block := BlockView.make_block(opcode)
 	var kind := String(_cursor.get("kind", ""))
+	if kind != "slot" and kind != "gap" and kind != "new":
+		_picker.hide()  # no usable cursor (shouldn't happen) — don't insert into nothing
+		return
+	var block := BlockView.make_block(opcode)
 	if kind == "slot":
 		var inputs: Dictionary = _cursor["inputs"]
 		inputs[String(_cursor["key"])] = block
