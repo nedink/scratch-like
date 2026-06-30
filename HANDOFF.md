@@ -12,7 +12,20 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: caret re-measures after layout (keyboard insert landed it on the wrong gap).**
+- **Just shipped — M51 fix: a picked statement with header slots drops the cursor into its first slot.**
+  Picking e.g. `go to x: y:` from the keyboard picker used to flow the cursor to the gap *after* the new
+  block, leaving its `x`/`y` slots empty and unvisited — even though picking a *reporter* already descends
+  into its first operand. Now a plain statement with header slots descends into its first slot (ready to
+  fill, then Tab to the next), the statement twin of the reporter path; hats/C-blocks still descend into
+  their body (the body is the primary flow, and an `if`'s condition stays reachable via Left/Right), and a
+  slotless statement (`delete this clone`) still flows to the gap after. One branch in `_picker_choose`
+  ([`block_canvas.gd`](scripts/block_canvas.gd)), reusing the existing `_first_slot_key`. No data/runtime change.
+  - **⚠ Not F5-verified.** **F5-verify:** place the cursor on empty canvas / in a body, pick `go to x: y:`
+    → the caret now lands as a hollow outline on the `x` slot (Tab → `y`); type a number to fill it. Pick
+    `forever` → caret still drops *inside* its body. Pick `delete this clone` (slotless) → caret flows to
+    the gap after it.
+
+- **Earlier — M51 fix: caret re-measures after layout (keyboard insert landed it on the wrong gap).**
   After picking a statement, the caret could appear *above* the just-inserted block (between it and the
   previous one) instead of in the gap *below* it. The insert logic was already correct (`_picker_choose`
   sets the cursor to `idx + 1`, the gap after) — the bug was that `_render()` measured the caret's pixel

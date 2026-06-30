@@ -2207,7 +2207,9 @@ func _picker_choose_index(i: int) -> void:
 
 
 ## Insert the chosen block at the cursor and advance it. At a gap/new: splice the statement in (creating a
-## stack for "new"); the cursor descends into its body if it's a hat/C-block, else moves to the gap after.
+## stack for "new"); the cursor descends into its body if it's a hat/C-block, else into its first header
+## slot if it has one (e.g. `go to x: y:` → the x slot, ready to fill — the statement twin of a reporter
+## descending into its first operand), else moves to the gap after (a slotless statement).
 ## At a slot: nest the reporter (overwriting whatever was there). If it has operands the cursor descends
 ## into the first, so nested expressions build recursively; if it's a leaf (no operands) the cursor instead
 ## advances to the gap after the owning statement, the same way a freshly-picked statement flows to its end
@@ -2247,9 +2249,18 @@ func _picker_choose(opcode: String) -> void:
 			arr.insert(idx, block)
 		var binputs: Dictionary = block["inputs"]
 		var body: Variant = binputs.get("body")
+		var fk := _first_slot_key(block)
 		if body is Array:
+			# Hat / C-block: descend into its body so the next block nests. (Its header slots — e.g.
+			# an `if`'s condition — are still reachable with Left/Right; the body is the primary flow,
+			# and a leaf condition filled there would otherwise carry the cursor past the body.)
 			_cursor = {"kind": "gap", "array": body, "index": 0}
+		elif fk != "":
+			# A plain statement with header slots (e.g. `go to x: y:`): descend into its first slot so
+			# you fill it straight away, the same way picking a reporter descends into its first operand.
+			_cursor = {"kind": "slot", "inputs": binputs, "key": fk}
 		else:
+			# A slotless statement (e.g. `delete this clone`): flow to the gap after it.
 			_cursor = {"kind": "gap", "array": arr, "index": idx + 1}
 		_render()
 	_picker.hide()
