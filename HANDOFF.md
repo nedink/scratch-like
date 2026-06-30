@@ -12,7 +12,28 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: a filled param slot advances to the next param, not straight to the gap.**
+- **Just shipped — M51 fixes: picker sizing + nav refinements (4 small tweaks).** All in
+  [`block_canvas.gd`](scripts/block_canvas.gd), **no opcode / data-shape / runtime / editor.gd /
+  block_view.gd change**:
+  1. **Picker fits its row count.** `_picker_refilter` now sizes the results list (and the popup) to the
+     number of matched items via the new `_picker_list_height(rows)` (measures the ItemList's font + row
+     spacing, capped at 300px), instead of a fixed 300px panel — a 2-item match no longer draws a tall empty
+     list. The fixed `custom_minimum_size` in `_ensure_picker` was dropped (set per-refilter now).
+  2. **Tab commits like Enter.** `_picker_nav` folds `KEY_TAB` into the Enter case, so typing arbitrary text
+     into a param and pressing Tab accepts it (the "use literal" row) and advances to the next slot, rather
+     than the LineEdit's default focus traversal.
+  3. **Esc clears the cursor too.** The picker's Escape branch now `_set_cursor({})` after hiding the popup,
+     so one Esc cancels the whole authoring gesture (picker + caret) instead of leaving the caret parked.
+  4. **Left/Right from a gap reach adjacent params.** `_cursor_move_horizontal`'s gap branch now uses the new
+     `_enter_adjacent_slot(arr, i, front)`: Right → the *first* header slot of the block after the gap (as
+     before), Left → the *last* header slot of the block before it (was a no-op).
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) open the picker and type `mov` — the
+    list is short, popup hugs it; clear to one char that matches many — popup grows but caps. (2) On a number
+    slot, type `5` then **Tab** → commits `5` and the cursor advances to the next param (same as Enter). (3)
+    With the picker open, press **Esc** → picker closes *and* the green caret disappears. (4) Click a gap
+    between two statements, press **Right** → cursor enters the following block's first slot; press **Left**
+    from that gap → cursor enters the preceding block's last slot.
+- **Earlier M51 fix: a filled param slot advances to the next param, not straight to the gap.**
   When you fill an input slot from the picker — a **leaf reporter** (no operands) or the **"use literal" row**
   — the cursor now moves to the **next param slot of the same block** if there is one, instead of always
   jumping to the gap after the statement. So `go to x: y:` flows `x`→`y` (fill the second before leaving the

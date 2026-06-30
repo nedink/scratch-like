@@ -1886,21 +1886,14 @@ func _cursor_move_horizontal(dir: int) -> void:
 	if kind == "new":
 		return
 	if kind == "gap":
-		if dir <= 0:
-			return
+		# From a gap (between statements), step into the most adjacent block's params: Right → the *first*
+		# header slot of the block after the gap, Left → the *last* header slot of the block before it.
 		var arr: Array = _cursor["array"]
 		var idx := int(_cursor["index"])
-		if idx < 0 or idx >= arr.size():
-			return
-		var blk: Variant = arr[idx]
-		if not (blk is Dictionary):
-			return
-		var panel := _panel_for_block(blk)
-		if panel == null:
-			return
-		var slots := _header_slots(panel)
-		if not slots.is_empty():
-			_enter_slot(slots[0] as Control)
+		if dir > 0:
+			_enter_adjacent_slot(arr, idx, true)
+		else:
+			_enter_adjacent_slot(arr, idx - 1, false)
 		return
 	# slot:
 	var ctrl := _cursor_control()
@@ -1973,6 +1966,24 @@ func _index_of_gap(gaps: Array, cur: Dictionary) -> int:
 func _enter_slot(slot_ctrl: Control) -> void:
 	_set_cursor({"kind": "slot", "inputs": slot_ctrl.get_meta("slot_inputs"),
 		"key": String(slot_ctrl.get_meta("slot_key"))})
+
+
+## Move the cursor into a header slot of the statement at arr[i] — its first slot (front) or its last
+## (back) — used by Left/Right from a gap to reach the most adjacent block's params. No-op if i is out of
+## range, the entry isn't a rendered block, or it has no header slots.
+func _enter_adjacent_slot(arr: Array, i: int, front: bool) -> void:
+	if i < 0 or i >= arr.size():
+		return
+	var blk: Variant = arr[i]
+	if not (blk is Dictionary):
+		return
+	var panel := _panel_for_block(blk)
+	if panel == null:
+		return
+	var slots := _header_slots(panel)
+	if slots.is_empty():
+		return
+	_enter_slot((slots[0] if front else slots[slots.size() - 1]) as Control)
 
 
 ## The input slots in a block's *header* (its own inputs + nested reporter pills), in left-to-right tree
@@ -2128,7 +2139,7 @@ func _ensure_picker() -> void:
 	box.add_child(_picker_edit)
 	_picker_list = ItemList.new()
 	_picker_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_picker_list.custom_minimum_size = Vector2(0, 240)
+	# Height is set per-refilter to fit the row count (see _picker_refilter / _picker_list_height).
 	_picker_list.item_activated.connect(_picker_choose_index)
 	box.add_child(_picker_list)
 	_picker.add_child(box)
@@ -2234,8 +2245,31 @@ func _picker_refilter(query: String) -> void:
 	# big list panel no longer covers the blocks you're typing into.
 	var show_list := first_reporter_idx != -1
 	_picker_list.visible = show_list
-	var h := 300 if show_list else int(_picker_edit.get_combined_minimum_size().y) + 8
+	var edit_h := int(_picker_edit.get_combined_minimum_size().y)
+	var h: int
+	if show_list:
+		# Fit the results list (and so the popup) to the row count, capped — a 2-item match shouldn't draw a
+		# tall empty panel, and a long one shouldn't run off-screen.
+		var list_h := _picker_list_height(_picker_list.item_count)
+		_picker_list.custom_minimum_size = Vector2(0, list_h)
+		h = edit_h + list_h + 8
+	else:
+		h = edit_h + 8
 	_picker.size = Vector2i(260, h)
+
+
+## The pixel height to give the results list so the popup fits `rows` items (capped at 300), measuring the
+## ItemList's own font/row spacing so it tracks the editor's content scale rather than a fixed panel height.
+func _picker_list_height(rows: int) -> int:
+	if rows <= 0:
+		return 0
+	var line_h := 18.0
+	var font := _picker_list.get_theme_font("font")
+	if font != null:
+		line_h = font.get_height(_picker_list.get_theme_font_size("font_size"))
+	var per := line_h + float(_picker_list.get_theme_constant("v_separation"))
+	var total := per * rows + per * 0.5  # a little slack for the list's own padding
+	return int(clampf(total, per + 8.0, 300.0))
 
 
 ## The label for the picker's "use literal" row — the typed text, quoted for a text slot so it reads as
@@ -2275,11 +2309,15 @@ func _picker_nav(event: InputEvent) -> void:
 		KEY_UP:
 			_picker_move(-1)
 			_picker_edit.accept_event()
-		KEY_ENTER, KEY_KP_ENTER:
+		KEY_ENTER, KEY_KP_ENTER, KEY_TAB:
+			# Tab commits like Enter (so typing arbitrary text into a param and Tab-ing accepts it and
+			# advances to the next slot), rather than the LineEdit's default focus-traversal.
 			_picker_commit()
 			_picker_edit.accept_event()
 		KEY_ESCAPE:
+			# Esc leaves the picker *and* clears the cursor — one press cancels the whole authoring gesture.
 			_picker.hide()
+			_set_cursor({})
 			_picker_edit.accept_event()
 
 

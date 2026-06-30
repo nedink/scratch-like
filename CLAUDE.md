@@ -53,7 +53,9 @@ from a slot they first ascend to the gap before the containing statement
 **Left/Right/Tab/Shift+Tab** walk a block's *header* slots ([`_header_slots`](scripts/block_canvas.gd) —
 left-to-right tree order, descending into nested reporter pills but **not** into a C-block body column,
 whose slots belong to other statements); from a gap, Right/Tab descends into the first slot of the block
-after it; Left at a slot's start ascends back to the gap before the owning statement.
+after it and **Left into the last slot of the block before it**
+([`_enter_adjacent_slot`](scripts/block_canvas.gd) — Left/Right reach the *most adjacent* block's params
+from a between-statements gap); Left at a slot's start ascends back to the gap before the owning statement.
 
 ### The fuzzy picker — a lazy `PopupPanel`, scoped + type-filtered
 
@@ -68,10 +70,15 @@ cursor: a **gap** → statements/C-blocks (hats only at a `"new"` stack, never m
 [`_picker_refilter`](scripts/block_canvas.gd) fuzzy-matches the typed query against the brace-stripped label
 ([`BlockView.opcode_label`](scripts/block_view.gd), e.g. `"move {steps} steps"` → `"move steps steps"`) via
 `is_subsequence_ofn`, ranked by prefix bonus then shorter label, displaying the raw template
-([`BlockView.opcode_template`](scripts/block_view.gd), e.g. `"if {condition} then"`). The picker's own
-`LineEdit.gui_input` ([`_picker_nav`](scripts/block_canvas.gd)) drives Up/Down/Enter/Escape (each
-`accept_event`'d so typing keeps working), so the canvas never steals its keys (`_handle_key` bails while the
-picker is visible).
+([`BlockView.opcode_template`](scripts/block_view.gd), e.g. `"if {condition} then"`). The results list (and
+so the popup) is **sized to fit its row count** ([`_picker_list_height`](scripts/block_canvas.gd) — measures
+the ItemList font + row spacing, capped at 300px), so a short match doesn't draw a tall empty panel. The
+picker's own `LineEdit.gui_input` ([`_picker_nav`](scripts/block_canvas.gd)) drives
+Up/Down/Enter/**Tab**/Escape (each `accept_event`'d so typing keeps working), so the canvas never steals its
+keys (`_handle_key` bails while the picker is visible): **Tab commits like Enter** (accept the typed literal
++ advance — so it works while entering arbitrary param text, not the LineEdit's focus traversal), and
+**Escape both hides the picker *and* clears the cursor** (`_set_cursor({})` — one press cancels the whole
+authoring gesture).
 
 ### Insert / type / delete
 
