@@ -12,7 +12,30 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — a new project starts with one sprite named "Sprite".** `_seed_blank`
+- **Just shipped — M51: keyboard authoring mode (cursor + fuzzy block picker).** The block editor is
+  now fully keyboard-drivable *alongside* mouse drag/drop. A keyboard **cursor** (`BlockCanvas._cursor`,
+  editor-only UI state like selection/collapse, never serialized, stored as data references so it
+  survives `_render`) sits at a **statement gap**, an **input slot**, or a **"new stack here"** point;
+  a bright-green caret overlay (`_caret`) marks it. **Click** a block/slot/empty-canvas to place it;
+  **↑/↓** walk statement gaps in document order (`_ordered_gaps`), **←/→/Tab** walk a block's header
+  slots (descending into nested reporter pills); **Enter** or **typing** opens a **fuzzy picker** (a
+  lazy `PopupPanel` + `LineEdit` + `ItemList`, `_ensure_picker`) that filters opcodes by their
+  natural-language label (`BlockView.opcode_label`/`opcode_template`); choosing inserts a fresh
+  `make_block` at the cursor. At a slot the picker is **type-filtered to reporters** (the M23
+  `slot_type` rule) and the cursor **descends into the new reporter's first operand** — so nested
+  expressions like `move (score + 1)` are built recursively, no text parser. Typing on a **literal**
+  slot focuses its field; **Backspace/Delete** deletes at the cursor; **Escape** dismisses. Pure
+  editor-side: only `block_canvas.gd` (the bulk) + two tiny `block_view.gd` accessors; **no opcode /
+  data-shape / runtime / editor.gd change**.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) click empty canvas → green caret;
+    type "flag", Enter → `when flag clicked` lands, caret drops into its body; Enter again, type "move"
+    → `move 10 steps` nests inside. (2) On `move`'s steps slot, type "+" → `(0 + 0)` nests, caret in the
+    first operand; fill it, Tab to the second. (3) On an `if` condition the picker offers only boolean
+    reporters. (4) ↑/↓ walk statements, ←/→/Tab walk slots, Backspace deletes at the caret, Escape
+    clears (and does **not** quit the editor while a cursor is active). (5) Mouse drag/drop, literal
+    click-edit, selection (M46), collapse (M47) all still work; collapsed stacks are skipped by ↑/↓.
+    Then **RUN** a keyboard-built script — runs identically to a drag-built one; **SAVE/OPEN** round-trips.
+- **Earlier — a new project starts with one sprite named "Sprite".** `_seed_blank`
   ([`editor.gd`](scripts/editor.gd)) now seeds the default/NEW project with a single `_DEFAULT_SPRITE`
   named `"Sprite"` (grey placeholder at stage centre, empty script) instead of zero sprites. The blank,
   spriteless default and the stale `_update_add_sprite_blink` doc reference are gone;
@@ -268,6 +291,13 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M51 — **keyboard authoring mode.** A keyboard cursor (gap / slot / new) + a fuzzy block picker make the
+  block editor fully keyboard-drivable alongside drag/drop; nested reporter expressions build recursively
+  via the picker. Editor-only UI state in `block_canvas.gd` (+ `BlockView.opcode_label`/`opcode_template`);
+  no opcode / data-shape / runtime change.
+- M50 — **category recolours are per-project.** A recolour now rides in the project `.json`
+  (`block_colors` key) instead of the global `blocks/block_styles.tres`; it loads with the project, resets
+  on NEW, and missing categories draw their default. Editor persistence only.
 - M49 — **recolour a block category from its palette header.** Section titles are `ColorPickerButton`s;
   picking recolours the category live and saves `blocks/block_styles.tres`. Editor UI only (`BlockPalette`
   + `BlockView.set_category_color`/`save_styles`); no opcode / data-shape / runtime change.

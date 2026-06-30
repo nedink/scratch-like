@@ -125,6 +125,27 @@ var _trash: Control
 ## in which case the canvas re-renders itself.
 var on_custom_block_renamed := Callable()
 
+## --- Keyboard authoring mode (M51) ---
+## A keyboard cursor that lives *alongside* mouse drag/drop — click to place it, arrows/Tab to move it,
+## Enter/typing to open a fuzzy block picker that inserts a block at the cursor. Like selection (M46) it
+## is editor-only UI state, never serialized, and stored as **data references** (a live Array + index, or
+## a live inputs dict + key) so it survives _render() — re-resolved to a widget each render by matching
+## the same meta BlockView stamps. Tagged by `kind`:
+##   * {"kind": "gap",  "array": <live body Array>, "index": int}  — an insertion point (0..size)
+##   * {"kind": "slot", "inputs": <live inputs dict>, "key": String} — an input slot of a block
+##   * {"kind": "new",  "pos": Vector2 (canvas-local)}              — "start a new top-level stack here"
+##   * {} — no cursor.
+## Nested reporter expressions (move (score + 1)) are built recursively: a reporter picked into a slot
+## drops the cursor into its first operand, so you fill it (with a literal or another reporter) and Tab on.
+var _cursor: Dictionary = {}
+var _caret: Panel                  # the cursor marker overlay (a direct canvas child, never freed by _render)
+var _caret_bar_style: StyleBoxFlat  # filled bar — a gap / new insertion point
+var _caret_box_style: StyleBoxFlat  # hollow outline — a slot
+var _picker: PopupPanel            # the shared fuzzy block picker, built lazily (see _ensure_picker)
+var _picker_edit: LineEdit
+var _picker_list: ItemList
+var _picker_opcodes: Array = []    # the candidate opcodes for the open picker (scoped by the cursor)
+
 
 func _ready() -> void:
 	clip_contents = true
@@ -160,6 +181,23 @@ func _ready() -> void:
 	_marquee_panel.visible = false
 	add_child(_marquee_panel)
 
+	# The keyboard cursor marker (M51): a bright-green filled bar at a gap / new-stack point, or a
+	# hollow outline around a slot — deliberately a different hue from the gold snap bar and the white
+	# selection border so the three read apart. A direct child of the canvas (added after _layer), so it
+	# draws above the blocks and _render never frees it.
+	_caret = Panel.new()
+	_caret.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_caret_bar_style = StyleBoxFlat.new()
+	_caret_bar_style.bg_color = Color("#5dff9b")
+	_caret_bar_style.set_corner_radius_all(2)
+	_caret_box_style = StyleBoxFlat.new()
+	_caret_box_style.bg_color = Color(0, 0, 0, 0)
+	_caret_box_style.border_color = Color("#5dff9b")
+	_caret_box_style.set_border_width_all(2)
+	_caret_box_style.set_corner_radius_all(3)
+	_caret.visible = false
+	add_child(_caret)
+
 
 ## Load a sprite's script for editing. Deep-duplicated so dragging mutates only this
 ## working copy, not the array passed in. Each top-level block becomes one stack, laid
@@ -167,6 +205,7 @@ func _ready() -> void:
 func load_script(script: Array) -> void:
 	_cancel_drag()
 	_selected = []  # a sprite switch starts with nothing selected (M46)
+	_cursor = {}    # …and with no keyboard cursor (M51) — it would point into the outgoing script
 	_stacks.clear()
 	for block in script:
 		if typeof(block) != TYPE_DICTIONARY:
@@ -229,9 +268,7 @@ func rename_variable(old_name: String, new_name: String) -> void:
 func delete_variable_refs(var_name: String) -> void:
 	for stack in _stacks:
 		BlockView.strip_variable_refs(stack["blocks"], var_name)
-	for s in range(_stacks.size() - 1, -1, -1):
-		if (_stacks[s]["blocks"] as Array).is_empty():
-			_stacks.remove_at(s)
+	_drop_empty_stacks()
 	_render()
 
 
@@ -250,9 +287,7 @@ func rename_list(old_name: String, new_name: String) -> void:
 func delete_list_refs(list_name: String) -> void:
 	for stack in _stacks:
 		BlockView.strip_list_refs(stack["blocks"], list_name)
-	for s in range(_stacks.size() - 1, -1, -1):
-		if (_stacks[s]["blocks"] as Array).is_empty():
-			_stacks.remove_at(s)
+	_drop_empty_stacks()
 	_render()
 
 
@@ -296,6 +331,7 @@ func _render() -> void:
 		ctrl.size = ctrl.get_combined_minimum_size()
 		extent = extent.max(ctrl.position + ctrl.size)
 	_apply_selection_highlight()  # outline the selected blocks (M46)
+	_update_caret()               # re-resolve + redraw the keyboard cursor (M51)
 	_fit_to_content(extent)
 
 
@@ -994,6 +1030,7 @@ func _cancel_drag() -> void:
 	# home, M46); a confined `param` drag (scope set) is discarded — it has no home outside its body.
 	if _state == _DRAGGING and not _grabbed.is_empty() and _spawn_scope_body == null:
 		_stacks.append({"blocks": _grabbed, "pos": _land_pos(), "collapsed": _grabbed_collapsed})
+	_cursor = {}  # an abandoned drag (sprite switch) drops the keyboard cursor too (M51)
 	_clear_drag_overlays()
 
 
@@ -1244,15 +1281,28 @@ func _outline_selected(control: Control) -> void:
 ## to GUI).
 func _on_pending_click() -> void:
 	if _pending.get("marquee", false):
-		if not _selected.is_empty():
-			_selected = []
-			_render()
+		# A plain click on empty canvas (M51): clear the selection and seat a "new stack here" keyboard
+		# cursor at the click point, so the user can start typing a script from nothing.
+		var had_sel := not _selected.is_empty()
+		_selected = []
+		_cursor = {"kind": "new", "pos": _press_pos - global_position}
+		if had_sel:
+			_render()  # re-render to drop the selection outlines (also redraws the caret)
+		else:
+			_update_caret()
 		return
 	if _pending_spawn:
 		return  # a define-hat prototype param pill spawns on drag; a click does nothing
 	var block: Variant = _pending_clicked_block()
 	if typeof(block) != TYPE_DICTIONARY:
 		return
+	# Place the keyboard cursor where the click landed (M51): on the slot of a clicked reporter pill, or
+	# at the gap *before* a clicked statement / free reporter (so Enter inserts there, Right enters its
+	# slots). Set before _render so _update_caret draws it on the rebuilt tree.
+	if _pending.has("inputs"):
+		_cursor = {"kind": "slot", "inputs": _pending["inputs"], "key": String(_pending["key"])}
+	elif _pending.has("array"):
+		_cursor = {"kind": "gap", "array": _pending["array"], "index": int(_pending["index"])}
 	var additive: bool = _pending.get("additive", false)
 	if _pending.get("double", false):
 		if not additive:
@@ -1396,9 +1446,7 @@ func _begin_multi_drag() -> void:
 	for pick in picks:
 		_grabbed.append(pick["block"])
 		_remove_block(pick["array"], pick["block"])
-	for s in range(_stacks.size() - 1, -1, -1):
-		if (_stacks[s]["blocks"] as Array).is_empty():
-			_stacks.remove_at(s)
+	_drop_empty_stacks()
 	_selected = []
 	_dragging_reporter = false
 	_render()
@@ -1416,9 +1464,7 @@ func _begin_multi_drag() -> void:
 func _delete_selection() -> void:
 	for pick in _topmost_selected_in_order():
 		_remove_block(pick["array"], pick["block"])
-	for s in range(_stacks.size() - 1, -1, -1):
-		if (_stacks[s]["blocks"] as Array).is_empty():
-			_stacks.remove_at(s)
+	_drop_empty_stacks()
 	_selected = []
 	_render()
 
@@ -1464,18 +1510,38 @@ func _panel_top_left_of(block: Variant) -> Vector2:
 ## typing — incl. Delete — inside a literal is unaffected) or nothing is selected. set_input_as_handled
 ## only when we actually act, so other keys propagate untouched.
 func _handle_key(event: InputEventKey) -> void:
-	if not event.pressed or event.echo or _selected.is_empty():
+	if not event.pressed or event.echo:
 		return
+	# The fuzzy picker (M51) owns its own keys while open (driven by _picker_edit.gui_input) — never let
+	# the canvas steal them.
+	if _picker != null and _picker.visible:
+		return
+	# A focused literal field (M12) owns typing/Backspace — leave it untouched (so editing a value, incl.
+	# deleting characters, is unaffected by the navigation/selection ops below).
 	if get_viewport().gui_get_focus_owner() is LineEdit:
 		return
-	if event.keycode == KEY_DELETE or event.keycode == KEY_BACKSPACE:
-		_delete_selection()
+	var kc := event.keycode
+	# Keyboard authoring (M51): navigation / picker / type-to-edit, driven by the cursor and independent
+	# of the selection. Handled first so arrows/Tab/Enter/typing work whenever a cursor is placed.
+	if not _cursor.is_empty() and _handle_cursor_nav(event):
 		get_viewport().set_input_as_handled()
-	elif event.keycode == KEY_D and (event.meta_pressed or event.ctrl_pressed):
-		_duplicate_selection()
-		get_viewport().set_input_as_handled()
-	elif event.keycode == KEY_E and (event.meta_pressed or event.ctrl_pressed):
-		_toggle_collapse_selection()
+		return
+	# Selection ops (M46/M47): act on the multi-selection when there is one.
+	if not _selected.is_empty():
+		if kc == KEY_DELETE or kc == KEY_BACKSPACE:
+			_delete_selection()
+			get_viewport().set_input_as_handled()
+		elif kc == KEY_D and (event.meta_pressed or event.ctrl_pressed):
+			_duplicate_selection()
+			get_viewport().set_input_as_handled()
+		elif kc == KEY_E and (event.meta_pressed or event.ctrl_pressed):
+			_toggle_collapse_selection()
+			get_viewport().set_input_as_handled()
+		return
+	# Cursor delete (M51): with no selection, Delete/Backspace removes the block at/around the cursor (or
+	# reverts a reporter slot to its default). Left to last so a real selection-delete wins when both exist.
+	if not _cursor.is_empty() and (kc == KEY_DELETE or kc == KEY_BACKSPACE):
+		_cursor_delete(kc == KEY_DELETE)
 		get_viewport().set_input_as_handled()
 
 
@@ -1521,3 +1587,602 @@ func _blocks_contain_selected(blocks: Array) -> bool:
 		if body is Array and _blocks_contain_selected(body):
 			return true
 	return false
+
+
+# --- Keyboard authoring: cursor + fuzzy picker (M51) -----------------------
+
+## Move the keyboard cursor and redraw its marker. No _render() — the block tree is unchanged by a
+## pure navigation; only the overlay moves. (Structural edits call _render(), which redraws the caret.)
+func _set_cursor(c: Dictionary) -> void:
+	_cursor = c
+	_update_caret()
+
+
+## Drop any top-level stack left empty by an edit (shared by the delete cascades, multi-drag, and the
+## cursor delete). The _begin_drag pickup keeps its own is_same-guarded version (it must not drop the
+## stack it is mid-detaching from).
+func _drop_empty_stacks() -> void:
+	for s in range(_stacks.size() - 1, -1, -1):
+		if (_stacks[s]["blocks"] as Array).is_empty():
+			_stacks.remove_at(s)
+
+
+## Re-resolve the cursor to the current Control tree and redraw the caret marker. Called at the end of
+## _render() (so the cursor survives a rebuild) and after every cursor move. A gap/slot cursor whose
+## data no longer renders (its block was deleted) is stale and is dropped.
+func _update_caret() -> void:
+	var g := _cursor_global_rect()
+	if g.is_empty():
+		if String(_cursor.get("kind", "")) != "new":
+			_cursor = {}
+		_caret.visible = false
+		return
+	var kind := String(g["kind"])
+	var rect: Rect2 = g["rect"]
+	var local := rect.position - global_position
+	if kind == "slot":
+		_caret.add_theme_stylebox_override("panel", _caret_box_style)
+		_caret.position = local
+		_caret.size = rect.size
+	else:  # gap / new — a thin insertion bar
+		_caret.add_theme_stylebox_override("panel", _caret_bar_style)
+		_caret.position = local
+		_caret.size = Vector2(maxf(rect.size.x, 60.0), 3.0)
+	_caret.visible = true
+
+
+## The cursor's marker geometry as a global-space {kind, rect}, or {} if it doesn't resolve.
+func _cursor_global_rect() -> Dictionary:
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "new":
+		var pos: Vector2 = _cursor.get("pos", Vector2.ZERO)
+		return {"kind": "new", "rect": Rect2(global_position + pos, Vector2(80, 3))}
+	if kind == "slot":
+		var ctrl := _cursor_control()
+		if ctrl == null:
+			return {}
+		return {"kind": "slot", "rect": ctrl.get_global_rect()}
+	if kind == "gap":
+		var arr: Array = _cursor["array"]
+		var r: Variant = _gap_global_marker(arr, int(_cursor["index"]))
+		if r == null:
+			return {}
+		return {"kind": "gap", "rect": r}
+	return {}
+
+
+## The global rect (a thin bar) of the gap at `index` of the live body Array `arr`, mirroring _all_gaps:
+## before the index-th block, after the last block, or the empty body column. null if `arr` isn't rendered.
+func _gap_global_marker(arr: Array, index: int) -> Variant:
+	for column in _columns(_layer):
+		if not is_same((column as Control).get_meta("body_array"), arr):
+			continue
+		var panels: Array = []
+		for child in column.get_children():
+			if child is Control and (child as Control).has_meta("blk_index"):
+				panels.append(child)
+		if panels.is_empty():
+			var cr: Rect2 = (column as Control).get_global_rect()
+			return Rect2(cr.position, Vector2(cr.size.x, 3))
+		if index < panels.size():
+			var pr: Rect2 = (panels[maxi(index, 0)] as Control).get_global_rect()
+			return Rect2(pr.position, Vector2(pr.size.x, 3))
+		var last: Rect2 = (panels[panels.size() - 1] as Control).get_global_rect()
+		return Rect2(Vector2(last.position.x, last.end.y), Vector2(last.size.x, 3))
+	return null
+
+
+## The rendered input widget the slot cursor points at (by is_same inputs + key), or null. The same
+## meta-match _reporter_at / _nearest_slot use, so it finds a literal field, an enum dropdown, or a pill.
+func _cursor_control() -> Control:
+	if String(_cursor.get("kind", "")) != "slot":
+		return null
+	var target_inputs: Dictionary = _cursor["inputs"]
+	var target_key := String(_cursor["key"])
+	for slot in _slots(_layer):
+		var c := slot as Control
+		if is_same(c.get_meta("slot_inputs"), target_inputs) and String(c.get_meta("slot_key")) == target_key:
+			return c
+	return null
+
+
+## Handle a keyboard event against the active cursor (M51). Returns true if it acted (the caller then
+## marks the event handled). Arrows/Tab navigate; Enter/typing open the picker (or focus a literal field /
+## open a dropdown); Escape clears the cursor. Delete/Backspace are deliberately left to _handle_key.
+func _handle_cursor_nav(event: InputEventKey) -> bool:
+	match event.keycode:
+		KEY_UP:
+			_cursor_move_vertical(-1)
+			return true
+		KEY_DOWN:
+			_cursor_move_vertical(1)
+			return true
+		KEY_LEFT:
+			_cursor_move_horizontal(-1)
+			return true
+		KEY_RIGHT:
+			_cursor_move_horizontal(1)
+			return true
+		KEY_TAB:
+			_cursor_move_horizontal(-1 if event.shift_pressed else 1)
+			return true
+		KEY_ESCAPE:
+			_set_cursor({})
+			return true
+		KEY_ENTER, KEY_KP_ENTER:
+			_activate_cursor("")
+			return true
+	# A printable character starts the picker (or edits a literal in place). Exclude Delete (unicode 127)
+	# and Backspace so they fall through to the delete path; exclude modifier combos (Cmd+D etc.).
+	if event.keycode != KEY_DELETE and event.keycode != KEY_BACKSPACE \
+			and event.unicode > 32 and event.unicode != 127 \
+			and not (event.ctrl_pressed or event.meta_pressed or event.alt_pressed):
+		_type_at_cursor(char(event.unicode))
+		return true
+	return false
+
+
+## Enter on the cursor: open the picker (gap/new → statements/hats; slot → type-matched reporters), or —
+## on an enum/data dropdown slot — open that dropdown instead.
+func _activate_cursor(seed: String) -> void:
+	if String(_cursor.get("kind", "")) == "slot":
+		var ctrl := _cursor_control()
+		if ctrl is OptionButton:
+			(ctrl as OptionButton).show_popup()
+			return
+	_open_picker(seed)
+
+
+## A printable char at the cursor: edit a literal slot's field in place (focus it and seed the char), open
+## an enum dropdown, else open the block picker seeded with the char (a gap, or a reporter slot).
+func _type_at_cursor(ch: String) -> void:
+	if String(_cursor.get("kind", "")) == "slot":
+		var ctrl := _cursor_control()
+		if ctrl is LineEdit:
+			var le := ctrl as LineEdit
+			le.grab_focus()
+			le.text = ch
+			le.caret_column = le.text.length()
+			return
+		if ctrl is OptionButton:
+			(ctrl as OptionButton).show_popup()
+			return
+	_open_picker(ch)
+
+
+## Up/Down: step the cursor through the statement gaps in document order (_ordered_gaps), clamped (no
+## wrap). From a slot, first resolve to the gap before the statement that contains it.
+func _cursor_move_vertical(dir: int) -> void:
+	var gaps := _ordered_gaps()
+	if gaps.is_empty():
+		return
+	var cur := _current_gap_pos()
+	var idx := _index_of_gap(gaps, cur)
+	if idx == -1:
+		idx = 0 if dir > 0 else gaps.size() - 1
+	else:
+		idx = clampi(idx + dir, 0, gaps.size() - 1)
+	var g: Dictionary = gaps[idx]
+	_set_cursor({"kind": "gap", "array": g["array"], "index": int(g["index"])})
+
+
+## Left/Right/Tab: walk the current block's header slots (left-to-right, descending into nested reporter
+## pills). From a gap, Right/Tab enters the first slot of the block after it; Left at a slot's start (or
+## Shift+Tab past it) ascends back to the gap before the owning statement.
+func _cursor_move_horizontal(dir: int) -> void:
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "new":
+		return
+	if kind == "gap":
+		if dir <= 0:
+			return
+		var arr: Array = _cursor["array"]
+		var idx := int(_cursor["index"])
+		if idx < 0 or idx >= arr.size():
+			return
+		var blk: Variant = arr[idx]
+		if not (blk is Dictionary):
+			return
+		var panel := _panel_for_block(blk)
+		if panel == null:
+			return
+		var slots := _header_slots(panel)
+		if not slots.is_empty():
+			_enter_slot(slots[0] as Control)
+		return
+	# slot:
+	var ctrl := _cursor_control()
+	if ctrl == null:
+		return
+	var stmt := _owning_statement_panel(ctrl)
+	if stmt == null:
+		return
+	var hslots := _header_slots(stmt)
+	var pos := _index_of_same(hslots, ctrl)
+	if pos == -1:
+		return
+	var nxt := pos + dir
+	if nxt < 0:
+		var owner := _find_owner_statement_top(_cursor["inputs"])
+		if not owner.is_empty():
+			_set_cursor({"kind": "gap", "array": owner["array"], "index": int(owner["index"])})
+		return
+	if nxt >= hslots.size():
+		return  # past the last header slot: stay (v1)
+	_enter_slot(hslots[nxt] as Control)
+
+
+## The {array, index} gap the cursor currently corresponds to (for vertical navigation): a gap cursor as
+## itself, a slot cursor as the gap before its containing statement, a "new" cursor as {} (no anchor).
+func _current_gap_pos() -> Dictionary:
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "gap":
+		return {"array": _cursor["array"], "index": int(_cursor["index"])}
+	if kind == "slot":
+		return _find_owner_statement_top(_cursor["inputs"])
+	return {}
+
+
+## Every statement gap across the canvas in document order — a data walk of _stacks (each blocks array,
+## recursing into C-block/hat bodies), independent of the rendered tree. Collapsed stacks are skipped.
+func _ordered_gaps() -> Array:
+	var out: Array = []
+	for stack in _stacks:
+		if stack.get("collapsed", false):
+			continue
+		_walk_gaps(stack["blocks"], out)
+	return out
+
+
+func _walk_gaps(arr: Array, out: Array) -> void:
+	for i in range(arr.size()):
+		out.append({"array": arr, "index": i})
+		var b: Variant = arr[i]
+		if b is Dictionary:
+			var inputs: Dictionary = (b as Dictionary).get("inputs", {})
+			var body: Variant = inputs.get("body")
+			if body is Array:
+				_walk_gaps(body, out)
+	out.append({"array": arr, "index": arr.size()})
+
+
+func _index_of_gap(gaps: Array, cur: Dictionary) -> int:
+	if cur.is_empty():
+		return -1
+	var cur_arr: Array = cur["array"]
+	var cur_idx := int(cur["index"])
+	for i in range(gaps.size()):
+		var g: Dictionary = gaps[i]
+		if int(g["index"]) == cur_idx and is_same(g["array"], cur_arr):
+			return i
+	return -1
+
+
+func _enter_slot(slot_ctrl: Control) -> void:
+	_set_cursor({"kind": "slot", "inputs": slot_ctrl.get_meta("slot_inputs"),
+		"key": String(slot_ctrl.get_meta("slot_key"))})
+
+
+## The input slots in a block's *header* (its own inputs + nested reporter pills), in left-to-right tree
+## order — NOT descending into a C-block body column (those slots belong to other statements, reached via
+## Up/Down). Used for Tab/Left/Right slot navigation within one block.
+func _header_slots(node: Node, out: Array = []) -> Array:
+	for child in node.get_children():
+		if child is Control and (child as Control).has_meta("body_array"):
+			continue  # a body substack — skip it and its slots
+		if child is Control and (child as Control).has_meta("slot_key"):
+			out.append(child)
+		_header_slots(child, out)
+	return out
+
+
+## The nearest ancestor statement / free-reporter panel (a blk_index-tagged Control) of `ctrl`, or null.
+func _owning_statement_panel(ctrl: Control) -> Control:
+	var n: Node = ctrl
+	while n != null and n != _layer:
+		if n is Control and (n as Control).has_meta("blk_index"):
+			return n as Control
+		n = n.get_parent()
+	return null
+
+
+func _panel_for_block(block: Variant) -> Control:
+	for p in _tagged_panels(_layer):
+		if is_same(_block_of(p), block):
+			return p as Control
+	return null
+
+
+func _index_of_same(arr: Array, ctrl: Control) -> int:
+	for i in range(arr.size()):
+		if is_same(arr[i], ctrl):
+			return i
+	return -1
+
+
+## The {array, index} of the top-level-walk statement whose subtree (header inputs / nested reporters)
+## contains `inputs` — the statement a slot belongs to, even when the slot is inside a nested reporter.
+func _find_owner_statement_top(inputs: Dictionary) -> Dictionary:
+	for stack in _stacks:
+		var r := _find_owner_statement(stack["blocks"], inputs)
+		if not r.is_empty():
+			return r
+	return {}
+
+
+func _find_owner_statement(blocks: Array, target: Dictionary) -> Dictionary:
+	for i in range(blocks.size()):
+		var b: Variant = blocks[i]
+		if not (b is Dictionary):
+			continue
+		var binputs: Dictionary = (b as Dictionary).get("inputs", {})
+		if _inputs_reach(binputs, target):
+			return {"array": blocks, "index": i}
+		var body: Variant = binputs.get("body")
+		if body is Array:
+			var r := _find_owner_statement(body, target)
+			if not r.is_empty():
+				return r
+	return {}
+
+
+## Whether `target` is `inputs` itself or the inputs of any reporter nested within it (descending through
+## reporter slots and plain arg maps, but NOT through `body` arrays — those are statement substacks).
+func _inputs_reach(inputs: Dictionary, target: Dictionary) -> bool:
+	if is_same(inputs, target):
+		return true
+	for k in inputs:
+		var v: Variant = inputs[k]
+		if v is Dictionary:
+			var d: Dictionary = v
+			if d.has("opcode"):
+				if _inputs_reach(d.get("inputs", {}), target):
+					return true
+			elif _inputs_reach(d, target):  # a plain map (a call's args)
+				return true
+	return false
+
+
+## Delete at the cursor: at a gap, remove the block after (Delete) or before (Backspace) it; at a slot
+## holding a reporter, revert that slot to its default literal (the M15 grab-out behaviour).
+func _cursor_delete(after: bool) -> void:
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "gap":
+		var arr: Array = _cursor["array"]
+		var idx := int(_cursor["index"])
+		if after:
+			if idx < arr.size():
+				arr.remove_at(idx)
+		elif idx > 0:
+			arr.remove_at(idx - 1)
+			_cursor["index"] = idx - 1
+		_drop_empty_stacks()
+		_render()
+	elif kind == "slot":
+		var inputs: Dictionary = _cursor["inputs"]
+		var key := String(_cursor["key"])
+		if typeof(inputs.get(key)) == TYPE_DICTIONARY:
+			var ctrl := _cursor_control()
+			if ctrl != null and ctrl.has_meta("slot_default"):
+				inputs[key] = ctrl.get_meta("slot_default")
+				_render()
+
+
+## The expected type ("value"/"boolean") of the slot the cursor is on — scopes the reporter picker.
+func _cursor_slot_type() -> String:
+	var ctrl := _cursor_control()
+	if ctrl != null:
+		return String(ctrl.get_meta("slot_type", "value"))
+	return "value"
+
+
+## The first template slot key of a freshly-made block (for descending the cursor into a nested reporter),
+## or "" if it has none / only a body.
+func _first_slot_key(block: Dictionary) -> String:
+	var op := String(block.get("opcode", ""))
+	var t := BlockView.opcode_template(op)
+	var i := t.find("{")
+	if i == -1:
+		return ""
+	var c := t.find("}", i)
+	var key := t.substr(i + 1, c - i - 1)
+	if key == "body":
+		return ""
+	var inputs: Dictionary = block.get("inputs", {})
+	return key if inputs.has(key) else ""
+
+
+## Build the shared fuzzy block picker once — a PopupPanel with a search LineEdit over a results ItemList
+## — and reuse it (the lazy-popup pattern of BlockPalette._ensure_color_popup). A direct canvas child, so
+## _render never frees it.
+func _ensure_picker() -> void:
+	if is_instance_valid(_picker):
+		return
+	_picker = PopupPanel.new()
+	var box := VBoxContainer.new()
+	box.custom_minimum_size = Vector2(240, 280)
+	_picker_edit = LineEdit.new()
+	_picker_edit.placeholder_text = "search blocks…"
+	_picker_edit.text_changed.connect(_picker_refilter)
+	_picker_edit.gui_input.connect(_picker_nav)
+	box.add_child(_picker_edit)
+	_picker_list = ItemList.new()
+	_picker_list.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_picker_list.custom_minimum_size = Vector2(0, 240)
+	_picker_list.item_activated.connect(_picker_choose_index)
+	box.add_child(_picker_list)
+	_picker.add_child(box)
+	_picker.popup_hide.connect(_on_picker_hide)
+	add_child(_picker)
+
+
+## The opcodes the picker offers, scoped to the cursor: a slot → reporters whose output matches the slot
+## type (the M23 rule); a gap → statements/C-blocks; a "new" stack → those plus hats. Drawn from
+## palette_groups so palette:false opcodes (define/call/param) are excluded.
+func _picker_candidates() -> Array:
+	var universe: Array = []
+	for g in BlockView.palette_groups():
+		universe.append_array((g as Dictionary)["opcodes"] as Array)
+	var out: Array = []
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "slot":
+		var st := _cursor_slot_type()
+		for op in universe:
+			var ops := String(op)
+			if BlockView.is_reporter(ops) and BlockView.reporter_output_type(ops) == st:
+				out.append(ops)
+	else:  # gap / new
+		var allow_hats := kind == "new"
+		for op in universe:
+			var ops := String(op)
+			if BlockView.is_reporter(ops):
+				continue
+			if ops in BlockView.HAT_OPCODES:
+				if allow_hats:
+					out.append(ops)
+			else:
+				out.append(ops)
+	return out
+
+
+## Open the picker just below the caret, scoped + seeded. The caret is a Control positioned at the cursor,
+## so its screen position (which already accounts for the editor's content scale) anchors the popup; a tiny
+## constant screen offset drops it below. Falls back to centred if the caret isn't shown.
+func _open_picker(seed: String) -> void:
+	if _cursor.is_empty():
+		return
+	_ensure_picker()
+	_picker_opcodes = _picker_candidates()
+	_update_caret()  # make sure the caret is positioned for the current cursor
+	var size := Vector2i(260, 300)
+	if _caret.visible:
+		var screen := _caret.get_screen_position() + Vector2(0, 20)
+		_picker.popup(Rect2i(Vector2i(screen), size))
+	else:
+		_picker.popup_centered(size)
+	_picker_edit.text = seed
+	_picker_refilter(seed)
+	_picker_edit.grab_focus()
+	_picker_edit.caret_column = _picker_edit.text.length()
+
+
+## Refill the results list with the candidates fuzzy-matching `query` (subsequence over the brace-stripped
+## label), ranked by prefix bonus then shorter label. Auto-selects the top hit so Enter has a target.
+func _picker_refilter(query: String) -> void:
+	if not is_instance_valid(_picker_list):
+		return
+	_picker_list.clear()
+	var q := query.strip_edges().to_lower()
+	var scored: Array = []
+	for op in _picker_opcodes:
+		var ops := String(op)
+		var label := BlockView.opcode_label(ops).to_lower()
+		if q == "" or q.is_subsequence_ofn(label):
+			scored.append({"op": ops, "score": _match_score(q, label)})
+	scored.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
+	for e in scored:
+		var idx := _picker_list.add_item(BlockView.opcode_template(String(e["op"])))
+		_picker_list.set_item_metadata(idx, String(e["op"]))
+	if _picker_list.item_count > 0:
+		_picker_list.select(0)
+
+
+func _match_score(q: String, label: String) -> float:
+	var s := -float(label.length()) * 0.1  # shorter labels first, all else equal
+	if q == "":
+		return s
+	if label.begins_with(q):
+		s += 100.0
+	else:
+		for w in label.split(" ", false):
+			if w.begins_with(q):
+				s += 50.0
+				break
+	return s
+
+
+## Drive the results list from the search field (M51): Up/Down move the selection, Enter commits the
+## highlighted block, Escape closes the picker — all consumed so the LineEdit keeps the typed text.
+func _picker_nav(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	var k := event as InputEventKey
+	if not k.pressed or k.echo:
+		return
+	match k.keycode:
+		KEY_DOWN:
+			_picker_move(1)
+			_picker_edit.accept_event()
+		KEY_UP:
+			_picker_move(-1)
+			_picker_edit.accept_event()
+		KEY_ENTER, KEY_KP_ENTER:
+			_picker_commit()
+			_picker_edit.accept_event()
+		KEY_ESCAPE:
+			_picker.hide()
+			_picker_edit.accept_event()
+
+
+func _picker_move(d: int) -> void:
+	if _picker_list.item_count == 0:
+		return
+	var sel := _picker_list.get_selected_items()
+	var cur := sel[0] if sel.size() > 0 else 0
+	var nxt := clampi(cur + d, 0, _picker_list.item_count - 1)
+	_picker_list.select(nxt)
+	_picker_list.ensure_current_is_visible()
+
+
+func _picker_commit() -> void:
+	if _picker_list.item_count == 0:
+		return
+	var sel := _picker_list.get_selected_items()
+	_picker_choose_index(sel[0] if sel.size() > 0 else 0)
+
+
+func _picker_choose_index(i: int) -> void:
+	if i < 0 or i >= _picker_list.item_count:
+		return
+	_picker_choose(String(_picker_list.get_item_metadata(i)))
+
+
+## Insert the chosen block at the cursor and advance it. At a gap/new: splice the statement in (creating a
+## stack for "new"); the cursor descends into its body if it's a hat/C-block, else moves to the gap after.
+## At a slot: nest the reporter (overwriting whatever was there) and descend into its first operand, so
+## nested expressions build recursively. Then re-render and close.
+func _picker_choose(opcode: String) -> void:
+	var block := BlockView.make_block(opcode)
+	var kind := String(_cursor.get("kind", ""))
+	if kind == "slot":
+		var inputs: Dictionary = _cursor["inputs"]
+		inputs[String(_cursor["key"])] = block
+		var fk := _first_slot_key(block)
+		if fk != "":
+			_cursor = {"kind": "slot", "inputs": block["inputs"], "key": fk}
+		_render()
+	else:
+		var arr: Array
+		var idx: int
+		if kind == "new":
+			var pos: Vector2 = _cursor.get("pos", Vector2(12, 12))
+			var stack := {"blocks": [block], "pos": pos}
+			_stacks.append(stack)
+			arr = stack["blocks"]
+			idx = 0
+		else:  # gap
+			arr = _cursor["array"]
+			idx = clampi(int(_cursor["index"]), 0, arr.size())
+			arr.insert(idx, block)
+		var binputs: Dictionary = block["inputs"]
+		var body: Variant = binputs.get("body")
+		if body is Array:
+			_cursor = {"kind": "gap", "array": body, "index": 0}
+		else:
+			_cursor = {"kind": "gap", "array": arr, "index": idx + 1}
+		_render()
+	_picker.hide()
+
+
+func _on_picker_hide() -> void:
+	_picker_opcodes = []

@@ -918,6 +918,31 @@ static func reporter_output_type(opcode: String) -> String:
 	return String(_OPCODES.get(opcode, {}).get("output", "value"))
 
 
+## The block's natural-language label with each `{key}` placeholder reduced to its bare key word —
+## used by the keyboard authoring picker (M51) to fuzzy-match what the user types against the visible
+## label (e.g. "move {steps} steps" → "move steps steps", "{a} + {b}" → "a + b"). The redundancy is
+## harmless for subsequence matching; opcode_template is what the picker actually *displays*.
+static func opcode_label(opcode: String) -> String:
+	var t := String(_OPCODES.get(opcode, {}).get("template", opcode))
+	var out := ""
+	var i := 0
+	while i < t.length():
+		if t[i] == "{":
+			var c := t.find("}", i)
+			out += t.substr(i + 1, c - i - 1)
+			i = c + 1
+		else:
+			out += t[i]
+			i += 1
+	return out
+
+
+## The raw label template for `opcode` (with `{key}` placeholders intact), shown as the picker's
+## list-row text (M51) — the recognizable block label, e.g. "if {condition} then".
+static func opcode_template(opcode: String) -> String:
+	return String(_OPCODES.get(opcode, {}).get("template", opcode))
+
+
 ## The display colour for a category (M50): the open project's override (project_block_colors) when
 ## it has one, else the category default (default_category_color). Used by the palette for its group
 ## headers and by _tint to recolour each block scene's stylebox — so a project's recoloured category
