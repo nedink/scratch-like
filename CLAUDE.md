@@ -85,10 +85,28 @@ gap after; at a **slot** it `inputs[key] = block`
 operand** ([`_first_slot_key`](scripts/block_canvas.gd)) so nested expressions build recursively — but a
 **leaf** reporter (no operands) instead **advances the cursor to the gap after the owning statement**
 ([`_find_owner_statement_top`](scripts/block_canvas.gd)), the same end-ward flow a freshly-picked statement
-makes, rather than stranding it on the just-filled slot. Typing a printable
-char on a **literal** slot instead `grab_focus`es that slot's existing `LineEdit` (reusing the M12 commit
-machinery — values are edited in place, not searched); on an **enum/data** slot, Enter/typing opens its
-`OptionButton` dropdown. **Backspace/Delete** ([`_cursor_delete`](scripts/block_canvas.gd)) removes the
+makes, rather than stranding it on the just-filled slot.
+
+**The picker doubles as the literal field, so typing a value and fuzzy-picking a reporter are not mutually
+exclusive** (the M51 fix). An earlier cut routed a printable char on a **literal** slot to `grab_focus` that
+slot's `LineEdit` and edit in place — but the focused field then swallowed every subsequent key, so once you
+began typing a value you could never open the picker to drop a reporter there ("can't fuzzy pick anymore").
+Now typing on a slot **always opens the picker** seeded with the char ([`_type_at_cursor`](scripts/block_canvas.gd)
+no longer touches the field), and on a free-literal slot [`_picker_refilter`](scripts/block_canvas.gd)
+prepends a **"use literal" row** ([`_literal_item_text`](scripts/block_canvas.gd)) above the matching
+reporters: choosing it ([`_picker_commit_literal`](scripts/block_canvas.gd)) coerces the typed text via the
+slot's default type ([`_cursor_slot_default`](scripts/block_canvas.gd) →
+[`BlockView.coerce_literal`](scripts/block_view.gd) — a number slot evaluates `2+3`→`5`, a text slot keeps
+the string) and flows the cursor to the gap after the owning statement (like a leaf reporter). The row is
+offered only where the text is a valid literal for the slot ([`_slot_literal_ok`](scripts/block_canvas.gd):
+never on a boolean slot; on a numeric slot only for a number/expression query — keeping text out of a number
+slot, the M13 oval-vs-box invariant), and it is the **default highlight** when it's the obvious intent (a
+number typed into a number slot, or no reporter matched at all), else the top reporter is.
+[`_slot_is_numeric`](scripts/block_canvas.gd) now keys off the slot's `slot_default` meta (robust whether the
+slot currently shows a literal or a dropped reporter). The **mouse** click-to-edit path (M12) is untouched —
+clicking a field still focuses it for in-place editing; only the **keyboard** path changed. On an
+**enum/data** slot, Enter/typing still opens its `OptionButton` dropdown. **Backspace/Delete**
+([`_cursor_delete`](scripts/block_canvas.gd)) removes the
 block before/after a gap (dropping emptied stacks via the new shared
 [`_drop_empty_stacks`](scripts/block_canvas.gd)) or reverts a reporter slot to its `slot_default` (the M15
 grab-out behaviour). **Escape** clears the cursor (and so doesn't fall through to the editor's ESC-quit).
@@ -96,8 +114,7 @@ grab-out behaviour). **Escape** clears the cursor (and so doesn't fall through t
 What this leaves deferred: **statement replace** in place ("change this block" — ship reporter-slot replace
 only; statement replace needs a distinct gesture + body-carry); keyboard insertion of `call`/custom blocks
 (data-driven header) and **setting `data_enum` (variable/sprite/list) values** from the keyboard (v1 uses
-`make_block` defaults; change via the mouse dropdown); **Tab-from-focused-literal** auto-advance (v1:
-Enter/Esc commits, then navigate); keyboard multi-select / copy-paste / block reordering; fancier fuzzy
+`make_block` defaults; change via the mouse dropdown); keyboard multi-select / copy-paste / block reordering; fancier fuzzy
 ranking, recently-used, category grouping; and wrap-around / spatial (non-document-order) navigation. Per
 the project's testing reality this milestone is **not F5-verified** (Claude can't run Godot).
 
@@ -1566,8 +1583,11 @@ outside it. See [Deliberately deferred](#deliberately-deferred-to-a-later-milest
    empty canvas (or a block) to place a green **cursor**, then: **type** (or press **Enter**) to open a
    **block picker** — start typing a block's name (e.g. `mov` → `move 10 steps`), **↑/↓** to choose,
    **Enter** to insert it at the cursor; **↑/↓** move between statements, **←/→** or **Tab** move between a
-   block's input slots; type a number/word on a slot to fill it; **Backspace/Delete** removes the block at
-   the cursor; **Esc** dismisses. Inserting a block with a body (a hat or `forever`/`if`) drops the cursor
+   block's input slots; **Backspace/Delete** removes the block at
+   the cursor; **Esc** dismisses. On a slot, typing opens the **same picker** — it offers a **"use literal"**
+   row (commit the typed number/word as the value) alongside the matching reporters, so one keystroke can set
+   a literal *or* fuzzy-pick a reporter (e.g. type `5` → "use 5", or type `score` → the `score` reporter).
+   Inserting a block with a body (a hat or `forever`/`if`) drops the cursor
    **inside** it, so the next block nests; picking a reporter into a slot (e.g. `+` into `move`'s steps)
    drops the cursor into its **operands**, so you build `move (score + 1)` by picking/typing each in turn.
    The picker only offers blocks that fit — statements at a statement gap, type-matching reporters at a

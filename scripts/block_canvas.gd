@@ -146,6 +146,7 @@ var _picker: PopupPanel            # the shared fuzzy block picker, built lazily
 var _picker_edit: LineEdit
 var _picker_list: ItemList
 var _picker_opcodes: Array = []    # the candidate opcodes for the open picker (scoped by the cursor)
+const _PICKER_LITERAL_META := "__literal__"  # ItemList meta marking the picker's "use literal" row (M51)
 
 
 func _ready() -> void:
@@ -1764,43 +1765,48 @@ func _activate_cursor(seed: String) -> void:
 	_open_picker(seed)
 
 
-## A printable char at the cursor: edit a literal slot's field in place (focus it and seed the char), open
-## an enum dropdown, else open the block picker seeded with the char (a gap, or a reporter slot).
+## A printable char at the cursor: open an enum/data dropdown, else open the block picker seeded with the
+## char. On a free-literal slot the picker doubles as the value field — it offers a "use literal" row
+## alongside the matching reporters (see _picker_refilter), so a keystroke can edit the literal OR fuzzy-pick
+## a reporter without the raw LineEdit ever grabbing focus and swallowing the rest of the keys (M51 fix —
+## the two are no longer mutually exclusive). A fixed-choice / data slot (OptionButton) still opens its menu.
 func _type_at_cursor(ch: String) -> void:
 	if String(_cursor.get("kind", "")) == "slot":
 		var ctrl := _cursor_control()
-		if ctrl is LineEdit:
-			# On a numeric slot a letter can't be a literal value, so it's clearly a reporter search —
-			# open the picker seeded with it (e.g. "x" → "x position"). A digit / sign / decimal point
-			# edits the number in place. A text slot edits in place for any char (Enter opens the picker
-			# there). This keeps non-numeric text out of a numeric slot, which is what otherwise turned
-			# its oval field into a rectangle.
-			if _slot_is_numeric() and not _is_numeric_char(ch):
-				_open_picker(ch)
-				return
-			var le := ctrl as LineEdit
-			le.grab_focus()
-			le.text = ch
-			le.caret_column = le.text.length()
-			return
 		if ctrl is OptionButton:
 			(ctrl as OptionButton).show_popup()
 			return
 	_open_picker(ch)
 
 
-## True when the cursor's slot currently holds a number — so its literal field is the oval number_field
-## (the M13 number-vs-text shape signal: the value's own type). Drives _type_at_cursor's letter→picker rule.
+## True when the cursor's slot is a numeric one — keyed off the slot's *default* literal (slot_default), so
+## it holds whether the slot currently shows a number or a dropped reporter (a reporter-filled number slot
+## still takes only numbers). Drives the literal row's availability + the number-vs-text coercion below.
 func _slot_is_numeric() -> bool:
-	if String(_cursor.get("kind", "")) != "slot":
-		return false
-	var inputs: Dictionary = _cursor["inputs"]
-	var t := typeof(inputs.get(String(_cursor["key"])))
+	var t := typeof(_cursor_slot_default())
 	return t == TYPE_INT or t == TYPE_FLOAT
 
 
-func _is_numeric_char(ch: String) -> bool:
-	return ch.length() == 1 and ((ch >= "0" and ch <= "9") or ch == "." or ch == "-" or ch == "+")
+## The opcode default literal for the cursor's slot (its slot_default meta), or null — the prev value the
+## literal commit coerces against, and the number-vs-text signal for _slot_is_numeric.
+func _cursor_slot_default() -> Variant:
+	var ctrl := _cursor_control()
+	if ctrl != null and ctrl.has_meta("slot_default"):
+		return ctrl.get_meta("slot_default")
+	return null
+
+
+## Whether the picker may offer a "use literal" row for the typed `q` on the cursor's slot: never on a
+## boolean slot (it takes only a boolean reporter, M23), and on a numeric slot only when `q` reads as a
+## number/expression — so non-numeric text can't land in a number slot (what would turn its oval into a box).
+func _slot_literal_ok(q: String) -> bool:
+	if String(_cursor.get("kind", "")) != "slot":
+		return false
+	if _cursor_slot_type() == "boolean":
+		return false
+	if _slot_is_numeric():
+		return typeof(BlockView.coerce_literal(q, 0)) != TYPE_STRING
+	return true
 
 
 ## Up/Down: step the cursor through the statement gaps in document order (_ordered_gaps), clamped (no
@@ -2132,6 +2138,14 @@ func _picker_refilter(query: String) -> void:
 		return
 	_picker_list.clear()
 	var q := query.strip_edges().to_lower()
+	# Literal row (M51 fix): on a free-literal slot the picker is also the value field — a "use literal"
+	# row commits the typed text as the slot's value, so typing can set a literal OR pick a reporter. Only
+	# once something's typed, and only where the text is a valid literal for the slot (see _slot_literal_ok).
+	var raw := query.strip_edges()
+	var literal_idx := -1
+	if raw != "" and _slot_literal_ok(raw):
+		literal_idx = _picker_list.add_item(_literal_item_text(raw))
+		_picker_list.set_item_metadata(literal_idx, _PICKER_LITERAL_META)
 	var scored: Array = []
 	for op in _picker_opcodes:
 		var ops := String(op)
@@ -2139,11 +2153,28 @@ func _picker_refilter(query: String) -> void:
 		if q == "" or q.is_subsequence_ofn(label):
 			scored.append({"op": ops, "score": _match_score(q, label)})
 	scored.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
+	var first_reporter_idx := -1
 	for e in scored:
 		var idx := _picker_list.add_item(BlockView.opcode_template(String(e["op"])))
 		_picker_list.set_item_metadata(idx, String(e["op"]))
-	if _picker_list.item_count > 0:
+		if first_reporter_idx == -1:
+			first_reporter_idx = idx
+	# Default highlight (so Enter has a target): the literal when it's the obvious intent — a number typed
+	# into a number slot, or no reporter matched at all — else the top reporter so Enter fuzzy-picks it.
+	if literal_idx != -1 and (first_reporter_idx == -1 or _slot_is_numeric()):
+		_picker_list.select(literal_idx)
+	elif first_reporter_idx != -1:
+		_picker_list.select(first_reporter_idx)
+	elif _picker_list.item_count > 0:
 		_picker_list.select(0)
+
+
+## The label for the picker's "use literal" row — the typed text, quoted for a text slot so it reads as
+## a value (kept ASCII so it renders in the web export, per the project's glyph rule).
+func _literal_item_text(raw: String) -> String:
+	if _slot_is_numeric():
+		return "use " + raw
+	return 'use "' + raw + '"'
 
 
 func _match_score(q: String, label: String) -> float:
@@ -2203,7 +2234,29 @@ func _picker_commit() -> void:
 func _picker_choose_index(i: int) -> void:
 	if i < 0 or i >= _picker_list.item_count:
 		return
-	_picker_choose(String(_picker_list.get_item_metadata(i)))
+	var meta := String(_picker_list.get_item_metadata(i))
+	if meta == _PICKER_LITERAL_META:
+		_picker_commit_literal()
+	else:
+		_picker_choose(meta)
+
+
+## Commit the picker's typed text as the cursor slot's literal value (M51 fix) — the "use literal" row.
+## Coerces via the slot's default type (so a number slot evaluates "2+3" → 5 and keeps the oval shape, a
+## text slot keeps the string — the M12/M29 machinery), then flows the cursor to the gap after the owning
+## statement, the same advance-to-the-end a freshly-filled leaf reporter makes.
+func _picker_commit_literal() -> void:
+	if String(_cursor.get("kind", "")) != "slot":
+		_picker.hide()
+		return
+	var inputs: Dictionary = _cursor["inputs"]
+	var key := String(_cursor["key"])
+	inputs[key] = BlockView.coerce_literal(_picker_edit.text, _cursor_slot_default())
+	var owner := _find_owner_statement_top(inputs)
+	if not owner.is_empty():
+		_cursor = {"kind": "gap", "array": owner["array"], "index": int(owner["index"]) + 1}
+	_render()
+	_picker.hide()
 
 
 ## Insert the chosen block at the cursor and advance it. At a gap/new: splice the statement in (creating a

@@ -12,7 +12,33 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: a picked statement with header slots drops the cursor into its first slot.**
+- **Just shipped — M51 fix: the picker is the literal field too (text fields no longer override fuzzy pick).**
+  Typing on a literal slot used to `grab_focus()` the slot's raw `LineEdit` (in-place edit, M12), which then
+  swallowed *every* subsequent key — so once you started typing a value you could never open the fuzzy
+  picker to drop a reporter there (the reported bug: "can't fuzzy pick anymore"). The two typing surfaces
+  were mutually exclusive. Now there's **one** keyboard surface: typing on a slot always opens the **picker**
+  seeded with the char, and on a free-literal slot the picker offers a **"use literal" row** at the top
+  alongside the matching reporters — so a keystroke can commit a literal *or* fuzzy-pick a reporter without
+  the raw field ever stealing focus. The literal row coerces via the slot's default type
+  (`BlockView.coerce_literal` — a number slot evaluates `2+3`→`5`, a text slot keeps the string), is offered
+  only where valid (never on a boolean slot; on a numeric slot only for a number/expression query, keeping
+  text out of a number slot), and on commit flows the cursor to the gap after the owning statement (like a
+  leaf reporter). Default highlight: the literal when it's the obvious intent (a number typed into a number
+  slot, or no reporter matched), else the top reporter. Mouse click-to-edit a field (M12) is untouched —
+  only the keyboard path changed. All in [`block_canvas.gd`](scripts/block_canvas.gd) (`_type_at_cursor` no
+  longer grabs the field; `_picker_refilter`/`_picker_choose_index`/new `_picker_commit_literal` +
+  `_slot_literal_ok`/`_cursor_slot_default`/`_literal_item_text`); **no opcode / data-shape / runtime /
+  editor.gd / block_view.gd change** (`_slot_is_numeric` now keys off `slot_default`, and the old
+  `_is_numeric_char` is gone).
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) navigate the cursor onto `go to`'s
+    `x` slot, type `5` → picker shows "use 5" selected, Enter commits `5` and the caret flows past. (2) On
+    the same numeric slot, type `score` → only the `score` reporter shows (no literal row — text can't go in
+    a number slot), Enter drops the reporter. (3) On a text slot (e.g. `say`), type `hi` → "use \"hi\"" row;
+    type `x pos` → the `x position` reporter appears too (Down to choose it). (4) On an `if` condition, no
+    literal row ever appears. (5) Mouse-clicking a literal field still edits it in place. There is no longer
+    any state where typing gets stuck in a field with the picker unreachable.
+
+- **Earlier — M51 fix: a picked statement with header slots drops the cursor into its first slot.**
   Picking e.g. `go to x: y:` from the keyboard picker used to flow the cursor to the gap *after* the new
   block, leaving its `x`/`y` slots empty and unvisited — even though picking a *reporter* already descends
   into its first operand. Now a plain statement with header slots descends into its first slot (ready to
