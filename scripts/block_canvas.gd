@@ -141,6 +141,7 @@ var _cursor: Dictionary = {}
 var _caret: Panel                  # the cursor marker overlay (a direct canvas child, never freed by _render)
 var _caret_bar_style: StyleBoxFlat  # filled bar — a gap / new insertion point
 var _caret_box_style: StyleBoxFlat  # hollow outline — a slot
+var _caret_refresh_pending := false  # a post-layout caret re-measure is already queued (M51)
 var _picker: PopupPanel            # the shared fuzzy block picker, built lazily (see _ensure_picker)
 var _picker_edit: LineEdit
 var _picker_list: ItemList
@@ -194,7 +195,9 @@ func _ready() -> void:
 	_caret_box_style.bg_color = Color(0, 0, 0, 0)
 	_caret_box_style.border_color = Color("#5dff9b")
 	_caret_box_style.set_border_width_all(2)
-	_caret_box_style.set_corner_radius_all(3)
+	# A generous radius so the outline hugs a rounded number-field oval / reporter pill (it clamps to a
+	# pill shape on a short field); a slot caret should echo the slot's shape, not box it into a rectangle.
+	_caret_box_style.set_corner_radius_all(12)
 	_caret.visible = false
 	add_child(_caret)
 
@@ -331,7 +334,12 @@ func _render() -> void:
 		ctrl.size = ctrl.get_combined_minimum_size()
 		extent = extent.max(ctrl.position + ctrl.size)
 	_apply_selection_highlight()  # outline the selected blocks (M46)
-	_update_caret()               # re-resolve + redraw the keyboard cursor (M51)
+	_update_caret()               # best-effort now — correct when no block geometry changed (M51)
+	# A freshly inserted / moved block isn't laid out until the VBox sorts its children next frame, so the
+	# measure above can land the caret on a stale rect (e.g. a keyboard-picked statement's caret appearing
+	# *above* the block instead of in the gap below it). Re-resolve once layout settles. Navigation paths
+	# (_set_cursor) measure already-laid-out panels and so are unaffected; only structural re-renders need this.
+	_refresh_caret_after_layout()
 	_fit_to_content(extent)
 
 
@@ -1290,6 +1298,10 @@ func _on_pending_click() -> void:
 			_render()  # re-render to drop the selection outlines (also redraws the caret)
 		else:
 			_update_caret()
+		# A "new" cursor has nothing adjacent to navigate to — the only useful next action is to insert
+		# a block — so open the picker straight away (unlike a gap/slot click, where the cursor is often
+		# placed just to navigate). Esc still clears it.
+		_open_picker("")
 		return
 	if _pending_spawn:
 		return  # a define-hat prototype param pill spawns on drag; a click does nothing
@@ -1618,6 +1630,24 @@ func _update_caret() -> void:
 	if g.is_empty():
 		_caret.visible = false
 		return
+	_draw_caret(g)
+
+
+## Re-measure the caret one frame after a structural re-render, when the container has run its layout/sort
+## pass so freshly added/moved block rects are valid (M51). Guarded so overlapping _render()s coalesce into
+## a single pending refresh. _render measures immediately too (for the common, geometry-unchanged case); this
+## corrects the case where it measured a not-yet-laid-out block.
+func _refresh_caret_after_layout() -> void:
+	if _caret_refresh_pending:
+		return
+	_caret_refresh_pending = true
+	await get_tree().process_frame
+	_caret_refresh_pending = false
+	if is_instance_valid(_caret):
+		_update_caret()
+
+
+func _draw_caret(g: Dictionary) -> void:
 	var kind := String(g["kind"])
 	var rect: Rect2 = g["rect"]
 	var local := rect.position - global_position
@@ -1740,6 +1770,14 @@ func _type_at_cursor(ch: String) -> void:
 	if String(_cursor.get("kind", "")) == "slot":
 		var ctrl := _cursor_control()
 		if ctrl is LineEdit:
+			# On a numeric slot a letter can't be a literal value, so it's clearly a reporter search —
+			# open the picker seeded with it (e.g. "x" → "x position"). A digit / sign / decimal point
+			# edits the number in place. A text slot edits in place for any char (Enter opens the picker
+			# there). This keeps non-numeric text out of a numeric slot, which is what otherwise turned
+			# its oval field into a rectangle.
+			if _slot_is_numeric() and not _is_numeric_char(ch):
+				_open_picker(ch)
+				return
 			var le := ctrl as LineEdit
 			le.grab_focus()
 			le.text = ch
@@ -1749,6 +1787,20 @@ func _type_at_cursor(ch: String) -> void:
 			(ctrl as OptionButton).show_popup()
 			return
 	_open_picker(ch)
+
+
+## True when the cursor's slot currently holds a number — so its literal field is the oval number_field
+## (the M13 number-vs-text shape signal: the value's own type). Drives _type_at_cursor's letter→picker rule.
+func _slot_is_numeric() -> bool:
+	if String(_cursor.get("kind", "")) != "slot":
+		return false
+	var inputs: Dictionary = _cursor["inputs"]
+	var t := typeof(inputs.get(String(_cursor["key"])))
+	return t == TYPE_INT or t == TYPE_FLOAT
+
+
+func _is_numeric_char(ch: String) -> bool:
+	return ch.length() == 1 and ((ch >= "0" and ch <= "9") or ch == "." or ch == "-" or ch == "+")
 
 
 ## Up/Down: step the cursor through the statement gaps in document order (_ordered_gaps), clamped (no
@@ -2000,6 +2052,12 @@ func _ensure_picker() -> void:
 	if is_instance_valid(_picker):
 		return
 	_picker = PopupPanel.new()
+	# Trim the PopupPanel's default content margin so the search field sits right under the caret
+	# (the +Vector2(0,4) offset in _open_picker, not the panel's stock padding, sets the gap).
+	var pbox := StyleBoxFlat.new()
+	pbox.bg_color = Color(0.12, 0.12, 0.14)
+	pbox.set_content_margin_all(2.0)
+	_picker.add_theme_stylebox_override("panel", pbox)
 	var box := VBoxContainer.new()
 	box.custom_minimum_size = Vector2(240, 280)
 	_picker_edit = LineEdit.new()
@@ -2057,7 +2115,7 @@ func _open_picker(seed: String) -> void:
 	_update_caret()  # make sure the caret is positioned for the current cursor
 	var size := Vector2i(260, 300)
 	if _caret.visible:
-		var screen := _caret.get_screen_position() + Vector2(0, 20)
+		var screen := _caret.get_screen_position() + Vector2(0, 4)
 		_picker.popup(Rect2i(Vector2i(screen), size))
 	else:
 		_picker.popup_centered(size)

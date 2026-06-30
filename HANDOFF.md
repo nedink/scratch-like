@@ -12,7 +12,21 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51: keyboard authoring mode (cursor + fuzzy block picker).** The block editor is
+- **Just shipped — M51 fix: caret re-measures after layout (keyboard insert landed it on the wrong gap).**
+  After picking a statement, the caret could appear *above* the just-inserted block (between it and the
+  previous one) instead of in the gap *below* it. The insert logic was already correct (`_picker_choose`
+  sets the cursor to `idx + 1`, the gap after) — the bug was that `_render()` measured the caret's pixel
+  position *synchronously, the same frame the new block panel was added*, before the `VBoxContainer` ran
+  its layout/sort pass, so `_gap_global_marker` read the freshly-added panel's stale rect. (Navigation
+  was unaffected: ↑/↓/←/→ measure already-laid-out panels.) Fix in
+  [`block_canvas.gd`](scripts/block_canvas.gd): `_render` now also calls `_refresh_caret_after_layout()`,
+  which `await get_tree().process_frame` then re-measures (`_update_caret` split into resolve + `_draw_caret`;
+  a `_caret_refresh_pending` guard coalesces overlapping renders). No data/runtime change.
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** place the cursor after a statement in a
+    hat body, pick another statement from the picker → the green caret now sits *below* the newly inserted
+    block, not between it and the one above. Repeat picking several in a row — each lands the caret after
+    the last-inserted block. (Pre-fix, the caret could be one gap too high.)
+- **Earlier — M51: keyboard authoring mode (cursor + fuzzy block picker).** The block editor is
   now fully keyboard-drivable *alongside* mouse drag/drop. A keyboard **cursor** (`BlockCanvas._cursor`,
   editor-only UI state like selection/collapse, never serialized, stored as data references so it
   survives `_render`) sits at a **statement gap**, an **input slot**, or a **"new stack here"** point;

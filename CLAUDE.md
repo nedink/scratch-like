@@ -31,8 +31,15 @@ a slot ([`_cursor_control`](scripts/block_canvas.gd)). A gap/slot cursor whose d
 block was deleted) is **stale** and dropped. It's drawn by a new mouse-ignored `_caret` Panel overlay (a
 bright-green **insertion bar** for a gap/new, a **hollow outline** for a slot — distinct from the gold snap
 bar and white selection border), updated by [`_update_caret`](scripts/block_canvas.gd) at the end of
-`_render` and on every move. `load_script` / `_cancel_drag` clear it (it would point into the outgoing
-script). It's placed by a plain **click** in [`_on_pending_click`](scripts/block_canvas.gd) — on a clicked
+`_render` and on every move. Because a structural re-render *adds/moves* block panels whose rects aren't
+laid out until the `VBoxContainer` sorts its children **next** frame, the end-of-`_render` measure can read
+a freshly-inserted block's stale rect (a keyboard-picked statement's caret landing one gap too high — in the
+gap *above* it rather than below). So `_render` also schedules
+[`_refresh_caret_after_layout`](scripts/block_canvas.gd) — `await get_tree().process_frame` then re-measure
+(`_update_caret` split into resolve + [`_draw_caret`](scripts/block_canvas.gd); a `_caret_refresh_pending`
+guard coalesces overlapping renders). Navigation moves (`_set_cursor`) measure already-laid-out panels, so
+only the structural-render path needs this. `load_script` / `_cancel_drag` clear it (it would point into the
+outgoing script). It's placed by a plain **click** in [`_on_pending_click`](scripts/block_canvas.gd) — on a clicked
 pill's slot, the gap before a clicked statement, or a "new" point on empty canvas.
 
 ### Navigation — gaps (Up/Down) and slots (Left/Right/Tab)
