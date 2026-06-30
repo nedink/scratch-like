@@ -22,8 +22,11 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
   lazy `PopupPanel` + `LineEdit` + `ItemList`, `_ensure_picker`) that filters opcodes by their
   natural-language label (`BlockView.opcode_label`/`opcode_template`); choosing inserts a fresh
   `make_block` at the cursor. At a slot the picker is **type-filtered to reporters** (the M23
-  `slot_type` rule) and the cursor **descends into the new reporter's first operand** — so nested
-  expressions like `move (score + 1)` are built recursively, no text parser. Typing on a **literal**
+  `slot_type` rule); choosing a reporter with operands **descends into its first operand** — so nested
+  expressions like `move (score + 1)` are built recursively, no text parser — while a **leaf** reporter
+  (no operands) **advances the cursor to the gap after the owning statement** (the same end-ward flow a
+  picked statement makes), so picking e.g. `score` into `move`'s slot doesn't strand the caret on that
+  slot. Typing on a **literal**
   slot focuses its field; **Backspace/Delete** deletes at the cursor; **Escape** dismisses. Pure
   editor-side: only `block_canvas.gd` (the bulk) + two tiny `block_view.gd` accessors; **no opcode /
   data-shape / runtime / editor.gd change**.

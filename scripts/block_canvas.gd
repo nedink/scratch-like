@@ -2150,8 +2150,10 @@ func _picker_choose_index(i: int) -> void:
 
 ## Insert the chosen block at the cursor and advance it. At a gap/new: splice the statement in (creating a
 ## stack for "new"); the cursor descends into its body if it's a hat/C-block, else moves to the gap after.
-## At a slot: nest the reporter (overwriting whatever was there) and descend into its first operand, so
-## nested expressions build recursively. Then re-render and close.
+## At a slot: nest the reporter (overwriting whatever was there). If it has operands the cursor descends
+## into the first, so nested expressions build recursively; if it's a leaf (no operands) the cursor instead
+## advances to the gap after the owning statement, the same way a freshly-picked statement flows to its end
+## rather than leaving the cursor stranded on the just-filled slot. Then re-render and close.
 func _picker_choose(opcode: String) -> void:
 	var kind := String(_cursor.get("kind", ""))
 	if kind != "slot" and kind != "gap" and kind != "new":
@@ -2163,7 +2165,14 @@ func _picker_choose(opcode: String) -> void:
 		inputs[String(_cursor["key"])] = block
 		var fk := _first_slot_key(block)
 		if fk != "":
+			# A reporter with operands: descend into its first one so nested expressions build recursively.
 			_cursor = {"kind": "slot", "inputs": block["inputs"], "key": fk}
+		else:
+			# A leaf reporter (no operands): flow to the gap after the owning statement — the same
+			# advance-to-the-end a freshly-picked statement makes — instead of staying on the just-filled slot.
+			var owner := _find_owner_statement_top(inputs)
+			if not owner.is_empty():
+				_cursor = {"kind": "gap", "array": owner["array"], "index": int(owner["index"]) + 1}
 		_render()
 	else:
 		var arr: Array

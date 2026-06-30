@@ -71,8 +71,11 @@ picker is visible).
 [`_picker_choose`](scripts/block_canvas.gd) `make_block`s the opcode and writes it into the live data: at a
 **gap/new** it `array.insert`s the statement (creating a stack for `"new"`) and the cursor **descends into
 its body** if it's a hat/C-block, else moves to the gap after; at a **slot** it `inputs[key] = block`
-(overwriting whatever was there — replace) and **descends into the new reporter's first operand**
-([`_first_slot_key`](scripts/block_canvas.gd)), so nested expressions build recursively. Typing a printable
+(overwriting whatever was there — replace) and, if the reporter has operands, **descends into its first
+operand** ([`_first_slot_key`](scripts/block_canvas.gd)) so nested expressions build recursively — but a
+**leaf** reporter (no operands) instead **advances the cursor to the gap after the owning statement**
+([`_find_owner_statement_top`](scripts/block_canvas.gd)), the same end-ward flow a freshly-picked statement
+makes, rather than stranding it on the just-filled slot. Typing a printable
 char on a **literal** slot instead `grab_focus`es that slot's existing `LineEdit` (reusing the M12 commit
 machinery — values are edited in place, not searched); on an **enum/data** slot, Enter/typing opens its
 `OptionButton` dropdown. **Backspace/Delete** ([`_cursor_delete`](scripts/block_canvas.gd)) removes the
