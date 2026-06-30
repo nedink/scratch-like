@@ -2092,7 +2092,9 @@ func _ensure_picker() -> void:
 	pbox.set_content_margin_all(2.0)
 	_picker.add_theme_stylebox_override("panel", pbox)
 	var box := VBoxContainer.new()
-	box.custom_minimum_size = Vector2(240, 280)
+	# Width-only min so the popup can shrink to just the search field when the results list is hidden
+	# (no fuzzy match — see _picker_refilter); a not-visible child doesn't count toward a container's min.
+	box.custom_minimum_size = Vector2(240, 0)
 	_picker_edit = LineEdit.new()
 	_picker_edit.placeholder_text = "search blocks…"
 	_picker_edit.text_changed.connect(_picker_refilter)
@@ -2200,6 +2202,14 @@ func _picker_refilter(query: String) -> void:
 		_picker_list.select(first_reporter_idx)
 	elif _picker_list.item_count > 0:
 		_picker_list.select(0)
+	# When the query matches no pickable block, get the results list out of the way so the canvas below is
+	# visible — collapse the popup to just the search field. A "use literal" row alone (a number/word with
+	# no reporter hit) doesn't keep the list open: it's still selected and Enter still commits it, but the
+	# big list panel no longer covers the blocks you're typing into.
+	var show_list := first_reporter_idx != -1
+	_picker_list.visible = show_list
+	var h := 300 if show_list else int(_picker_edit.get_combined_minimum_size().y) + 8
+	_picker.size = Vector2i(260, h)
 
 
 ## The label for the picker's "use literal" row — the typed text, quoted for a text slot so it reads as

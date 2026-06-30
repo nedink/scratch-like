@@ -12,7 +12,21 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: clicking a value field opens the picker too (mouse & keyboard are one path).**
+- **Just shipped — M51 fix: picker collapses to the search field when nothing matches.** When the typed
+  query fuzzy-matches **no** pickable block (e.g. typing a number/word into a slot, or gibberish at a gap),
+  the results `ItemList` is now **hidden** and the popup shrinks to just the search field, so the big list
+  panel stops covering the blocks you're typing into. A **"use literal" row alone** (a value with no reporter
+  hit) does *not* keep the list open — it stays selected and **Enter still commits it**, the panel just gets
+  out of the way. The list reappears (popup grows back to full height) as soon as a query matches a block
+  again. All in [`block_canvas.gd`](scripts/block_canvas.gd): `_picker_refilter` toggles `_picker_list.visible`
+  on `first_reporter_idx != -1` and resets `_picker.size`; the picker's VBox min size dropped its fixed height
+  so it can shrink. **No opcode / data-shape / runtime / editor.gd / block_view.gd change.**
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) click/keyboard-open the picker on a
+    number slot, type `5` → the list collapses to just the search box (canvas visible below); Enter commits
+    `5`. (2) Type `score` → the list reopens with the `score` reporter; delete back to `5` → it collapses
+    again. (3) At a statement **gap**, open the picker and type gibberish (`zzz`) → list collapses; type `mov`
+    → it reopens with `move`. (4) Empty query (just opened) → full list shows.
+- **Earlier M51 fix: clicking a value field opens the picker too (mouse & keyboard are one path).**
   The prior fix already made the *keyboard* one surface (typing on a slot opens the picker, which doubles as
   the literal field). But a **mouse click** on a value field still took the old M12 path — focus the raw
   `LineEdit` for in-place editing, with **no fuzzy picker, no reporter suggestions** — so the two surfaces
