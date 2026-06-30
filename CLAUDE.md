@@ -83,9 +83,15 @@ statement twin of a reporter descending into its first operand), else (a slotles
 gap after; at a **slot** it `inputs[key] = block`
 (overwriting whatever was there — replace) and, if the reporter has operands, **descends into its first
 operand** ([`_first_slot_key`](scripts/block_canvas.gd)) so nested expressions build recursively — but a
-**leaf** reporter (no operands) instead **advances the cursor to the gap after the owning statement**
+**leaf** reporter (no operands) instead **advances** via
+[`_advance_after_fill`](scripts/block_canvas.gd): to the **next header slot of the owning statement** if
+there is one (so a block's params fill left-to-right — `go to x: y:` flows `x`→`y`, and `(score + ?)` flows
+the `+`'s `a` operand → its `b`), else to the **gap after the owning statement**
 ([`_find_owner_statement_top`](scripts/block_canvas.gd)), the same end-ward flow a freshly-picked statement
-makes, rather than stranding it on the just-filled slot.
+makes, rather than stranding it on the just-filled slot. (`_advance_after_fill` runs *after* `_render()`, so
+it can read the just-filled slot's laid-out widget — [`_slot_control`](scripts/block_canvas.gd), the
+`_cursor`-independent twin of [`_cursor_control`](scripts/block_canvas.gd) — and take the next of the same
+[`_header_slots`](scripts/block_canvas.gd) that Tab/Left/Right walk.)
 
 **The picker doubles as the literal field, so typing a value and fuzzy-picking a reporter are not mutually
 exclusive** (the M51 fix). An earlier cut routed a printable char on a **literal** slot to `grab_focus` that
@@ -97,7 +103,8 @@ prepends a **"use literal" row** ([`_literal_item_text`](scripts/block_canvas.gd
 reporters: choosing it ([`_picker_commit_literal`](scripts/block_canvas.gd)) coerces the typed text via the
 slot's default type ([`_cursor_slot_default`](scripts/block_canvas.gd) →
 [`BlockView.coerce_literal`](scripts/block_view.gd) — a number slot evaluates `2+3`→`5`, a text slot keeps
-the string) and flows the cursor to the gap after the owning statement (like a leaf reporter). The row is
+the string) and advances the cursor via the same [`_advance_after_fill`](scripts/block_canvas.gd) (next param
+slot if there is one, else the gap after the owning statement — like a leaf reporter). The row is
 offered only where the text is a valid literal for the slot ([`_slot_literal_ok`](scripts/block_canvas.gd):
 never on a boolean slot; on a numeric slot only for a number/expression query — keeping text out of a number
 slot, the M13 oval-vs-box invariant), and it is the **default highlight** when it's the obvious intent (a

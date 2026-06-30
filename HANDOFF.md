@@ -12,7 +12,23 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: picker collapses to the search field when nothing matches.** When the typed
+- **Just shipped — M51 fix: a filled param slot advances to the next param, not straight to the gap.**
+  When you fill an input slot from the picker — a **leaf reporter** (no operands) or the **"use literal" row**
+  — the cursor now moves to the **next param slot of the same block** if there is one, instead of always
+  jumping to the gap after the statement. So `go to x: y:` flows `x`→`y` (fill the second before leaving the
+  block), and building `move (score + 1)` flows the `+`'s `a` operand → its `b`. Only when there's **no next
+  slot** does it fall to the gap after the owning statement (the old end-ward flow). All in
+  [`block_canvas.gd`](scripts/block_canvas.gd): new shared `_advance_after_fill(inputs, key)` (called *after*
+  `_render()` so it can read the just-filled widget; finds the next of the same `_header_slots` Tab/Left/Right
+  walk, else the gap after via `_find_owner_statement_top`), plus `_slot_control` (the `_cursor`-independent
+  twin of `_cursor_control`). `_picker_choose`'s leaf branch and `_picker_commit_literal` both route through
+  it. **No opcode / data-shape / runtime / editor.gd / block_view.gd change.**
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) at a gap, open the picker and pick
+    `go to x: y:` → cursor lands on `x`; type `5`, Enter → cursor advances to `y` (not below the block); type
+    `9`, Enter → now cursor is the gap below `go to`. (2) Build `move (score + 1)`: pick `move`, on its steps
+    slot pick `+` → cursor on `+`'s `a`; pick/type `score` → cursor advances to `+`'s `b`; type `1`, Enter →
+    cursor is the gap below `move`. (3) A single-slot statement still flows to the gap after on fill.
+- **Earlier M51 fix: picker collapses to the search field when nothing matches.** When the typed
   query fuzzy-matches **no** pickable block (e.g. typing a number/word into a slot, or gibberish at a gap),
   the results `ItemList` is now **hidden** and the popup shrinks to just the search field, so the big list
   panel stops covering the blocks you're typing into. A **"use literal" row alone** (a value with no reporter

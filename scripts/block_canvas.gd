@@ -1736,13 +1736,39 @@ func _gap_global_marker(arr: Array, index: int) -> Variant:
 func _cursor_control() -> Control:
 	if String(_cursor.get("kind", "")) != "slot":
 		return null
-	var target_inputs: Dictionary = _cursor["inputs"]
-	var target_key := String(_cursor["key"])
+	return _slot_control(_cursor["inputs"], String(_cursor["key"]))
+
+
+## The rendered input widget for the slot (inputs, key) — by is_same inputs + key — or null. Same meta-match
+## _cursor_control uses, but independent of _cursor (so the post-fill advance can find a just-filled slot).
+func _slot_control(target_inputs: Dictionary, target_key: String) -> Control:
 	for slot in _slots(_layer):
 		var c := slot as Control
 		if is_same(c.get_meta("slot_inputs"), target_inputs) and String(c.get_meta("slot_key")) == target_key:
 			return c
 	return null
+
+
+## After a slot is filled (a leaf reporter, or a literal), move the cursor to the *next* header slot of the
+## owning statement if there is one — so a block's params fill left-to-right (`go to x: [y:]`, the next
+## operand of `(score + ?)`) — else flow to the gap after the owning statement (the end-ward advance a
+## slotless fill makes). Call *after* _render(), so the just-filled widget is laid out and the next slot
+## resolvable from the rendered header.
+func _advance_after_fill(inputs: Dictionary, key: String) -> void:
+	var ctrl := _slot_control(inputs, key)
+	if ctrl != null:
+		var stmt := _owning_statement_panel(ctrl)
+		if stmt != null:
+			var hslots := _header_slots(stmt)
+			var pos := _index_of_same(hslots, ctrl)
+			if pos != -1 and pos + 1 < hslots.size():
+				_enter_slot(hslots[pos + 1] as Control)
+				return
+	var owner := _find_owner_statement_top(inputs)
+	if not owner.is_empty():
+		_set_cursor({"kind": "gap", "array": owner["array"], "index": int(owner["index"]) + 1})
+	else:
+		_update_caret()
 
 
 ## Handle a keyboard event against the active cursor (M51). Returns true if it acted (the caller then
@@ -2286,8 +2312,8 @@ func _picker_choose_index(i: int) -> void:
 
 ## Commit the picker's typed text as the cursor slot's literal value (M51 fix) — the "use literal" row.
 ## Coerces via the slot's default type (so a number slot evaluates "2+3" → 5 and keeps the oval shape, a
-## text slot keeps the string — the M12/M29 machinery), then flows the cursor to the gap after the owning
-## statement, the same advance-to-the-end a freshly-filled leaf reporter makes.
+## text slot keeps the string — the M12/M29 machinery), then advances to the next param slot of the owning
+## statement if there is one, else flows to the gap after it (the same advance a freshly-filled leaf makes).
 func _picker_commit_literal() -> void:
 	if String(_cursor.get("kind", "")) != "slot":
 		_picker.hide()
@@ -2295,10 +2321,8 @@ func _picker_commit_literal() -> void:
 	var inputs: Dictionary = _cursor["inputs"]
 	var key := String(_cursor["key"])
 	inputs[key] = BlockView.coerce_literal(_picker_edit.text, _cursor_slot_default())
-	var owner := _find_owner_statement_top(inputs)
-	if not owner.is_empty():
-		_cursor = {"kind": "gap", "array": owner["array"], "index": int(owner["index"]) + 1}
 	_render()
+	_advance_after_fill(inputs, key)
 	_picker.hide()
 
 
@@ -2308,7 +2332,8 @@ func _picker_commit_literal() -> void:
 ## descending into its first operand), else moves to the gap after (a slotless statement).
 ## At a slot: nest the reporter (overwriting whatever was there). If it has operands the cursor descends
 ## into the first, so nested expressions build recursively; if it's a leaf (no operands) the cursor instead
-## advances to the gap after the owning statement, the same way a freshly-picked statement flows to its end
+## advances to the *next* param slot of the owning statement if there is one (so a block's params fill
+## left-to-right), else to the gap after it — the same way a freshly-picked statement flows to its end
 ## rather than leaving the cursor stranded on the just-filled slot. Then re-render and close.
 func _picker_choose(opcode: String) -> void:
 	var kind := String(_cursor.get("kind", ""))
@@ -2318,18 +2343,18 @@ func _picker_choose(opcode: String) -> void:
 	var block := BlockView.make_block(opcode)
 	if kind == "slot":
 		var inputs: Dictionary = _cursor["inputs"]
-		inputs[String(_cursor["key"])] = block
+		var key := String(_cursor["key"])
+		inputs[key] = block
 		var fk := _first_slot_key(block)
 		if fk != "":
 			# A reporter with operands: descend into its first one so nested expressions build recursively.
 			_cursor = {"kind": "slot", "inputs": block["inputs"], "key": fk}
+			_render()
 		else:
-			# A leaf reporter (no operands): flow to the gap after the owning statement — the same
-			# advance-to-the-end a freshly-picked statement makes — instead of staying on the just-filled slot.
-			var owner := _find_owner_statement_top(inputs)
-			if not owner.is_empty():
-				_cursor = {"kind": "gap", "array": owner["array"], "index": int(owner["index"]) + 1}
-		_render()
+			# A leaf reporter (no operands): advance to the next param slot of the owning statement if there
+			# is one, else flow to the gap after it (the same advance-to-the-end a freshly-picked statement makes).
+			_render()
+			_advance_after_fill(inputs, key)
 	else:
 		var arr: Array
 		var idx: int
