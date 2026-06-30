@@ -12,7 +12,33 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fix: the picker is the literal field too (text fields no longer override fuzzy pick).**
+- **Just shipped — M51 fix: clicking a value field opens the picker too (mouse & keyboard are one path).**
+  The prior fix already made the *keyboard* one surface (typing on a slot opens the picker, which doubles as
+  the literal field). But a **mouse click** on a value field still took the old M12 path — focus the raw
+  `LineEdit` for in-place editing, with **no fuzzy picker, no reporter suggestions** — so the two surfaces
+  were still separate (the reported "separation between the fuzzy picker cursor and typing in a text field").
+  Now a click on an editable **value** field places the slot cursor there and **opens the same picker**,
+  seeded + select-all'd with the field's current value (so the first keystroke retypes it, Scratch's
+  click-and-edit): typing fuzzy-picks a reporter, or commits arbitrary text as the literal via the
+  "use literal" row — exactly the keyboard behaviour. **Excluded** (still fall through to the old GUI path,
+  by design): the `define`-**name** field (M32 — a free-text procedure rename + cascade, not a reporter
+  slot) and **enum/data dropdowns** (`OptionButton`s open their own menu). Commit with **Enter / a chosen
+  row**; **dismissing** the picker (Escape / click away) leaves the slot unchanged — consistent with the
+  keyboard picker, but note this differs from the old field's *commit-on-blur* (a value typed then
+  click-away is **not** committed; use Enter). All in [`block_canvas.gd`](scripts/block_canvas.gd): new
+  `_literal_field_at` (the LineEdit-value subset of `_over_literal`, minus `define_name`), a click branch in
+  `_input` before the `_over_literal` fall-through, and a `select` param on `_open_picker` (select-all the
+  seed). **No opcode / data-shape / runtime / editor.gd / block_view.gd change.**
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) **click** `go to`'s `y` field → the
+    picker opens at the slot with the value selected; type `5`, Enter → commits `5`. (2) Click the same
+    field, type `score` → the `score` reporter lists (no literal row on a number slot); Enter drops it.
+    (3) Click a text field (`say`), type `hi` → "use \"hi\""; (4) click an `if` condition's slot → only
+    boolean reporters, no literal row. (5) Click a **`call`/`set`/`variable` dropdown** → its native menu
+    still opens (not the picker). (6) Click a **`define`'s name** field → still edits in place and renames
+    the procedure (cascades to its `call`s). (7) Esc / click-away from the picker leaves the slot as it was.
+    Keyboard cursor + typing (prior fix) still works identically — both paths now reach the same picker.
+
+- **Earlier — M51 fix: the picker is the literal field too (text fields no longer override fuzzy pick).**
   Typing on a literal slot used to `grab_focus()` the slot's raw `LineEdit` (in-place edit, M12), which then
   swallowed *every* subsequent key — so once you started typing a value you could never open the fuzzy
   picker to drop a reporter there (the reported bug: "can't fuzzy pick anymore"). The two typing surfaces

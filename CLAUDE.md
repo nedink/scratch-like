@@ -103,8 +103,23 @@ never on a boolean slot; on a numeric slot only for a number/expression query �
 slot, the M13 oval-vs-box invariant), and it is the **default highlight** when it's the obvious intent (a
 number typed into a number slot, or no reporter matched at all), else the top reporter is.
 [`_slot_is_numeric`](scripts/block_canvas.gd) now keys off the slot's `slot_default` meta (robust whether the
-slot currently shows a literal or a dropped reporter). The **mouse** click-to-edit path (M12) is untouched —
-clicking a field still focuses it for in-place editing; only the **keyboard** path changed. On an
+slot currently shows a literal or a dropped reporter).
+
+**The mouse and keyboard share the *one* picker** (a follow-on M51 fix — the user's "there shouldn't be a
+separation between the fuzzy picker cursor and typing in a text field"). An earlier cut left the **mouse**
+click-to-edit path (M12) untouched: clicking a value field focused its raw `LineEdit` for in-place editing,
+with no picker and no reporter suggestions — so a clicked field couldn't fuzzy-pick. Now a **click on an
+editable value field** ([`_literal_field_at`](scripts/block_canvas.gd) — the LineEdit-value subset of
+[`_over_literal`](scripts/block_canvas.gd), found in the press branch of [`_input`](scripts/block_canvas.gd)
+*before* the `_over_literal` fall-through) places the slot cursor there and **opens the same picker**, seeded
++ `select_all`'d with the field's current value (the new `select` arg to [`_open_picker`](scripts/block_canvas.gd),
+so the first keystroke retypes it — Scratch's click-and-edit). So a click reaches the identical
+fuzzy-pick-or-literal surface the keyboard does. Two widgets are **deliberately excluded** (they keep the old
+GUI path): the `define`-**name** field (M32 — a free-text procedure rename + cascade, not a reporter slot;
+filtered out by its `define_name` meta) and **enum/data dropdowns** (`OptionButton`s, which open their own
+menu — `_literal_field_at` matches only `LineEdit`s). Commit is by **Enter / a chosen row**; **dismissing**
+the picker (Escape / click away) leaves the slot unchanged — consistent with the keyboard picker, but unlike
+the old field's commit-on-blur (so a value typed then clicked-away is *not* committed; press Enter). On an
 **enum/data** slot, Enter/typing still opens its `OptionButton` dropdown. **Backspace/Delete**
 ([`_cursor_delete`](scripts/block_canvas.gd)) removes the
 block before/after a gap (dropping emptied stacks via the new shared

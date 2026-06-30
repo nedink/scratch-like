@@ -592,8 +592,22 @@ func _input(event: InputEvent) -> void:
 				_pending = {"marquee": true, "additive": additive}
 				get_viewport().set_input_as_handled()
 				return
-			# A press on an editable literal field (M12) belongs to that field: let it
-			# fall through to GUI focus/editing rather than grabbing the block.
+			# A press on an editable *value* field opens the fuzzy picker on that slot — the same editor
+			# the keyboard cursor uses, so a click and a keyboard cursor share one path: typing fuzzy-picks
+			# a reporter, or commits arbitrary text as the literal via the picker's "use literal" row, with
+			# no separate in-place-edit mode. Seeded + selected with the field's current value, so the first
+			# keystroke retypes it (Scratch's click-and-edit). Commit with Enter / a chosen row; dismissing
+			# (Escape / click away) leaves the slot as it was.
+			var litfield := _literal_field_at(root, event.position)
+			if litfield != null:
+				get_viewport().gui_release_focus()
+				_cursor = {"kind": "slot", "inputs": litfield.get_meta("slot_inputs"), "key": String(litfield.get_meta("slot_key"))}
+				_open_picker(litfield.text, true)
+				get_viewport().set_input_as_handled()
+				return
+			# The define-name field (M32, a free-text procedure rename — not a reporter slot) and enum/data
+			# dropdowns (OptionButtons, which open their own menu) aren't value slots: let them fall through
+			# to GUI focus / editing rather than the picker or a block grab.
 			if _over_literal(root, event.position):
 				return
 			# Grabbing anything else commits whatever field was being edited.
@@ -745,6 +759,19 @@ func _literal_fields(node: Node, out: Array = []) -> Array:
 	for child in node.get_children():
 		_literal_fields(child, out)
 	return out
+
+
+## The editable *value* field (a literal LineEdit, M12) under a global point within `root`, or null —
+## the subset of _over_literal that opens the fuzzy picker on a click (a LineEdit value slot). Excludes
+## the define-name field (M32 — a free-text procedure rename, not a reporter slot, so it keeps in-place
+## editing) and enum/data dropdowns (OptionButtons aren't LineEdits — they open their native menu); both
+## fall through to _over_literal instead.
+func _literal_field_at(root: Node, global_point: Vector2) -> LineEdit:
+	for field in _literal_fields(root):
+		if field is LineEdit and not field.has_meta("define_name") \
+				and (field as Control).get_global_rect().has_point(global_point):
+			return field as LineEdit
+	return null
 
 
 ## The deepest reporter pill under a global point — the pickup counterpart to _block_at
@@ -2113,7 +2140,7 @@ func _picker_candidates() -> Array:
 ## Open the picker just below the caret, scoped + seeded. The caret is a Control positioned at the cursor,
 ## so its screen position (which already accounts for the editor's content scale) anchors the popup; a tiny
 ## constant screen offset drops it below. Falls back to centred if the caret isn't shown.
-func _open_picker(seed: String) -> void:
+func _open_picker(seed: String, select := false) -> void:
 	if _cursor.is_empty():
 		return
 	_ensure_picker()
@@ -2128,7 +2155,13 @@ func _open_picker(seed: String) -> void:
 	_picker_edit.text = seed
 	_picker_refilter(seed)
 	_picker_edit.grab_focus()
-	_picker_edit.caret_column = _picker_edit.text.length()
+	# A click on a value field seeds the picker with the field's whole current value and selects it, so
+	# the first keystroke replaces it (click-and-retype); a keyboard seed (a single typed char) just
+	# parks the caret at the end so typing continues from it.
+	if select:
+		_picker_edit.select_all()
+	else:
+		_picker_edit.caret_column = _picker_edit.text.length()
 
 
 ## Refill the results list with the candidates fuzzy-matching `query` (subsequence over the brace-stripped
