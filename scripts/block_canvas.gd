@@ -145,7 +145,7 @@ var _caret_refresh_pending := false  # a post-layout caret re-measure is already
 var _picker: PopupPanel            # the shared fuzzy block picker, built lazily (see _ensure_picker)
 var _picker_edit: LineEdit
 var _picker_list: ItemList
-var _picker_opcodes: Array = []    # the candidate opcodes for the open picker (scoped by the cursor)
+var _picker_opcodes: Array = []    # the open picker's candidates (scoped by the cursor) — {op, bind_key, bind_value} dicts
 const _PICKER_LITERAL_META := "__literal__"  # ItemList meta marking the picker's "use literal" row (M51)
 
 
@@ -2099,20 +2099,25 @@ func _cursor_slot_type() -> String:
 	return "value"
 
 
-## The first template slot key of a freshly-made block (for descending the cursor into a nested reporter),
-## or "" if it has none / only a body.
-func _first_slot_key(block: Dictionary) -> String:
+## The first template slot key of a freshly-made block that still needs filling (for descending the
+## cursor into a nested reporter) — or "" if none remain / it has only a body. `skip` (M51 fix) excludes a
+## key the caller already bound to a real value (a named variable/list candidate's `name`/`list`), so
+## the cursor descends into the next placeholder instead of the one that's already filled correctly —
+## e.g. `list_contains? {list} contains {item}?` bound to a list lands on `item`, not the bound `list`.
+func _first_slot_key(block: Dictionary, skip := "") -> String:
 	var op := String(block.get("opcode", ""))
 	var t := BlockView.opcode_template(op)
-	var i := t.find("{")
-	if i == -1:
-		return ""
-	var c := t.find("}", i)
-	var key := t.substr(i + 1, c - i - 1)
-	if key == "body":
-		return ""
 	var inputs: Dictionary = block.get("inputs", {})
-	return key if inputs.has(key) else ""
+	var i := 0
+	while true:
+		i = t.find("{", i)
+		if i == -1:
+			return ""
+		var c := t.find("}", i)
+		var key := t.substr(i + 1, c - i - 1)
+		if key != "body" and key != skip and inputs.has(key):
+			return key
+		i = c + 1
 
 
 ## Build the shared fuzzy block picker once — a PopupPanel with a search LineEdit over a results ItemList
@@ -2147,9 +2152,19 @@ func _ensure_picker() -> void:
 	add_child(_picker)
 
 
-## The opcodes the picker offers, scoped to the cursor: a slot → reporters whose output matches the slot
-## type (the M23 rule); a gap → statements/C-blocks; a "new" stack → those plus hats. Drawn from
-## palette_groups so palette:false opcodes (define/call/param) are excluded.
+## One picker candidate: `op` (the opcode to make_block) plus an optional `bind_key`/`bind_value` — a
+## template input already filled in (the named variable/list candidates below), rather than left at its
+## make_block default.
+func _picker_item(op: String, bind_key := "", bind_value := "") -> Dictionary:
+	return {"op": op, "bind_key": bind_key, "bind_value": bind_value}
+
+
+## The candidates the picker offers, scoped to the cursor: a slot → reporters whose output matches the
+## slot type (the M23 rule), plus one **named** candidate per in-scope variable/list (M51 fix) — the fuzzy-
+## pick equivalent of Scratch's per-variable palette chip, since this editor's palette only has the
+## generic `variable`/list-block chips (M17/M44) with a make_block default name; a gap → statements/
+## C-blocks; a "new" stack → those plus hats. Drawn from palette_groups so palette:false opcodes
+## (define/call/param) are excluded.
 func _picker_candidates() -> Array:
 	var universe: Array = []
 	for g in BlockView.palette_groups():
@@ -2161,7 +2176,14 @@ func _picker_candidates() -> Array:
 		for op in universe:
 			var ops := String(op)
 			if BlockView.is_reporter(ops) and BlockView.reporter_output_type(ops) == st:
-				out.append(ops)
+				out.append(_picker_item(ops))
+		if BlockView.reporter_output_type("variable") == st:
+			for var_name in BlockView.project_variables:
+				out.append(_picker_item("variable", "name", String(var_name)))
+		for list_name in BlockView.project_lists:
+			for op in BlockView.list_reporter_opcodes():
+				if BlockView.reporter_output_type(op) == st:
+					out.append(_picker_item(op, "list", String(list_name)))
 	else:  # gap / new
 		var allow_hats := kind == "new"
 		for op in universe:
@@ -2170,9 +2192,9 @@ func _picker_candidates() -> Array:
 				continue
 			if ops in BlockView.HAT_OPCODES:
 				if allow_hats:
-					out.append(ops)
+					out.append(_picker_item(ops))
 			else:
-				out.append(ops)
+				out.append(_picker_item(ops))
 	return out
 
 
@@ -2219,16 +2241,17 @@ func _picker_refilter(query: String) -> void:
 		literal_idx = _picker_list.add_item(_literal_item_text(raw))
 		_picker_list.set_item_metadata(literal_idx, _PICKER_LITERAL_META)
 	var scored: Array = []
-	for op in _picker_opcodes:
-		var ops := String(op)
-		var label := BlockView.opcode_label(ops).to_lower()
+	for item in _picker_opcodes:
+		var it: Dictionary = item
+		var label := _picker_label(it).to_lower()
 		if q == "" or q.is_subsequence_ofn(label):
-			scored.append({"op": ops, "score": _match_score(q, label)})
+			scored.append({"item": it, "score": _match_score(q, label)})
 	scored.sort_custom(func(a, b): return float(a["score"]) > float(b["score"]))
 	var first_reporter_idx := -1
 	for e in scored:
-		var idx := _picker_list.add_item(BlockView.opcode_template(String(e["op"])))
-		_picker_list.set_item_metadata(idx, String(e["op"]))
+		var it: Dictionary = e["item"]
+		var idx := _picker_list.add_item(_picker_display(it))
+		_picker_list.set_item_metadata(idx, it)
 		if first_reporter_idx == -1:
 			first_reporter_idx = idx
 	# Default highlight (so Enter has a target): the literal when it's the obvious intent — a number typed
@@ -2278,6 +2301,23 @@ func _literal_item_text(raw: String) -> String:
 	if _slot_is_numeric():
 		return "use " + raw
 	return 'use "' + raw + '"'
+
+
+## The picker row's display text for a candidate — the opcode's raw template, with a bound key's
+## placeholder (M51 fix) substituted for its real value (e.g. "item {index} of {list}" -> "item {index} of
+## MyList"); any other placeholder is left shown for the user to fill, same as an unbound candidate.
+func _picker_display(item: Dictionary) -> String:
+	var t := BlockView.opcode_template(String(item["op"]))
+	var bind_key := String(item.get("bind_key", ""))
+	if bind_key != "":
+		t = t.replace("{" + bind_key + "}", String(item["bind_value"]))
+	return t
+
+
+## The searchable label for a candidate — the display text's braces stripped (so typing a variable's
+## or list's own name finds it, since that name is now baked into the text the label is stripped from).
+func _picker_label(item: Dictionary) -> String:
+	return BlockView.label_for_template(_picker_display(item))
 
 
 func _match_score(q: String, label: String) -> float:
@@ -2341,8 +2381,8 @@ func _picker_commit() -> void:
 func _picker_choose_index(i: int) -> void:
 	if i < 0 or i >= _picker_list.item_count:
 		return
-	var meta := String(_picker_list.get_item_metadata(i))
-	if meta == _PICKER_LITERAL_META:
+	var meta: Variant = _picker_list.get_item_metadata(i)
+	if typeof(meta) == TYPE_STRING and String(meta) == _PICKER_LITERAL_META:
 		_picker_commit_literal()
 	else:
 		_picker_choose(meta)
@@ -2364,26 +2404,33 @@ func _picker_commit_literal() -> void:
 	_picker.hide()
 
 
-## Insert the chosen block at the cursor and advance it. At a gap/new: splice the statement in (creating a
-## stack for "new"); the cursor descends into its body if it's a hat/C-block, else into its first header
-## slot if it has one (e.g. `go to x: y:` → the x slot, ready to fill — the statement twin of a reporter
-## descending into its first operand), else moves to the gap after (a slotless statement).
-## At a slot: nest the reporter (overwriting whatever was there). If it has operands the cursor descends
-## into the first, so nested expressions build recursively; if it's a leaf (no operands) the cursor instead
-## advances to the *next* param slot of the owning statement if there is one (so a block's params fill
-## left-to-right), else to the gap after it — the same way a freshly-picked statement flows to its end
-## rather than leaving the cursor stranded on the just-filled slot. Then re-render and close.
-func _picker_choose(opcode: String) -> void:
+## Insert the chosen candidate's block at the cursor and advance it. `item` is a `_picker_item` dict — a
+## `bind_key`/`bind_value` (M51 fix, a named variable/list candidate) is written into the fresh block's
+## inputs before it's placed, in place of its make_block default. At a gap/new: splice the statement in
+## (creating a stack for "new"); the cursor descends into its body if it's a hat/C-block, else into its
+## first header slot if it has one (e.g. `go to x: y:` → the x slot, ready to fill — the statement twin
+## of a reporter descending into its first operand), else moves to the gap after (a slotless statement).
+## At a slot: nest the reporter (overwriting whatever was there). If it has operands still needing a fill
+## the cursor descends into the first of those (skipping past the bound key, if any — see
+## _first_slot_key), so nested expressions build recursively; if it's a leaf (no operands left) the
+## cursor instead advances to the *next* param slot of the owning statement if there is one (so a
+## block's params fill left-to-right), else to the gap after it — the same way a freshly-picked
+## statement flows to its end rather than leaving the cursor stranded on the just-filled slot. Then
+## re-render and close.
+func _picker_choose(item: Dictionary) -> void:
 	var kind := String(_cursor.get("kind", ""))
 	if kind != "slot" and kind != "gap" and kind != "new":
 		_picker.hide()  # no usable cursor (shouldn't happen) — don't insert into nothing
 		return
-	var block := BlockView.make_block(opcode)
+	var block := BlockView.make_block(String(item["op"]))
+	var bind_key := String(item.get("bind_key", ""))
+	if bind_key != "":
+		block["inputs"][bind_key] = item["bind_value"]
 	if kind == "slot":
 		var inputs: Dictionary = _cursor["inputs"]
 		var key := String(_cursor["key"])
 		inputs[key] = block
-		var fk := _first_slot_key(block)
+		var fk := _first_slot_key(block, bind_key)
 		if fk != "":
 			# A reporter with operands: descend into its first one so nested expressions build recursively.
 			_cursor = {"kind": "slot", "inputs": block["inputs"], "key": fk}

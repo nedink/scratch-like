@@ -675,6 +675,12 @@ const _LIST_REPORTER_OPCODES := ["list_item", "list_item_index", "list_length", 
 const _LIST_OPCODES := ["list_add", "list_delete", "list_delete_all", "list_insert", "list_replace", "list_item", "list_item_index", "list_length", "list_contains?"]
 
 
+## The list-reading reporter opcodes (M44), exposed for the keyboard picker's named-list candidates
+## (M51 fix) — it offers each in-scope list bound into whichever of these matches the cursor slot's type.
+static func list_reporter_opcodes() -> Array:
+	return _LIST_REPORTER_OPCODES
+
+
 ## Count how many blocks in `blocks` reference the list `name` (M44) — the list twin of
 ## count_variable_refs, keyed on the `{list}` input instead of `{name}`. Recurses into nested reporter
 ## inputs and `body` substacks. The editor sums this across the in-scope scripts to report a delete's usage.
@@ -923,7 +929,14 @@ static func reporter_output_type(opcode: String) -> String:
 ## label (e.g. "move {steps} steps" → "move steps steps", "{a} + {b}" → "a + b"). The redundancy is
 ## harmless for subsequence matching; opcode_template is what the picker actually *displays*.
 static func opcode_label(opcode: String) -> String:
-	var t := String(_OPCODES.get(opcode, {}).get("template", opcode))
+	return label_for_template(String(_OPCODES.get(opcode, {}).get("template", opcode)))
+
+
+## The brace-stripping half of opcode_label, factored out (M51 fix) so the keyboard picker can compute a
+## label for a *bound* template too — a named variable/list candidate substitutes its real name for one
+## placeholder (e.g. "item {index} of {list}" -> "item {index} of MyList") before this strips the rest,
+## so the bound name itself becomes part of the searchable label.
+static func label_for_template(t: String) -> String:
 	var out := ""
 	var i := 0
 	while i < t.length():

@@ -12,7 +12,34 @@ top-of-stack** — what's in flight right now, what to do next, and the working 
 
 ## Current state
 
-- **Just shipped — M51 fixes: picker sizing + nav refinements (4 small tweaks).** All in
+- **Just shipped — M51 fix: the fuzzy picker offers named variable/list reporters.** At a value/boolean
+  slot, the picker used to offer only the bare `variable`/list-reporter opcodes (`variable`, `list_item`,
+  `list_item_index`, `list_length`, `list_contains?`) — picking one landed its `make_block` default name
+  (e.g. `p1_score`), with no keyboard way to choose a *different* real variable/list (the standing deferral:
+  "v1 uses `make_block` defaults; change via the mouse dropdown"). Now `_picker_candidates`
+  ([`block_canvas.gd`](scripts/block_canvas.gd)) also synthesizes one candidate **per in-scope variable**
+  (`variable` pre-bound to that name) and, per in-scope **list**, one per matching list-reporter opcode
+  (`BlockView.list_reporter_opcodes()`, filtered by the M23 slot-type rule) pre-bound to that list. A
+  candidate is now a `{op, bind_key, bind_value}` dict (was a bare opcode string); its display/search label
+  substitutes the real name into the template (`_picker_display`/`_picker_label`, the latter via new
+  `BlockView.label_for_template` — `opcode_label`'s brace-stripping factored out) — so typing `score` finds
+  the `score` reporter directly, and typing a list's name finds `item ... of ThatList` / `length of ThatList`
+  / etc. with the list already filled in. `_picker_choose` writes the bind into the fresh block before
+  placing it; `_first_slot_key` gained a `skip` param so the cursor descends into the *next* unfilled
+  placeholder rather than the one just bound (e.g. a bound `list_contains?` lands on `item`, not `list`).
+  Sprites / custom-block `call`s are **not** covered (still keyboard-deferred). Files: `block_canvas.gd`,
+  `block_view.gd`. **No opcode / data-shape / runtime / editor.gd change.**
+  - **⚠ Not F5-verified** (Claude can't run Godot). **F5-verify:** (1) make a variable `score`; on any value
+    slot (e.g. `move`'s steps) open the picker and type `score` → the `score` reporter shows (not just the
+    generic `variable` block), picking it drops `score` bound correctly; Enter/Tab advances past it (leaf).
+    (2) make a list `MyList`; on a value slot type `mylist` → `item ... of MyList` / `length of MyList` /
+    `item # of ... in MyList` all show with the list pre-filled; picking `item ... of MyList` lands the
+    cursor on the `index` slot (not back on the list), type a number to fill it. (3) On a **boolean** slot
+    (an `if` condition), type the list's name → only `MyList contains ...?` shows (boolean-filtered), landing
+    the cursor on `item` after picking. (4) The generic un-named `variable`/list-block chips still also
+    appear in the results (typing "variable" or "item" still finds them) — this only *adds* named entries.
+
+- **Earlier — M51 fixes: picker sizing + nav refinements (4 small tweaks).** All in
   [`block_canvas.gd`](scripts/block_canvas.gd), **no opcode / data-shape / runtime / editor.gd /
   block_view.gd change**:
   1. **Picker fits its row count.** `_picker_refilter` now sizes the results list (and the popup) to the
@@ -424,6 +451,10 @@ Drawn from `CLAUDE.md` → *Deliberately deferred*. Pick one per milestone; stay
 
 (Newest first. Move items here as they land + commit.)
 
+- M51 fix — **the fuzzy picker offers named variable/list reporters.** Typing a variable's or list's own
+  name now surfaces it pre-bound (`variable`, or a list reporter with `{list}` filled), not just the
+  generic block landing on a `make_block` default name. `block_canvas.gd` + `block_view.gd`; no opcode /
+  data-shape / runtime change.
 - M51 — **keyboard authoring mode.** A keyboard cursor (gap / slot / new) + a fuzzy block picker make the
   block editor fully keyboard-drivable alongside drag/drop; nested reporter expressions build recursively
   via the picker. Editor-only UI state in `block_canvas.gd` (+ `BlockView.opcode_label`/`opcode_template`);

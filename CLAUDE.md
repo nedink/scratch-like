@@ -140,12 +140,36 @@ block before/after a gap (dropping emptied stacks via the new shared
 [`_drop_empty_stacks`](scripts/block_canvas.gd)) or reverts a reporter slot to its `slot_default` (the M15
 grab-out behaviour). **Escape** clears the cursor (and so doesn't fall through to the editor's ESC-quit).
 
+**The picker offers a named candidate per in-scope variable/list, not just the generic block** (an M51
+fix). At a value/boolean slot, [`_picker_candidates`](scripts/block_canvas.gd) previously offered only the
+bare `variable`/list-reporter opcodes — picking one landed its `make_block` default name (e.g. `p1_score`),
+with no way to choose a *different* real variable/list from the keyboard (the deferral below used to name
+this: "v1 uses `make_block` defaults; change via the mouse dropdown"). Now it also synthesizes one
+[`_picker_item`](scripts/block_canvas.gd) per project variable — `variable` pre-bound to that name — and,
+for each in-scope list, one item per matching [`list_reporter_opcodes`](scripts/block_view.gd) entry
+(`list_item`/`list_item_index`/`list_length`/`list_contains?`, filtered by the M23 slot-type rule same as
+any reporter) pre-bound to that list. A bound candidate's searchable label and displayed row both substitute
+the real name into the opcode's template ([`_picker_display`](scripts/block_canvas.gd) /
+[`_picker_label`](scripts/block_canvas.gd), the latter via the new
+[`BlockView.label_for_template`](scripts/block_view.gd), `opcode_label`'s brace-stripping factored out) — so
+typing a variable's or list's own name finds it directly (e.g. typing `score` surfaces the `score` reporter;
+typing a list's name surfaces `item ... of ThatList` / `length of ThatList` / etc. with the list already
+filled in), the fuzzy-pick equivalent of Scratch's per-variable palette chip (this editor's palette only
+has the generic chips, M17/M44). Choosing a bound candidate ([`_picker_choose`](scripts/block_canvas.gd))
+writes `bind_value` into the fresh block's `bind_key` input before placing it, and
+[`_first_slot_key`](scripts/block_canvas.gd) gained a `skip` param so the cursor descends into the *next*
+unfilled placeholder rather than the one just bound (e.g. a bound `list_contains?` lands on `item`, not the
+already-filled `list`) — a bound leaf (`variable`, `list_length`) advances like any other leaf. Sprites and
+custom-block `call`s are **not** covered by this fix (see the deferral below, narrowed).
+
 What this leaves deferred: **statement replace** in place ("change this block" — ship reporter-slot replace
 only; statement replace needs a distinct gesture + body-carry); keyboard insertion of `call`/custom blocks
-(data-driven header) and **setting `data_enum` (variable/sprite/list) values** from the keyboard (v1 uses
-`make_block` defaults; change via the mouse dropdown); keyboard multi-select / copy-paste / block reordering; fancier fuzzy
-ranking, recently-used, category grouping; and wrap-around / spatial (non-document-order) navigation. Per
-the project's testing reality this milestone is **not F5-verified** (Claude can't run Godot).
+(data-driven header) and **setting the `sprites`/`custom_blocks` `data_enum` values** from the keyboard (the
+`variables`/`lists` sources are now covered by named picker candidates, above; a sprite/custom-block one
+still uses its `make_block` default — change via the mouse dropdown); keyboard multi-select / copy-paste /
+block reordering; fancier fuzzy ranking, recently-used, category grouping; and wrap-around / spatial
+(non-document-order) navigation. Per the project's testing reality this milestone is **not F5-verified**
+(Claude can't run Godot).
 
 ---
 
